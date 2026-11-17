@@ -38,7 +38,7 @@ const TUNING_KNOBS := {
 const MAX_PARTICLES: int = 1600
 const PARTICLE_QUAD_PX: float = 4.0
 const MAX_STRIPS: int = 256
-const STRIP_ATLAS_COLS: int = 12
+const DEFAULT_STRIP_ATLAS_COLS: int = 16
 const STRIP_CELL_PX: float = 8.0
 const LIGHTMAP_W: int = 214
 const LIGHTMAP_H: int = 120
@@ -62,6 +62,10 @@ const STRIP_PACT: int = 8
 const STRIP_WAR: int = 9
 const STRIP_REBEL: int = 10
 const STRIP_PORTAL: int = 11
+const STRIP_PLOT_WAR: int = 12
+const STRIP_PLOT_PACT: int = 13
+const STRIP_PLOT_REBEL: int = 14
+const STRIP_CROWN_BANNER: int = 15
 
 const P_COL_EMBER: int = 0
 const P_COL_PUFF: int = 1
@@ -101,6 +105,7 @@ signal impact_trauma(trauma: float, hit_stop_sec: float)
 var _mm_particles: MultiMeshInstance2D
 var _mm_strips: MultiMeshInstance2D
 var _strips_mat: ShaderMaterial
+var _strip_atlas_cols: int = DEFAULT_STRIP_ATLAS_COLS
 var _initialized: bool = false
 
 # Flat SoA particle buffers (zero GC)
@@ -361,7 +366,7 @@ func _stamp_pattern(img: Image, col_idx: int, rows: PackedStringArray, palette: 
 
 
 func _make_fallback_strips_atlas() -> ImageTexture:
-	var img := Image.create(STRIP_ATLAS_COLS * 8, 8, false, Image.FORMAT_RGBA8)
+	var img := Image.create(DEFAULT_STRIP_ATLAS_COLS * 8, 8, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	var pal := {
 		"K": Color("#1C2738"),
@@ -377,139 +382,92 @@ func _make_fallback_strips_atlas() -> ImageTexture:
 		"P": Color("#C75CFF"),
 		"M": Color("#8D35BD"),
 	}
+	_stamp_fallback_strips_primary(img, pal)
+	_stamp_fallback_strips_diplo(img, pal)
+	return ImageTexture.create_from_image(img)
+
+
+func _stamp_fallback_strips_primary(img: Image, pal: Dictionary) -> void:
 	# 0: DODGE wind chevron
 	_stamp_pattern(img, STRIP_DODGE, [
-		"........",
-		"..KK....",
-		".KWWK...",
-		"KKWWKK..",
-		".KCCWWK.",
-		"..KCCK..",
-		"...KK...",
-		"........",
+		"........", "..KK....", ".KWWK...", "KKWWKK..",
+		".KCCWWK.", "..KCCK..", "...KK...", "........",
 	], pal)
 	# 1: BLOCK shield spark
 	_stamp_pattern(img, STRIP_BLOCK, [
-		"..KKKK..",
-		".KCCCCK.",
-		"KCCWWCCK",
-		"KCWWWWCK",
-		".KCWWCK.",
-		"..KCCK..",
-		"...KK...",
-		"........",
+		"..KKKK..", ".KCCCCK.", "KCCWWCCK", "KCWWWWCK",
+		".KCWWCK.", "..KCCK..", "...KK...", "........",
 	], pal)
 	# 2: HAPPY green-gold heart/sun
 	_stamp_pattern(img, STRIP_HAPPY, [
-		".KK..KK.",
-		"KGGKKGGK",
-		"KGYGGYGK",
-		"KGGGGGGK",
-		".KGGGGK.",
-		"..KGGK..",
-		"...KK...",
-		"........",
+		".KK..KK.", "KGGKKGGK", "KGYGGYGK", "KGGGGGGK",
+		".KGGGGK.", "..KGGK..", "...KK...", "........",
 	], pal)
 	# 3: ANGRY red exclamation
 	_stamp_pattern(img, STRIP_ANGRY, [
-		"...KK...",
-		"..KRRK..",
-		"..KRRK..",
-		"..KRRK..",
-		"...KK...",
-		"..KWWK..",
-		"...KK...",
-		"........",
+		"...KK...", "..KRRK..", "..KRRK..", "..KRRK..",
+		"...KK...", "..KWWK..", "...KK...", "........",
 	], pal)
 	# 4: FOOD golden ration/berry
 	_stamp_pattern(img, STRIP_FOOD, [
-		"...KK...",
-		"..KGGK..",
-		".KYYYYK.",
-		"KYYOOYYK",
-		"KOOOOOOK",
-		".KOOOOK.",
-		"..KKKK..",
-		"........",
+		"...KK...", "..KGGK..", ".KYYYYK.", "KYYOOYYK",
+		"KOOOOOOK", ".KOOOOK.", "..KKKK..", "........",
 	], pal)
 	# 5: SHIELD cyan dome deflect
 	_stamp_pattern(img, STRIP_SHIELD, [
-		"..KKKK..",
-		".KCCCCK.",
-		"KCWWWWCK",
-		"KCDDDDCK",
-		"KCCCCCCK",
-		".KKKKKK.",
-		"........",
-		"........",
+		"..KKKK..", ".KCCCCK.", "KCWWWWCK", "KCDDDDCK",
+		"KCCCCCCK", ".KKKKKK.", "........", "........",
 	], pal)
 	# 6: LVLUP bright star
 	_stamp_pattern(img, STRIP_LVLUP, [
-		"...KK...",
-		"..KYYK..",
-		"KKYWWYKK",
-		"KYYWWYYK",
-		".KYYYYK.",
-		"KYK..KYK",
-		"KK....KK",
-		"........",
+		"...KK...", "..KYYK..", "KKYWWYKK", "KYYWWYYK",
+		".KYYYYK.", "KYK..KYK", "KK....KK", "........",
 	], pal)
 	# 7: MUTATE violet helix
 	_stamp_pattern(img, STRIP_MUTATE, [
-		".KK..KK.",
-		"KPPKKPPK",
-		".KCMMCK.",
-		"..KPPK..",
-		".KCMMCK.",
-		"KPPKKPPK",
-		".KK..KK.",
-		"........",
+		".KK..KK.", "KPPKKPPK", ".KCMMCK.", "..KPPK..",
+		".KCMMCK.", "KPPKKPPK", ".KK..KK.", "........",
 	], pal)
+
+
+func _stamp_fallback_strips_diplo(img: Image, pal: Dictionary) -> void:
 	# 8: PACT glowing cyan-gold link emblem
 	_stamp_pattern(img, STRIP_PACT, [
-		"..KK.KK.",
-		".KCCKYYK",
-		"KCWWKWYK",
-		"KCYWKCCK",
-		".KYYKCCK",
-		"..KK.KK.",
-		"........",
-		"........",
+		"..KK.KK.", ".KCCKYYK", "KCWWKWYK", "KCYWKCCK",
+		".KYYKCCK", "..KK.KK.", "........", "........",
 	], pal)
 	# 9: WAR crimson-orange crossed spark emblem
 	_stamp_pattern(img, STRIP_WAR, [
-		"KK....KK",
-		"KRK..KRO",
-		".KRKKOK.",
-		"..KWWK..",
-		".KOKKRK.",
-		"OKK..KRK",
-		"KK....KK",
-		"........",
+		"KK....KK", "KRK..KRO", ".KRKKOK.", "..KWWK..",
+		".KOKKRK.", "OKK..KRK", "KK....KK", "........",
 	], pal)
 	# 10: REBEL emerald-acid & gold rebellion emblem
 	_stamp_pattern(img, STRIP_REBEL, [
-		"...KK...",
-		"..KEEK..",
-		".KEAAEK.",
-		"KEAWAEEK",
-		"KEEEEEAK",
-		".KEAAEK.",
-		"..KKKK..",
-		"........",
+		"...KK...", "..KEEK..", ".KEAAEK.", "KEAWAEEK",
+		"KEEEEEAK", ".KEAAEK.", "..KKKK..", "........",
 	], pal)
 	# 11: PORTAL cyan-violet warp vortex emblem
 	_stamp_pattern(img, STRIP_PORTAL, [
-		"..KKKK..",
-		".KPPPPK.",
-		"KPMCCMPK",
-		"KMCWWCMK",
-		"KPMCCMPK",
-		".KPPPPK.",
-		"..KKKK..",
-		"........",
+		"..KKKK..", ".KPPPPK.", "KPMCCMPK", "KMCWWCMK",
+		"KPMCCMPK", ".KPPPPK.", "..KKKK..", "........",
 	], pal)
-	return ImageTexture.create_from_image(img)
+	# 12..15: Fallback plot & crown banner strips
+	_stamp_pattern(img, STRIP_PLOT_WAR, [
+		"KK....KK", "KRK..KRK", ".KRKKRK.", "..KWWK..",
+		".KRKKRK.", "KRK..KRK", "KK....KK", "........",
+	], pal)
+	_stamp_pattern(img, STRIP_PLOT_PACT, [
+		"..KKKK..", ".KCCCCK.", "KCWKKWCK", "KCKYYKCK",
+		"KCCYYCCK", ".KCCCCK.", "..KKKK..", "........",
+	], pal)
+	_stamp_pattern(img, STRIP_PLOT_REBEL, [
+		"..KKKK..", ".KOOYYK.", "KOYWWYOK", "KOOOOOOK",
+		".KOOOOOK", "..KKKK..", "........", "........",
+	], pal)
+	_stamp_pattern(img, STRIP_CROWN_BANNER, [
+		"........", "KY.YY.YK", "KYYYYYYK", "KYYAAYYK",
+		"KYYYYYYK", ".KKKKKK.", "........", "........",
+	], pal)
 
 
 func _init_strip_buffers() -> void:
@@ -546,9 +504,12 @@ func _init_strips_multimesh() -> void:
 	_mm_strips.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_mm_strips.texture = strip_tex
 
+	var tex_w: int = strip_tex.get_width() if strip_tex != null else (DEFAULT_STRIP_ATLAS_COLS * int(STRIP_CELL_PX))
+	_strip_atlas_cols = maxi(1, int(tex_w / int(STRIP_CELL_PX)))
+
 	_strips_mat = ShaderMaterial.new()
 	_strips_mat.shader = UNIT_SPRITE_SHADER
-	_strips_mat.set_shader_parameter("atlas_cols", STRIP_ATLAS_COLS)
+	_strips_mat.set_shader_parameter("atlas_cols", _strip_atlas_cols)
 	_strips_mat.set_shader_parameter("sprite_size", Vector2(STRIP_CELL_PX, STRIP_CELL_PX))
 	_strips_mat.set_shader_parameter("motion_mode", 0)
 	if mask_tex != null:
@@ -798,7 +759,7 @@ func spawn_shockwave(world_pos: Vector2, max_radius: float, color: Color, life_o
 	_p_rot[flash_slot] = _rng.randf_range(0.0, TAU)
 	_write_instance_visual(flash_slot)
 
-	# 2) Continuous tangent-aligned pixel shockwave ring (zero isolated dot beads)
+	# 2) Crisp pixel-art expanding spark ring (no smooth vector polygon chords)
 	for i in range(ring_count):
 		var slot := _alloc_particle_slot()
 		var base_ang := (float(i) / float(ring_count)) * TAU
@@ -807,17 +768,17 @@ func spawn_shockwave(world_pos: Vector2, max_radius: float, color: Color, life_o
 		_p_origin[slot] = world_pos
 		_p_dir[slot] = dir
 		_p_max_r[slot] = safe_r
-		_p_pos[slot] = world_pos + dir * (safe_r * 0.18)
+		_p_pos[slot] = (world_pos + dir * (safe_r * 0.18)).round()
 		_p_vel[slot] = dir * (safe_r / life)
 		_p_age[slot] = 0.0
 		_p_life[slot] = life
 		_p_gravity[slot] = 0.0
-		_p_col_idx[slot] = P_COL_RING
-		_p_hdr[slot] = 2.5
-		_p_color[slot] = color
-		_p_size[slot] = 0.46
+		_p_col_idx[slot] = P_COL_SPARKLE if (i % 2 == 0) else P_COL_EMBER
+		_p_hdr[slot] = 2.4
+		_p_color[slot] = color.lightened(0.18)
+		_p_size[slot] = 0.42
 		_p_aspect[slot] = 1.0
-		_p_rot[slot] = base_ang + PI * 0.5
+		_p_rot[slot] = 0.0
 		_write_instance_visual(slot)
 
 	# 3) Fast directional debris embers + compact dust puffs
@@ -1009,7 +970,7 @@ func _write_strip_visual(i: int) -> void:
 func spawn_reaction_strip(world_pos: Vector2, strip_id: int) -> void:
 	_ensure_initialized()
 	var slot := _alloc_strip_slot()
-	var cid := clampi(strip_id, 0, STRIP_ATLAS_COLS - 1)
+	var cid := clampi(strip_id, 0, maxi(0, _strip_atlas_cols - 1))
 	_s_pos[slot] = world_pos + Vector2(_rng.randf_range(-2.2, 2.2), -5.5)
 	_s_vel[slot] = Vector2(_rng.randf_range(-2.2, 2.2), -float(TUNING_KNOBS["STRIP_FLOAT_SPEED"]))
 	_s_age[slot] = 0.0
@@ -1200,7 +1161,7 @@ func emit_shield_deflect(pylon_pos: Vector2, radius: float, hit_pos: Vector2) ->
 	_p_rot[flash_slot] = _rng.randf_range(0.0, TAU)
 	_write_instance_visual(flash_slot)
 
-	var ring_segs := 10
+	var ring_segs := 12
 	for r_idx in range(ring_segs):
 		var r_slot := _alloc_particle_slot()
 		var base_ang := (float(r_idx) / float(ring_segs)) * TAU
@@ -1209,17 +1170,17 @@ func emit_shield_deflect(pylon_pos: Vector2, radius: float, hit_pos: Vector2) ->
 		_p_origin[r_slot] = arc_pos
 		_p_dir[r_slot] = r_dir
 		_p_max_r[r_slot] = ripple_r
-		_p_pos[r_slot] = arc_pos + r_dir * (ripple_r * 0.20)
+		_p_pos[r_slot] = (arc_pos + r_dir * (ripple_r * 0.20)).round()
 		_p_vel[r_slot] = r_dir * (ripple_r / 0.24)
 		_p_age[r_slot] = 0.0
 		_p_life[r_slot] = 0.24
 		_p_gravity[r_slot] = 0.0
-		_p_col_idx[r_slot] = P_COL_RING
+		_p_col_idx[r_slot] = P_COL_SPARKLE
 		_p_hdr[r_slot] = 2.1
-		_p_color[r_slot] = Color(0.32, 0.92, 1.0, 0.90)
+		_p_color[r_slot] = Color(0.32, 0.92, 1.0, 0.92)
 		_p_size[r_slot] = 0.36
 		_p_aspect[r_slot] = 1.0
-		_p_rot[r_slot] = base_ang + PI * 0.5
+		_p_rot[r_slot] = 0.0
 		_write_instance_visual(r_slot)
 
 	for i in range(12):
@@ -1547,14 +1508,11 @@ func _write_instance_visual(i: int) -> void:
 	var hdr_val := _p_hdr[i]
 
 	if mode == MODE_SHOCKWAVE:
-		var ring_count: float = maxf(float(TUNING_KNOBS["SHOCKWAVE_RING_COUNT"]), 8.0)
-		var ease_r := 0.18 + 0.82 * (1.0 - pow(1.0 - t, 2.3))
-		var r_now := _p_max_r[i] * ease_r
-		var seg_len := (TAU * r_now / ring_count) * 1.22
-		scale_x = maxf(0.65, seg_len / PARTICLE_QUAD_PX)
-		scale_y = _p_size[i] * (1.0 - 0.38 * t)
+		var ps := _p_size[i] * (1.05 - 0.45 * t)
+		scale_x = ps
+		scale_y = ps
 		alpha_mult = (1.0 - t * t)
-		hdr_val *= (1.05 - 0.35 * t)
+		hdr_val *= (1.10 - 0.35 * t)
 	elif mode == MODE_TRACER:
 		scale_y = _p_size[i] * (1.0 - 0.35 * t)
 		alpha_mult = (1.0 - t * t)

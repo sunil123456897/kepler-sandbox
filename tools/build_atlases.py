@@ -4,7 +4,7 @@ Generates native-size PNGs in `assets/src_sprites/` and packs them into:
 1. `assets/atlases/buildings_atlas.png` + `buildings_atlas_mask.png` + `buildings_atlas.json` (24x24 cells, 38 cols)
 2. `assets/atlases/units_atlas.png` + `units_atlas_mask.png` + `units_atlas.json` (8x8 cells, 24 cols, shadowless)
 3. `assets/atlases/flora_atlas.png` + `flora_atlas_mask.png` + `flora_atlas.json` (12x12 cells, 14 cols, shadowless)
-4. `assets/atlases/fx_strips_atlas.png` + `fx_strips_atlas_mask.png` + `fx_strips_atlas.json` (8x8 cells, 12 cols)
+4. `assets/atlases/fx_strips_atlas.png` + `fx_strips_atlas_mask.png` + `fx_strips_atlas.json` (8x8 cells, 16 cols)
 
 Mask channel contract (`sprite_mode = 3` in `shaders/unit_sprite.gdshader`):
 - R: faction / role / subtle flora tint weight (0..255)
@@ -1781,7 +1781,7 @@ FLORA_SPECS: List[dict] = [
 
 
 # ---------------------------------------------------------------------------
-# 4. FX REACTION & STATUS ICON STRIPS (8x8 cells x 12 cols = 96x8, zero digits!)
+# 4. FX REACTION & STATUS ICON STRIPS (8x8 cells x 16 cols = 128x8, zero digits!)
 # ---------------------------------------------------------------------------
 FX_STRIP_SPECS: List[dict] = [
     {
@@ -1973,6 +1973,70 @@ FX_STRIP_SPECS: List[dict] = [
             "O[]_<]cO",
             ".O)]]cO.",
             "..OOOO..",
+            "........",
+        ],
+    },
+    {
+        "col": 12,
+        "id": "plot_war",
+        "src_name": "fx_strip_plot_war",
+        "size": (8, 8),
+        "rows": [
+            ".o....o.",
+            "oh@..@ho",
+            ".a/--/a.",
+            "..@yy@..",
+            ".@a--a@.",
+            "@z@..@z@",
+            ".@....@.",
+            "........",
+        ],
+    },
+    {
+        "col": 13,
+        "id": "plot_pact",
+        "src_name": "fx_strip_plot_pact",
+        "size": (8, 8),
+        "rows": [
+            ".#wwww#.",
+            "#wCCCCw#",
+            "#wWWWWw#",
+            "#W@@@@W#",
+            "#W@},@W#",
+            ".#W@@W#.",
+            "..####..",
+            "........",
+        ],
+    },
+    {
+        "col": 14,
+        "id": "plot_rebel",
+        "src_name": "fx_strip_plot_rebel",
+        "size": (8, 8),
+        "rows": [
+            "...@@...",
+            "..@,,@..",
+            ".@/{/@..",
+            "..@--@..",
+            "oo.@@.oo",
+            "oha..aho",
+            ".oo..oo.",
+            "........",
+        ],
+    },
+    {
+        "col": 15,
+        "id": "crown_banner",
+        "src_name": "fx_strip_crown_banner",
+        "size": (8, 8),
+        "rows": [
+            ".@.@@.@.",
+            "@,@,,@,@",
+            "@z@zz@Z@",
+            "@zzHczZ@",
+            "@zzCCZZ@",
+            "@ZZZZZZ@",
+            ".@@@@@@.",
             "........",
         ],
     },

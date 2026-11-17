@@ -2,19 +2,19 @@
   "atlas_path": "res://assets/atlases/fx_strips_atlas.png",
   "mask_path": "res://assets/atlases/fx_strips_atlas_mask.png",
   "atlas_size": [
-    96,
+    128,
     8
   ],
   "cell_size": [
     8,
     8
   ],
-  "atlas_cols": 12,
+  "atlas_cols": 16,
   "shader_mode": 3,
   "shader_uniforms": {
     "sprite_mode": 3,
     "motion_mode": 0,
-    "atlas_cols": 12,
+    "atlas_cols": 16,
     "sprite_size": [
       8,
       8
@@ -34,7 +34,11 @@
     "PACT": 8,
     "WAR": 9,
     "REBEL": 10,
-    "PORTAL": 11
+    "PORTAL": 11,
+    "PLOT_WAR": 12,
+    "PLOT_PACT": 13,
+    "PLOT_REBEL": 14,
+    "CROWN_BANNER": 15
   },
   "cells": [
     {
@@ -59,7 +63,7 @@
       "uv_rect": [
         0.0,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -83,9 +87,9 @@
         0
       ],
       "uv_rect": [
-        0.083333,
+        0.0625,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -109,9 +113,9 @@
         0
       ],
       "uv_rect": [
-        0.166667,
+        0.125,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -135,9 +139,9 @@
         0
       ],
       "uv_rect": [
-        0.25,
+        0.1875,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -161,9 +165,9 @@
         0
       ],
       "uv_rect": [
-        0.333333,
+        0.25,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -187,9 +191,9 @@
         0
       ],
       "uv_rect": [
-        0.416667,
+        0.3125,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -213,9 +217,9 @@
         0
       ],
       "uv_rect": [
-        0.5,
+        0.375,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -239,9 +243,9 @@
         0
       ],
       "uv_rect": [
-        0.583333,
+        0.4375,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -265,9 +269,9 @@
         0
       ],
       "uv_rect": [
-        0.666667,
+        0.5,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -291,9 +295,9 @@
         0
       ],
       "uv_rect": [
-        0.75,
+        0.5625,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -317,9 +321,9 @@
         0
       ],
       "uv_rect": [
-        0.833333,
+        0.625,
         0.0,
-        0.083333,
+        0.0625,
         1.0
       ]
     },
@@ -343,9 +347,113 @@
         0
       ],
       "uv_rect": [
-        0.916667,
+        0.6875,
         0.0,
-        0.083333,
+        0.0625,
+        1.0
+      ]
+    },
+    {
+      "col": 12,
+      "id": "plot_war",
+      "src": "assets/src_sprites/fx_strip_plot_war.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        96,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.75,
+        0.0,
+        0.0625,
+        1.0
+      ]
+    },
+    {
+      "col": 13,
+      "id": "plot_pact",
+      "src": "assets/src_sprites/fx_strip_plot_pact.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        104,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.8125,
+        0.0,
+        0.0625,
+        1.0
+      ]
+    },
+    {
+      "col": 14,
+      "id": "plot_rebel",
+      "src": "assets/src_sprites/fx_strip_plot_rebel.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        112,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.875,
+        0.0,
+        0.0625,
+        1.0
+      ]
+    },
+    {
+      "col": 15,
+      "id": "crown_banner",
+      "src": "assets/src_sprites/fx_strip_crown_banner.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        120,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.9375,
+        0.0,
+        0.0625,
         1.0
       ]
     }

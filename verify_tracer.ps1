@@ -355,15 +355,51 @@ try {
     $null = Invoke-GodotGuarded -GodotArgs @("--path", "`"$ProjectDir`"", "--", "`"--shot-combat=$CombatShotPath`"") -Label "COMBAT_SHOT"
     $combatShotBytes = Assert-ShotValid -Path $CombatShotPath -Label "COMBAT_SHOT" -MinBytes 102400 -CheckColorVariance
 
+    Write-Host "=== Step 9: WorldBox Pace, Self-Founding, Ecology & Combat Range Smoke ==="
+    $paceSw = [System.Diagnostics.Stopwatch]::StartNew()
+    $paceOut = Invoke-GodotGuarded -GodotArgs @("--headless", "--path", "`"$ProjectDir`"", "--", "--smoke-worldbox-pace") -Label "SMOKE_WORLDBOX_PACE"
+    $paceSw.Stop()
+    if ($paceOut -notmatch "SMOKE_WORLDBOX_PACE_PASS") {
+        throw "[SMOKE_WORLDBOX_PACE] Expected SMOKE_WORLDBOX_PACE_PASS marker in output."
+    }
+    $wbFoundedSec = Parse-NumMetric -Text $paceOut -Key "founded_sec" -Label "SMOKE_WORLDBOX_PACE"
+    $wbTier30 = Parse-IntMetric -Text $paceOut -Key "tier_at_30s" -Label "SMOKE_WORLDBOX_PACE"
+    $wbTents30 = Parse-IntMetric -Text $paceOut -Key "tents_at_30s" -Label "SMOKE_WORLDBOX_PACE"
+    $wbRoads30 = Parse-IntMetric -Text $paceOut -Key "roads_at_30s" -Label "SMOKE_WORLDBOX_PACE"
+    $wbMaxTier = Parse-IntMetric -Text $paceOut -Key "max_tier" -Label "SMOKE_WORLDBOX_PACE"
+    $wbBiodomes = Parse-IntMetric -Text $paceOut -Key "biodomes" -Label "SMOKE_WORLDBOX_PACE"
+    $wbUpgraded = Parse-IntMetric -Text $paceOut -Key "upgraded_in_place" -Label "SMOKE_WORLDBOX_PACE"
+    $wbKingdomCities = Parse-IntMetric -Text $paceOut -Key "kingdom_cities" -Label "SMOKE_WORLDBOX_PACE"
+    $wbEcoDelta = Parse-NumMetric -Text $paceOut -Key "eco_delta" -Label "SMOKE_WORLDBOX_PACE"
+    $wbUnitShots = Parse-IntMetric -Text $paceOut -Key "unit_shots" -Label "SMOKE_WORLDBOX_PACE"
+    $wbMaxShotDist = Parse-NumMetric -Text $paceOut -Key "max_shot_dist" -Label "SMOKE_WORLDBOX_PACE"
+
+    if ($wbFoundedSec -le 0.0 -or $wbFoundedSec -gt 15.0) { throw "[SMOKE_WORLDBOX_PACE] Expected founded_sec in (0, 15.0], got $wbFoundedSec" }
+    if ($wbTier30 -ne 0) { throw "[SMOKE_WORLDBOX_PACE] Expected tier_at_30s == 0, got $wbTier30" }
+    if ($wbTents30 -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected tents_at_30s >= 1, got $wbTents30" }
+    if ($wbRoads30 -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected roads_at_30s >= 1, got $wbRoads30" }
+    if ($wbMaxTier -lt 3) { throw "[SMOKE_WORLDBOX_PACE] Expected max_tier >= 3, got $wbMaxTier" }
+    if ($wbBiodomes -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected biodomes >= 1, got $wbBiodomes" }
+    if ($wbUpgraded -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected upgraded_in_place >= 1, got $wbUpgraded" }
+    if ($wbKingdomCities -lt 2) { throw "[SMOKE_WORLDBOX_PACE] Expected kingdom_cities >= 2, got $wbKingdomCities" }
+    if ($wbEcoDelta -le 0.1) { throw "[SMOKE_WORLDBOX_PACE] Expected eco_delta > 0.1, got $wbEcoDelta" }
+    if ($wbUnitShots -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected unit_shots >= 1, got $wbUnitShots" }
+    if ($wbMaxShotDist -le 0.0 -or $wbMaxShotDist -gt 36.0) { throw "[SMOKE_WORLDBOX_PACE] Expected max_shot_dist in (0, 36.0], got $wbMaxShotDist" }
+    if ($paceSw.Elapsed.TotalSeconds -ge $TimeoutSec) {
+        throw "[SMOKE_WORLDBOX_PACE] Timing budget exceeded: $($paceSw.Elapsed.TotalSeconds)s"
+    }
+
     $activeGodotPre = @(Get-Process -Name "Godot*" -ErrorAction SilentlyContinue).Count
     if ($activeGodotPre -ne 0) {
-        throw "Active Godot processes remaining after Step 8: $activeGodotPre"
+        throw "Active Godot processes remaining after Step 9: $activeGodotPre"
     }
 
     $maxSpeedStr = $smokeMaxSpeed.ToString("F2", $inv)
     $storageStr = $storageTotal.ToString("F2", $inv)
-    Write-Host ("VERIFY_ALL_PASS units={0} flora={1} max_speed={2} cities={3} zones_owned={4} buildings={5} tech_tier={6} storage_total={7} shuttles_total={8} cosmic_age={9} shield_pylons={10} shield_blocked={11} dodges={12} possession_ok={13} world_tick_ms={14} phys_civ_tick_ms={15} sim_tick_ms={16} beams_fired={17} portal_transfers={18} casualties={19} combat_tech_tier={20} wars_active={21} rebellions_total={22} water_stranded={23} combat_max_speed={24} combat_world_tick_ms={25} combat_phys_civ_tick_ms={26} combat_sim_tick_ms={27} macro_bytes={28} zoom_bytes={29} civ_bytes={30} night_bytes={31} combat_bytes={32}" -f `
-        $smokeUnits, $smokeFlora, $maxSpeedStr, $cities, $zonesOwned, $buildings, $techTier, $storageStr, $shuttlesTotal, $cosmicAge, $shieldPylons, $shieldBlocked, $dodges, $possessionOk, $worldTickStr, $physCivTickStr, $simTickStr, $beamsFired, $portalTransfers, $casualties, $combatTechTier, $warsActive, $rebellionsTotal, $waterStranded, $combatMaxSpeedStr, $combatWorldTickStr, $combatPhysCivTickStr, $combatSimTickStr, $macroBytes, $zoomBytes, $civBytes, $nightBytes, $combatShotBytes)
+    $wbFoundedStr = $wbFoundedSec.ToString("F2", $inv)
+    $wbMaxShotStr = $wbMaxShotDist.ToString("F2", $inv)
+    Write-Host ("VERIFY_ALL_PASS units={0} flora={1} max_speed={2} cities={3} zones_owned={4} buildings={5} tech_tier={6} storage_total={7} shuttles_total={8} cosmic_age={9} shield_pylons={10} shield_blocked={11} dodges={12} possession_ok={13} world_tick_ms={14} phys_civ_tick_ms={15} sim_tick_ms={16} beams_fired={17} portal_transfers={18} casualties={19} combat_tech_tier={20} wars_active={21} rebellions_total={22} water_stranded={23} combat_max_speed={24} combat_world_tick_ms={25} combat_phys_civ_tick_ms={26} combat_sim_tick_ms={27} macro_bytes={28} zoom_bytes={29} civ_bytes={30} night_bytes={31} combat_bytes={32} wb_founded_sec={33} wb_tier30={34} wb_max_tier={35} wb_kingdom_cities={36} wb_max_shot_dist={37}" -f `
+        $smokeUnits, $smokeFlora, $maxSpeedStr, $cities, $zonesOwned, $buildings, $techTier, $storageStr, $shuttlesTotal, $cosmicAge, $shieldPylons, $shieldBlocked, $dodges, $possessionOk, $worldTickStr, $physCivTickStr, $simTickStr, $beamsFired, $portalTransfers, $casualties, $combatTechTier, $warsActive, $rebellionsTotal, $waterStranded, $combatMaxSpeedStr, $combatWorldTickStr, $combatPhysCivTickStr, $combatSimTickStr, $macroBytes, $zoomBytes, $civBytes, $nightBytes, $combatShotBytes, $wbFoundedStr, $wbTier30, $wbMaxTier, $wbKingdomCities, $wbMaxShotStr)
 }
 finally {
     Stop-StrayGodot

@@ -21,6 +21,7 @@ uniform float day_phase = 0.0;
 uniform float night_mix : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 age_tint = vec3(1.0, 1.0, 1.0);
 uniform float age_tint_strength : hint_range(0.0, 1.0) = 0.0;
+uniform float cargo_tint_override : hint_range(0.0, 1.0) = 0.0;
 
 varying vec4 v_custom;
 varying vec2 v_local_uv;
@@ -174,6 +175,14 @@ void fragment() {
 		float solid_px = smoothstep(0.55, 0.95, tex.a);
 
 		vec3 base_rgb = tex.rgb * mix(vec3(1.0), v_inst_col.rgb, tint_w);
+		if (cargo_tint_override > 0.5) {
+			float lum = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
+			float is_fill = smoothstep(0.28, 0.50, lum);
+			float shade = clamp(lum * 1.48, 0.48, 1.0);
+			vec3 rim_rgb = tex.rgb * mix(vec3(1.0), v_inst_col.rgb, 0.28);
+			vec3 fill_rgb = v_inst_col.rgb * shade;
+			base_rgb = mix(rim_rgb, fill_rgb, is_fill);
+		}
 		if (spec_w > 0.02 && solid_px > 0.05) {
 			float shimmer = 0.5 + 0.5 * sin(TIME * 1.6 + v_custom.r + v_local_uv.x * 6.0);
 			base_rgb += vec3(0.08, 0.12, 0.16) * spec_w * shimmer * solid_px;

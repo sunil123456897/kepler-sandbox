@@ -26,8 +26,8 @@ const TUNING_KNOBS := {
 	"ARC_PULSE_FREQ": 2.6,
 	"TURRET_INTERVAL_SEC": 1.25,
 	"TURRET_MISS_COOLDOWN_SEC": 0.28,
-	"TURRET_RANGE_PX": 136.0,
-	"TURRET_RANGE_PER_TIER_PX": 10.0,
+	"TURRET_RANGE_PX": 46.0,
+	"TURRET_RANGE_PER_TIER_PX": 2.0,
 	"TURRET_ENERGY_COST": 4.0,
 	"TURRET_DAMAGE": 24.0,
 	"TURRET_DAMAGE_PER_TIER": 4.0,
@@ -117,6 +117,11 @@ var _portal_transfers: int = 0
 var _turret_shots: int = 0
 var _orbital_strikes: int = 0
 
+var _sim_pace_mult: float = 1.0
+var _law_diplomacy_wars: bool = true
+var _law_rebellions: bool = true
+var _law_disasters: bool = true
+
 
 func _ready() -> void:
 	_ensure_initialized()
@@ -148,6 +153,19 @@ func bind_systems(world: Node2D, physics: Node2D, civ: Node2D) -> void:
 	_civ = civ
 	if _fx == null:
 		_fx = get_node_or_null("../FxAudio") as Node2D
+
+
+func set_sim_pace(mult: float) -> void:
+	_sim_pace_mult = clampf(mult, 0.05, 50.0)
+
+
+func set_world_laws(laws: Dictionary) -> void:
+	if laws.has("diplomacy_wars"):
+		_law_diplomacy_wars = bool(laws["diplomacy_wars"])
+	if laws.has("rebellions"):
+		_law_rebellions = bool(laws["rebellions"])
+	if laws.has("disasters"):
+		_law_disasters = bool(laws["disasters"])
 
 
 func push_lights_to_fx(fx: Node2D) -> void:
@@ -200,11 +218,12 @@ func step_combat(dt: float) -> void:
 	var safe_dt: float = clampf(dt, 0.0, 0.1)
 	_sim_time += safe_dt
 
+	var pace_dt: float = safe_dt * clampf(_sim_pace_mult, 0.05, 80.0)
 	_update_beams(safe_dt)
 	_update_arcs(safe_dt)
 	_pull_unit_beams()
-	_step_city_turrets(safe_dt)
-	_step_quantum_gates(safe_dt)
+	_step_city_turrets(pace_dt)
+	_step_quantum_gates(pace_dt)
 
 	_sync_beam_multimesh()
 	_sync_arc_multimesh()
@@ -253,7 +272,6 @@ func fire_orbital_strike(world_pos: Vector2, radius: float) -> Dictionary:
 		_spawn_beam(sky_pos, stop_pos, COL_HUMAN, clampf(safe_r * 0.45, 3.0, 8.0), 1.25, 8.2)
 		_spawn_beam(sky_pos, stop_pos, COL_ORBITAL_INTERCEPT_CORE, clampf(safe_r * 0.18, 1.5, 3.5), 2.85, 10.5)
 		spawned_beams += 2
-		spawned_beams += _spawn_shock_ring_beams(stop_pos, clampf(safe_r * 0.75, 8.0, 22.0), COL_ORBITAL_INTERCEPT_CORE, 8, 2.15)
 		if _world != null and _world.has_method("apply_orbital_strike"):
 			_world.apply_orbital_strike(world_pos, safe_r, true)
 		if _fx != null:
@@ -267,12 +285,10 @@ func fire_orbital_strike(world_pos: Vector2, radius: float) -> Dictionary:
 		impact_trauma.emit(float(TUNING_KNOBS["ORBITAL_INTERCEPT_TRAUMA"]), 0.0)
 		return {"beams": spawned_beams, "hits": 0, "intercepted": true}
 
-	# Unintercepted amber-gold orbital plasma beam + tinted core + shock ring (capped under AgX white=6.0)
+	# Unintercepted amber-gold orbital plasma beam + tinted core (capped under AgX white=6.0)
 	_spawn_beam(sky_pos, world_pos, COL_ORBITAL_SHEATH, clampf(safe_r * 0.85, 6.0, 18.0), 1.25, 5.6)
 	_spawn_beam(sky_pos, world_pos, COL_ORBITAL_CORE, clampf(safe_r * 0.34, 2.5, 7.0), 2.95, 7.8)
 	spawned_beams += 2
-	var ring_segs: int = int(TUNING_KNOBS["ORBITAL_RING_SEGS"])
-	spawned_beams += _spawn_shock_ring_beams(world_pos, clampf(safe_r * 0.92, 9.0, 34.0), COL_ORBITAL_RING, ring_segs, 2.2)
 
 	if _world != null:
 		if _world.has_method("apply_orbital_strike"):
@@ -700,18 +716,6 @@ func _spawn_beam(src: Vector2, dst: Vector2, col: Color, width: float, hdr: floa
 	_beam_rate[slot] = maxf(rate, 0.5)
 
 
-func _spawn_shock_ring_beams(center: Vector2, radius: float, col: Color, segs: int, hdr: float) -> int:
-	var count: int = maxi(segs, 6)
-	var step_ang: float = TAU / float(count)
-	for s in range(count):
-		var a0: float = float(s) * step_ang
-		var a1: float = float(s + 1) * step_ang
-		var p0: Vector2 = center + Vector2(cos(a0), sin(a0)) * radius
-		var p1: Vector2 = center + Vector2(cos(a1), sin(a1)) * radius
-		_spawn_beam(p0, p1, col, 2.4, hdr, 8.6)
-	return count
-
-
 func _alloc_arc_slot() -> int:
 	if _arc_count < MAX_ARCS:
 		var slot: int = _arc_count
@@ -938,11 +942,17 @@ func _step_city_turrets(dt: float) -> void:
 			continue
 
 		var origin: Vector2 = city_center[cid] + Vector2(0.0, -4.0)
-		var scan_r: float = base_range + float(tier - 1) * tier_range
+		var scan_r: float = clampf(base_range + float(tier - 1) * tier_range, 42.0, 52.0)
 		var target: Dictionary = _find_hostile_target(origin, scan_r, cid, goals)
 		if not bool(target.get("found", false)):
 			_city_turret_cd[cid] = miss_cd
 			continue
+		if not _law_diplomacy_wars and not bool(target.get("is_threat", false)):
+			var t_fac: int = int(target.get("faction", -1))
+			var t_cid: int = int(target.get("city_id", -1))
+			if t_fac != FACTION_MUTANT and t_cid >= 0 and t_cid != cid:
+				_city_turret_cd[cid] = miss_cd
+				continue
 		if not _civ.consume_city_energy(cid, energy_cost):
 			_city_turret_cd[cid] = miss_cd
 			continue
@@ -967,7 +977,7 @@ func _step_city_turrets(dt: float) -> void:
 
 
 func _is_city_hot(city_id: int, war_states: PackedByteArray, alerted: PackedByteArray) -> bool:
-	var at_war: bool = city_id >= 0 and city_id < war_states.size() and int(war_states[city_id]) >= DIPLO_TOTAL_WAR
+	var at_war: bool = _law_diplomacy_wars and city_id >= 0 and city_id < war_states.size() and int(war_states[city_id]) >= DIPLO_TOTAL_WAR
 	var is_alerted: bool = city_id >= 0 and city_id < alerted.size() and int(alerted[city_id]) != 0
 	return at_war or is_alerted
 
@@ -1148,12 +1158,16 @@ func _is_city_hostile_to(owner_cid: int, target_cid: int, target_fac: int, goals
 		var idx: int = owner_cid * max_c + target_cid
 		if idx >= 0 and idx < diplo.size():
 			var st: int = int(diplo[idx])
-			return st == DIPLO_TOTAL_WAR or st == DIPLO_REBELLION
+			if st == DIPLO_TOTAL_WAR:
+				return _law_diplomacy_wars
+			if st == DIPLO_REBELLION:
+				return _law_diplomacy_wars and _law_rebellions
+			return false
 	var fac_v: Variant = goals.get("city_faction", null)
 	if fac_v is PackedByteArray:
 		var facs: PackedByteArray = fac_v
 		if owner_cid < facs.size():
-			return target_fac != int(facs[owner_cid])
+			return _law_diplomacy_wars and (target_fac != int(facs[owner_cid]))
 	return false
 
 

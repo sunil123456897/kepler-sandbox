@@ -79,15 +79,15 @@ text = "KEPLER-1"
 layout_mode = 2
 
 [node name="ColonistsLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(64, 0)
+custom_minimum_size = Vector2(56, 0)
 layout_mode = 2
-text = "Юниты: 110"
+text = "Юниты: 0"
 
 [node name="SepCities" type="VSeparator" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 
 [node name="CitiesLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(54, 0)
+custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 text = "Города: 0"
 
@@ -95,7 +95,7 @@ text = "Города: 0"
 layout_mode = 2
 
 [node name="TechLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(48, 0)
+custom_minimum_size = Vector2(44, 0)
 layout_mode = 2
 text = "Тех: 0/4"
 
@@ -103,7 +103,7 @@ text = "Тех: 0/4"
 layout_mode = 2
 
 [node name="WarsLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(70, 0)
+custom_minimum_size = Vector2(64, 0)
 tooltip_text = "Активные войны и мятежи"
 layout_mode = 2
 text = "Войн: 0 · М:0"
@@ -112,7 +112,7 @@ text = "Войн: 0 · М:0"
 layout_mode = 2
 
 [node name="FloraLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(54, 0)
+custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 text = "Флора: 0"
 
@@ -120,7 +120,7 @@ text = "Флора: 0"
 layout_mode = 2
 
 [node name="TempLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(76, 0)
+custom_minimum_size = Vector2(68, 0)
 layout_mode = 2
 text = "Темп: +18.0°C"
 
@@ -186,11 +186,18 @@ focus_mode = 0
 toggle_mode = true
 text = "5x"
 
+[node name="BtnSpeed20" type="Button" parent="HUD/TopBar/TopRow/SpeedRow"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Ускорение времени 20x (безопасный шаг)"
+text = "20x"
+
 [node name="SepFps" type="VSeparator" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 
 [node name="FpsLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(44, 0)
+custom_minimum_size = Vector2(42, 0)
 layout_mode = 2
 text = "FPS: 60"
 
@@ -202,6 +209,16 @@ layout_mode = 2
 focus_mode = 0
 tooltip_text = "Космическая эпоха планеты: нажмите для переключения [G]"
 text = "Эпоха: Золотое окно"
+
+[node name="SepLaws" type="VSeparator" parent="HUD/TopBar/TopRow"]
+layout_mode = 2
+
+[node name="BtnLaws" type="Button" parent="HUD/TopBar/TopRow"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Законы мира: самооснование, войны, мятежи, эпохи, катастрофы, мутации"
+text = "Законы"
 
 [node name="InspectorPanel" type="PanelContainer" parent="HUD"]
 anchors_preset = 1
@@ -447,7 +464,7 @@ layout_mode = 2
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Основать колонию выбранной фракции [6]"
+tooltip_text = "ЛКМ: Высадить поселенцев (4->1, 8->4, 16+->8) · Shift+ЛКМ: Мгновенная колония [6]"
 text = "Колония"
 
 [node name="FactionRow" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]

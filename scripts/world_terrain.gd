@@ -35,7 +35,7 @@ const TUNING_KNOBS := {
 	"DIRTY_FLUSH_INTERVAL": 4,
 	"TEMP_AVG_ROWS_PER_TICK": 4,
 	"STEAM_COOLDOWN_SEC": 0.25,
-	"COSMIC_AGE_DURATION_SEC": 28.0,
+	"COSMIC_AGE_DURATION_SEC": 420.0,
 	"ION_STORM_STRIKE_INTERVAL_SEC": 4.2,
 	"ION_STORM_FIRST_STRIKE_DELAY_SEC": 1.6,
 	"PLASMA_SHIMMER_DECAY_PER_SEC": 38.0,
@@ -119,6 +119,9 @@ const COSMIC_AGE_DEFS := [
 		"temp_offset": -2.0,
 	},
 ]
+
+# Calm cosmic rhythm: GOLD >= 0.55, (GOLD + SPORE_BLOOM) >= 0.65
+const COSMIC_AGE_WEIGHTS: Array[float] = [0.56, 0.10, 0.10, 0.14, 0.10]
 
 enum Tier {
 	DEEP_OCEAN = 0,
@@ -291,6 +294,15 @@ var _cosmic_temp_offset: float = 0.0
 var _cosmic_fire_mul: float = 0.85
 var _last_crisis_age: int = 0
 var _ion_strike_timer: float = 0.0
+var _sim_pace_mult: float = 1.0
+var _world_laws: Dictionary = {
+	"self_founding": true,
+	"diplomacy_wars": true,
+	"rebellions": true,
+	"cosmic_ages": true,
+	"disasters": true,
+	"rad_mutations": true,
+}
 var _avg_temp_cached: float = 18.0
 var _temp_total_sum: float = 0.0
 var _inv_total_tiles: float = 0.0
@@ -488,9 +500,40 @@ func set_cosmic_age(age_id: int, reset_timer: bool = true) -> void:
 	cosmic_age_changed.emit(next_id)
 
 
+func set_sim_pace(mult: float) -> void:
+	_sim_pace_mult = clampf(mult, 0.0, 200.0)
+
+
+func set_world_laws(laws: Dictionary) -> void:
+	for key in laws:
+		_world_laws[String(key)] = bool(laws[key])
+
+
+func get_world_laws() -> Dictionary:
+	return _world_laws.duplicate()
+
+
+func _pick_next_cosmic_age() -> int:
+	var total_w: float = 0.0
+	for w in COSMIC_AGE_WEIGHTS:
+		total_w += w
+	var roll: float = _cosmic_age_rng.randf() * total_w
+	var acc: float = 0.0
+	var picked: int = CosmicAge.GOLD
+	for age_i in range(COSMIC_AGE_WEIGHTS.size()):
+		acc += COSMIC_AGE_WEIGHTS[age_i]
+		if roll <= acc:
+			picked = age_i
+			break
+	if picked != CosmicAge.GOLD and picked != CosmicAge.SPORE_BLOOM and picked == _last_crisis_age:
+		return CosmicAge.GOLD
+	return picked
+
+
 func step_cosmic_age(dt: float) -> Dictionary:
 	_ensure_initialized()
-	if dt <= 0.0:
+	var scaled_dt: float = dt * _sim_pace_mult
+	if dt <= 0.0 or scaled_dt <= 0.0:
 		return {
 			"changed": false,
 			"age_id": _cosmic_age,
@@ -499,26 +542,22 @@ func step_cosmic_age(dt: float) -> Dictionary:
 		}
 
 	var duration: float = maxf(1.0, float(TUNING_KNOBS["COSMIC_AGE_DURATION_SEC"]))
-	_cosmic_age_elapsed += dt
 	var changed: bool = false
-	var steps: int = 0
-	while _cosmic_age_elapsed >= duration and steps < 16:
-		_cosmic_age_elapsed -= duration
-		steps += 1
-		var next_age: int = CosmicAge.GOLD
-		if _cosmic_age == CosmicAge.GOLD:
-			var pick: int = _cosmic_age_rng.randi_range(CosmicAge.SOLAR_FLARE, CosmicAge.ION_STORM)
-			if pick == _last_crisis_age:
-				pick = (pick % 4) + 1
-			next_age = pick
-		set_cosmic_age(next_age, false)
-		changed = true
+	if bool(_world_laws.get("cosmic_ages", true)):
+		_cosmic_age_elapsed += scaled_dt
+		var steps: int = 0
+		while _cosmic_age_elapsed >= duration and steps < 16:
+			_cosmic_age_elapsed -= duration
+			steps += 1
+			var next_age: int = _pick_next_cosmic_age()
+			set_cosmic_age(next_age, false)
+			changed = true
 
 	var strike_pending: bool = false
 	var strike_pos: Vector2 = Vector2.ZERO
-	if _cosmic_age == CosmicAge.ION_STORM:
+	if _cosmic_age == CosmicAge.ION_STORM and bool(_world_laws.get("disasters", true)):
 		var interval: float = maxf(0.5, float(TUNING_KNOBS["ION_STORM_STRIKE_INTERVAL_SEC"]))
-		_ion_strike_timer += dt
+		_ion_strike_timer += scaled_dt
 		if _ion_strike_timer >= interval:
 			_ion_strike_timer = fmod(_ion_strike_timer, interval)
 			var cand: Vector2 = _pick_ion_storm_strike_pos()
@@ -944,6 +983,88 @@ func _carve_volcanic_fissures() -> void:
 		hubs_y.append(hy)
 		_stamp_volcano_hub(hx, hy)
 
+	_enforce_hot_lava_borders_rect(0, 0, map_w, map_h, false)
+
+
+func _has_hot_lava_within_two(px: int, py: int) -> bool:
+	var y0: int = maxi(0, py - 2)
+	var y1: int = mini(map_h - 1, py + 2)
+	var x0: int = maxi(0, px - 2)
+	var x1: int = mini(map_w - 1, px + 2)
+	for ny in range(y0, y1 + 1):
+		var dy: int = ny - py
+		var row_off: int = ny * map_w
+		for nx in range(x0, x1 + 1):
+			var dx: int = nx - px
+			if dx * dx + dy * dy > 5:
+				continue
+			var nidx: int = row_off + nx
+			var nb_b: int = _biomes[nidx]
+			if nb_b == Biome.LAVA or (nb_b == Biome.SCORCHED and _temp[nidx] >= 165.0):
+				return true
+	return false
+
+
+func _enforce_hot_border_at(px: int, py: int, mark_dirty: bool) -> float:
+	var idx: int = py * map_w + px
+	var is_lava: bool = _biomes[idx] == Biome.LAVA
+	var min_ring1_t: float = 115.0 if is_lava else 85.0
+	var temp_delta: float = 0.0
+	var y0: int = maxi(0, py - 2)
+	var y1: int = mini(map_h - 1, py + 2)
+	var x0: int = maxi(0, px - 2)
+	var x1: int = mini(map_w - 1, px + 2)
+	for ny in range(y0, y1 + 1):
+		var dy: int = ny - py
+		var row_off: int = ny * map_w
+		for nx in range(x0, x1 + 1):
+			var dx: int = nx - px
+			var d2: int = dx * dx + dy * dy
+			if d2 == 0 or d2 > 5:
+				continue
+			var nidx: int = row_off + nx
+			if _tiers[nidx] <= Tier.SHALLOW or _biomes[nidx] == Biome.LAVA:
+				continue
+			var changed: bool = false
+			if d2 <= 2:
+				if _biomes[nidx] != Biome.SCORCHED:
+					_biomes[nidx] = Biome.SCORCHED
+					changed = true
+					if _temp[nidx] < min_ring1_t:
+						temp_delta += min_ring1_t - _temp[nidx]
+						_temp[nidx] = min_ring1_t
+				if _moisture[nidx] > 0.12:
+					_moisture[nidx] = 0.12
+			else:
+				if _biomes[nidx] == Biome.LUSH:
+					_biomes[nidx] = Biome.RUST
+					changed = true
+				if _moisture[nidx] > 0.24:
+					_moisture[nidx] = 0.24
+			if changed and mark_dirty:
+				_mark_tile_dirty(nx, ny, true, 0)
+	return temp_delta
+
+
+func _enforce_hot_lava_borders_rect(sx0: int, sy0: int, sx1: int, sy1: int, mark_dirty: bool) -> void:
+	var x0: int = maxi(0, sx0)
+	var y0: int = maxi(0, sy0)
+	var x1: int = mini(map_w, sx1)
+	var y1: int = mini(map_h, sy1)
+	var sum_d: float = 0.0
+	for py in range(y0, y1):
+		var row_off: int = py * map_w
+		for px in range(x0, x1):
+			var idx: int = row_off + px
+			if _tiers[idx] <= Tier.SHALLOW:
+				continue
+			var b: int = _biomes[idx]
+			if b == Biome.LAVA or (b == Biome.SCORCHED and _temp[idx] >= 165.0):
+				sum_d += _enforce_hot_border_at(px, py, mark_dirty)
+	if sum_d != 0.0:
+		_temp_total_sum += sum_d
+		_avg_temp_cached = _temp_total_sum * _inv_total_tiles
+
 
 func _has_water_within(cx: int, cy: int, rad: int) -> bool:
 	for dy in range(-rad, rad + 1, 2):
@@ -1267,6 +1388,7 @@ func apply_brush(world_pos: Vector2, brush_mode: int, radius: float = 12.0) -> v
 	var rx1: int = mini(map_w, cx + r + 3)
 	var ry1: int = mini(map_h, cy + r + 3)
 
+	_enforce_hot_lava_borders_rect(rx0 - 2, ry0 - 2, rx1 + 2, ry1 + 2, false)
 	_mark_chunks_in_rect(cx - r - 1, cy - r - 1, r * 2 + 3, r * 2 + 3, false)
 	_recompute_avg_temp_full()
 	_render_rect(rx0, ry0, rx1 - rx0, ry1 - ry0)
@@ -1379,6 +1501,8 @@ func apply_orbital_strike(world_pos: Vector2, radius: float, intercepted: bool) 
 	var rx1: int = mini(map_w, cx + r + 3)
 	var ry1: int = mini(map_h, cy + r + 3)
 
+	if not intercepted:
+		_enforce_hot_lava_borders_rect(rx0 - 2, ry0 - 2, rx1 + 2, ry1 + 2, false)
 	_mark_chunks_in_rect(cx - r - 1, cy - r - 1, r * 2 + 3, r * 2 + 3, false)
 	if not intercepted:
 		_recompute_avg_temp_full()
@@ -1573,6 +1697,7 @@ func apply_elemental_storm(world_pos: Vector2, radius: float, kind: String) -> v
 	var rx1: int = mini(map_w, cx + r + 3)
 	var ry1: int = mini(map_h, cy + r + 3)
 
+	_enforce_hot_lava_borders_rect(rx0 - 2, ry0 - 2, rx1 + 2, ry1 + 2, false)
 	_mark_chunks_in_rect(cx - r - 1, cy - r - 1, r * 2 + 3, r * 2 + 3, false)
 	_recompute_avg_temp_full()
 	_render_rect(rx0, ry0, rx1 - rx0, ry1 - ry0)
@@ -1586,6 +1711,163 @@ func apply_elemental_storm(world_pos: Vector2, radius: float, kind: String) -> v
 		surface_impact.emit(world_pos, float(r), "ion_storm")
 	elif is_rain:
 		surface_impact.emit(world_pos, float(r), "rain")
+
+
+func apply_civ_ecology_batch(events: Array) -> int:
+	_ensure_initialized()
+	if events.is_empty():
+		return 0
+	var applied: int = 0
+	var prev_sum: float = _temp_total_sum
+	for item in events:
+		if not (item is Dictionary):
+			continue
+		var ev: Dictionary = item
+		var kind: int = int(ev.get("kind", -1))
+		if kind < 0 or kind > 3:
+			continue
+		var px: int = int(ev.get("x", -1))
+		var py: int = int(ev.get("y", -1))
+		if px < 0 or px >= map_w or py < 0 or py >= map_h:
+			continue
+		var val: float = float(ev.get("val", 1.0))
+		if val <= 0.0:
+			continue
+		if _apply_ecology_footprint(kind, px, py, val):
+			applied += 1
+	if _temp_total_sum != prev_sum:
+		_avg_temp_cached = _temp_total_sum * _inv_total_tiles
+	return applied
+
+
+func _apply_ecology_footprint(kind: int, px: int, py: int, val: float) -> bool:
+	var rad: int = 1 if (kind == 0 or kind == 1 or kind == 2 or val >= 1.5) else 0
+	var any_hit: bool = false
+	for dy in range(-rad, rad + 1):
+		var ny: int = py + dy
+		if ny < 0 or ny >= map_h:
+			continue
+		for dx in range(-rad, rad + 1):
+			var nx: int = px + dx
+			if nx < 0 or nx >= map_w:
+				continue
+			var d2: int = dx * dx + dy * dy
+			if kind == 1 and d2 > 1:
+				continue
+			var w: float = 1.0 if d2 == 0 else (0.55 if d2 == 1 else 0.35)
+			if _apply_ecology_at(kind, nx, ny, val * w):
+				any_hit = true
+	return any_hit
+
+
+func _apply_ecology_at(kind: int, nx: int, ny: int, val: float) -> bool:
+	var idx: int = ny * map_w + nx
+	var t: int = _tiers[idx]
+	var b: int = _biomes[idx]
+	if t <= Tier.SHALLOW or b == Biome.LAVA:
+		return false
+	var visual_dirty: bool = false
+	var structural: bool = false
+
+	if kind == 0:
+		var add_t: float = clampf(val, 0.2, 160.0)
+		var old_t: float = _temp[idx]
+		var new_t: float = clampf(old_t + add_t, -40.0, 520.0)
+		_temp[idx] = new_t
+		_temp_total_sum += new_t - old_t
+		_moisture[idx] = maxf(0.0, _moisture[idx] - clampf(add_t * 0.0045, 0.01, 0.25))
+		if t == Tier.SUMMIT and new_t >= 8.0:
+			_height[idx] = minf(_height[idx], 0.745)
+			_tiers[idx] = Tier.MOUNTAINS
+			_moisture[idx] = clampf(_moisture[idx] + 0.14, 0.0, 0.85)
+			visual_dirty = true
+			structural = true
+		if new_t >= 105.0 and b != Biome.SCORCHED:
+			_biomes[idx] = Biome.SCORCHED
+			visual_dirty = true
+		elif new_t >= 52.0 and b == Biome.LUSH:
+			_biomes[idx] = Biome.RUST
+			visual_dirty = true
+		if (old_t <= 65.0 and new_t > 65.0) or (old_t <= 95.0 and new_t > 95.0) or (old_t <= 185.0 and new_t > 185.0):
+			visual_dirty = true
+		if visual_dirty:
+			_mark_tile_dirty(nx, ny, structural, 1 if structural else 0)
+		elif new_t > float(TUNING_KNOBS["TEMP_EQUILIBRIUM_MAX_C"]):
+			_activate_tile_row(nx, ny)
+		if new_t >= 165.0:
+			_temp_total_sum += _enforce_hot_border_at(nx, ny, true)
+		return true
+
+	if kind == 1:
+		if t <= Tier.HILLS:
+			if b == Biome.LUSH:
+				_biomes[idx] = Biome.RUST
+				visual_dirty = true
+			var old_m1: float = _moisture[idx]
+			var new_m1: float = maxf(0.06, old_m1 - clampf(val * 0.22, 0.05, 0.45))
+			_moisture[idx] = new_m1
+			if _ash[idx] > 0:
+				_ash[idx] = 0
+				_ash_tiles = maxi(0, _ash_tiles - 1)
+				visual_dirty = true
+			if visual_dirty:
+				var cidx1: int = (ny >> CHUNK_SHIFT) * _chunks_w + (nx >> CHUNK_SHIFT)
+				_mark_chunk_dirty_local(cidx1, nx & 15, ny & 15, nx & 15, ny & 15, false)
+			return visual_dirty or absf(new_m1 - old_m1) > 0.001
+		return false
+
+	if kind == 2:
+		if t <= Tier.HILLS and _temp[idx] < 65.0 and _rad[idx] < 0.38:
+			# Keep moisture <= 0.72 so SPORE bio-cover stays vigorous yet flammable by lava/beams
+			var old_m2: float = _moisture[idx]
+			var new_m2: float = clampf(old_m2 + clampf(val * 0.25, 0.05, 0.42), 0.0, 0.72)
+			_moisture[idx] = new_m2
+			if b == Biome.RUST or (b == Biome.SCORCHED and _temp[idx] < 45.0):
+				if not _has_hot_lava_within_two(nx, ny):
+					_biomes[idx] = Biome.LUSH
+					visual_dirty = true
+			if _ash[idx] > 0:
+				_ash[idx] = 0
+				_ash_tiles = maxi(0, _ash_tiles - 1)
+				visual_dirty = true
+			if visual_dirty:
+				var cidx2: int = (ny >> CHUNK_SHIFT) * _chunks_w + (nx >> CHUNK_SHIFT)
+				_mark_chunk_dirty_local(cidx2, nx & 15, ny & 15, nx & 15, ny & 15, false)
+			return visual_dirty or absf(new_m2 - old_m2) > 0.001
+		return false
+
+	var any_ore_change: bool = false
+	if b == Biome.CRYSTAL:
+		var old_r: float = _rad[idx]
+		var new_r: float = maxf(0.015, old_r - clampf(val * 0.14, 0.04, 0.35))
+		_rad[idx] = new_r
+		if _plasma_glow[idx] > 0:
+			_plasma_glow[idx] = 0
+			any_ore_change = true
+		if new_r != old_r:
+			any_ore_change = true
+		if new_r <= 0.22:
+			_biomes[idx] = Biome.RUST
+			visual_dirty = true
+			structural = true
+	var old_h: float = _height[idx]
+	var min_h: float = 0.405 if old_h >= 0.40 else old_h
+	var new_h: float = maxf(min_h, old_h - clampf(val * 0.005, 0.002, 0.016))
+	if new_h != old_h:
+		_height[idx] = new_h
+		any_ore_change = true
+	var new_t_tier: int = _classify_height(new_h)
+	if new_t_tier != t and new_t_tier >= Tier.SAND:
+		_tiers[idx] = new_t_tier
+		visual_dirty = true
+		structural = true
+	if b == Biome.LUSH and val >= 0.8:
+		_biomes[idx] = Biome.RUST
+		_moisture[idx] *= 0.80
+		visual_dirty = true
+	if visual_dirty:
+		_mark_tile_dirty(nx, ny, structural, 0)
+	return visual_dirty or any_ore_change
 
 
 func _ignite_tile(idx: int, intensity: float) -> void:
@@ -1604,7 +1886,7 @@ func _ignite_tile(idx: int, intensity: float) -> void:
 
 func step_environment(dt: float) -> void:
 	_ensure_initialized()
-	if dt <= 0.0:
+	if dt <= 0.0 or _sim_pace_mult <= 0.0:
 		return
 
 	var eff_dt: float = minf(dt, 0.15)
@@ -1826,7 +2108,7 @@ func step_environment(dt: float) -> void:
 						if b_cur == Biome.SCORCHED and r_cur < 0.22:
 							var m_next: float = minf(0.56, _moisture[idx] + 0.032 * eff_dt)
 							_moisture[idx] = m_next
-							if m_next >= 0.34:
+							if m_next >= 0.34 and not _has_hot_lava_within_two(px, py):
 								rng_s = (rng_s * 1664525 + 1013904223) & 0x7FFFFFFF
 								if (rng_s & 0xFFFF) < ash_prob_i:
 									_biomes[idx] = Biome.LUSH
@@ -1839,7 +2121,7 @@ func step_environment(dt: float) -> void:
 
 					elif b_cur == Biome.SCORCHED and t_cur < 32.0 and r_cur < 0.14 and _moisture[idx] > 0.45:
 						rng_s = (rng_s * 1664525 + 1013904223) & 0x7FFFFFFF
-						if (rng_s & 0xFFFF) < lush_prob_i:
+						if (rng_s & 0xFFFF) < lush_prob_i and not _has_hot_lava_within_two(px, py):
 							var l_dir: int = (rng_s >> 16) & 3
 							var nidx_l: int = idx - 1 if l_dir == 0 else (idx + 1 if l_dir == 1 else (idx - mw if l_dir == 2 else idx + mw))
 							if _biomes[nidx_l] == Biome.LUSH:
@@ -1885,9 +2167,15 @@ func step_environment(dt: float) -> void:
 		_step_rolling_avg_temp()
 
 	var flush_interval: int = int(TUNING_KNOBS["DIRTY_FLUSH_INTERVAL"])
+	var dirty_cap: int = 16
+	var struct_cap: int = 12
+	if _sim_pace_mult >= 20.0:
+		flush_interval = maxi(flush_interval, 8)
+		dirty_cap = 32
+		struct_cap = 24
 	var dirty_n: int = _dirty_chunks.size()
 	var struct_n: int = _structural_dirty_chunks.size()
-	if dirty_n >= 16 or struct_n >= 12 or ((dirty_n > 0 or struct_n > 0) and (_env_step_count % flush_interval) == 0):
+	if dirty_n >= dirty_cap or struct_n >= struct_cap or ((dirty_n > 0 or struct_n > 0) and (_env_step_count % flush_interval) == 0):
 		if dirty_n > 0:
 			_flush_dirty_chunks()
 		if _structural_dirty_chunks.size() > 0:
@@ -1901,6 +2189,18 @@ func _activate_chunk(cidx: int) -> void:
 	_chunk_row_mask[cidx] = 0xFFFF
 	_active_chunk_pos[cidx] = _active_chunks.size()
 	_active_chunks.append(cidx)
+
+
+func _activate_tile_row(px: int, py: int) -> void:
+	var cx: int = clampi(px >> CHUNK_SHIFT, 0, _chunks_w - 1)
+	var cy: int = clampi(py >> CHUNK_SHIFT, 0, _chunks_h - 1)
+	var cidx: int = cy * _chunks_w + cx
+	if _chunk_active[cidx] == 0:
+		_chunk_active[cidx] = 1
+		_chunk_row_mask[cidx] = 0
+		_active_chunk_pos[cidx] = _active_chunks.size()
+		_active_chunks.append(cidx)
+	_chunk_row_mask[cidx] |= 1 << (py & 15)
 
 
 func _deactivate_chunk_at(pos: int) -> void:
@@ -1946,8 +2246,7 @@ func _mark_tile_dirty(px: int, py: int, structural: bool, neighbor_pad: int) -> 
 	var cx: int = clampi(px >> CHUNK_SHIFT, 0, _chunks_w - 1)
 	var cy: int = clampi(py >> CHUNK_SHIFT, 0, _chunks_h - 1)
 	var cidx: int = cy * _chunks_w + cx
-	_activate_chunk(cidx)
-	_chunk_row_mask[cidx] |= 1 << (py & 15)
+	_activate_tile_row(px, py)
 	if neighbor_pad <= 0:
 		var lx: int = px & 15
 		var ly: int = py & 15
@@ -2005,7 +2304,7 @@ func _recompute_all_chunk_flags() -> void:
 		for cx in range(_chunks_w):
 			var x0: int = cx << CHUNK_SHIFT
 			var x1: int = mini(map_w, x0 + CHUNK_SIZE)
-			var active: bool = false
+			var rmask: int = 0
 			for py in range(y0, y1):
 				var row_off: int = py * map_w
 				for px in range(x0, x1):
@@ -2013,12 +2312,14 @@ func _recompute_all_chunk_flags() -> void:
 					var b: int = _biomes[idx]
 					var r_floor: float = crys_floor if b == Biome.CRYSTAL else 0.02
 					if _fire[idx] > 0.0 or _ash[idx] > 0 or b == Biome.LAVA or _temp[idx] > eq_max or _rad[idx] > r_floor or _plasma_glow[idx] > 0:
-						active = true
+						rmask |= 1 << (py & 15)
 						break
-				if active:
-					break
-			if active:
-				_activate_chunk(cy * _chunks_w + cx)
+			if rmask != 0:
+				var cidx: int = cy * _chunks_w + cx
+				_chunk_active[cidx] = 1
+				_chunk_row_mask[cidx] = rmask
+				_active_chunk_pos[cidx] = _active_chunks.size()
+				_active_chunks.append(cidx)
 
 
 func _flush_dirty_chunks() -> void:
