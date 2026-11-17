@@ -1,0 +1,1057 @@
+{
+  "atlas_path": "res://assets/atlases/buildings_atlas.png",
+  "mask_path": "res://assets/atlases/buildings_atlas_mask.png",
+  "atlas_size": [
+    912,
+    24
+  ],
+  "cell_size": [
+    24,
+    24
+  ],
+  "atlas_cols": 38,
+  "shader_mode": 3,
+  "shader_uniforms": {
+    "sprite_mode": 3,
+    "motion_mode": 0,
+    "atlas_cols": 38,
+    "sprite_size": [
+      24,
+      24
+    ],
+    "mask_tex": "res://assets/atlases/buildings_atlas_mask.png",
+    "hdr_emissive": 2.6
+  },
+  "primary_columns": {
+    "BLD_CAMPFIRE": 0,
+    "BLD_TENT": 1,
+    "BLD_DRILL": 2,
+    "BLD_DEPOT": 3,
+    "BLD_SOLAR_ARRAY": 4,
+    "BLD_BIODOME": 5,
+    "BLD_FUSION_REACTOR": 6,
+    "BLD_LAUNCHPAD": 7
+  },
+  "variant_columns": {
+    "BLD_CAMPFIRE_1": 8,
+    "BLD_TENT_POD": 9,
+    "BLD_DRILL_1": 10,
+    "BLD_DEPOT_1": 11,
+    "BLD_SOLAR_ARRAY_1": 12,
+    "BLD_BIODOME_DAMAGED": 13,
+    "BLD_FUSION_REACTOR_1": 14,
+    "BLD_LAUNCHPAD_EMPTY": 15,
+    "BLD_LAUNCHPAD_SCORCHED": 16,
+    "BLD_RUINS": 17,
+    "BLD_SCAFFOLD": 18,
+    "BLD_SCAFFOLD_LG": 19,
+    "BLD_ROBOT_EXTRACTOR": 20,
+    "BLD_ROBOT_DEPOT": 21,
+    "BLD_ROBOT_PYLON": 22,
+    "BLD_ROBOT_REACTOR": 23,
+    "BLD_ROBOT_GANTRY": 24,
+    "BLD_SPORE_POD": 25,
+    "BLD_SPORE_EXTRACTOR": 26,
+    "BLD_SPORE_HIVE": 27,
+    "BLD_SPORE_SPIRE": 28,
+    "BLD_SPORE_DOME": 29,
+    "BLD_SPORE_HEART": 30,
+    "BLD_SPORE_LAUNCH": 31,
+    "CRAFT_SHUTTLE": 32,
+    "CRAFT_SHUTTLE_BOOST": 33,
+    "BLD_SHIELD_PYLON": 34,
+    "BLD_SHIELD_PYLON_ACTIVE": 35,
+    "BLD_QUANTUM_GATE": 36,
+    "BLD_QUANTUM_GATE_ACTIVE": 37
+  },
+  "cells": [
+    {
+      "col": 0,
+      "id": "bld_campfire",
+      "src": "assets/src_sprites/bld_campfire_0.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        0,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        8,
+        16
+      ],
+      "uv_rect": [
+        0.0,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 1,
+      "id": "bld_tent",
+      "src": "assets/src_sprites/bld_tent_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        24,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.026316,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 2,
+      "id": "bld_drill",
+      "src": "assets/src_sprites/bld_drill_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        48,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.052632,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 3,
+      "id": "bld_depot",
+      "src": "assets/src_sprites/bld_depot_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        72,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.078947,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 4,
+      "id": "bld_solar_array",
+      "src": "assets/src_sprites/bld_solar_array_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 2,
+      "cell_px": [
+        96,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.105263,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 5,
+      "id": "bld_biodome",
+      "src": "assets/src_sprites/bld_biodome_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        120,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.131579,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 6,
+      "id": "bld_fusion_reactor",
+      "src": "assets/src_sprites/bld_fusion_reactor_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        144,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.157895,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 7,
+      "id": "bld_launchpad",
+      "src": "assets/src_sprites/bld_launchpad_0.png",
+      "native_size": [
+        24,
+        24
+      ],
+      "tier": 3,
+      "cell_px": [
+        168,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.184211,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 8,
+      "id": "bld_campfire_1",
+      "src": "assets/src_sprites/bld_campfire_1.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        192,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        8,
+        16
+      ],
+      "uv_rect": [
+        0.210526,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 9,
+      "id": "bld_tent_1",
+      "src": "assets/src_sprites/bld_tent_1.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        216,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.236842,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 10,
+      "id": "bld_drill_1",
+      "src": "assets/src_sprites/bld_drill_1.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        240,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.263158,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 11,
+      "id": "bld_depot_1",
+      "src": "assets/src_sprites/bld_depot_1.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        264,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.289474,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 12,
+      "id": "bld_solar_array_1",
+      "src": "assets/src_sprites/bld_solar_array_1.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 2,
+      "cell_px": [
+        288,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.315789,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 13,
+      "id": "bld_biodome_1",
+      "src": "assets/src_sprites/bld_biodome_1.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        312,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.342105,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 14,
+      "id": "bld_fusion_reactor_1",
+      "src": "assets/src_sprites/bld_fusion_reactor_1.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        336,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.368421,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 15,
+      "id": "bld_launchpad_1",
+      "src": "assets/src_sprites/bld_launchpad_1.png",
+      "native_size": [
+        24,
+        24
+      ],
+      "tier": 3,
+      "cell_px": [
+        360,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.394737,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 16,
+      "id": "bld_launchpad_2",
+      "src": "assets/src_sprites/bld_launchpad_2.png",
+      "native_size": [
+        24,
+        24
+      ],
+      "tier": 3,
+      "cell_px": [
+        384,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.421053,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 17,
+      "id": "bld_ruins",
+      "src": "assets/src_sprites/bld_ruins_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        408,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.447368,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 18,
+      "id": "bld_scaffold",
+      "src": "assets/src_sprites/bld_scaffold_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        432,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.473684,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 19,
+      "id": "bld_scaffold_lg",
+      "src": "assets/src_sprites/bld_scaffold_lg_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        456,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.5,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 20,
+      "id": "bld_robot_extractor",
+      "src": "assets/src_sprites/bld_robot_extractor_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        480,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.526316,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 21,
+      "id": "bld_robot_depot",
+      "src": "assets/src_sprites/bld_robot_depot_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        504,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.552632,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 22,
+      "id": "bld_robot_pylon",
+      "src": "assets/src_sprites/bld_robot_pylon_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 2,
+      "cell_px": [
+        528,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.578947,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 23,
+      "id": "bld_robot_reactor",
+      "src": "assets/src_sprites/bld_robot_reactor_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        552,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.605263,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 24,
+      "id": "bld_robot_gantry",
+      "src": "assets/src_sprites/bld_robot_gantry_0.png",
+      "native_size": [
+        24,
+        24
+      ],
+      "tier": 3,
+      "cell_px": [
+        576,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.631579,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 25,
+      "id": "bld_spore_pod",
+      "src": "assets/src_sprites/bld_spore_pod_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        600,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.657895,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 26,
+      "id": "bld_spore_extractor",
+      "src": "assets/src_sprites/bld_spore_extractor_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        624,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.684211,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 27,
+      "id": "bld_spore_hive",
+      "src": "assets/src_sprites/bld_spore_hive_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        648,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.710526,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 28,
+      "id": "bld_spore_spire",
+      "src": "assets/src_sprites/bld_spore_spire_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 2,
+      "cell_px": [
+        672,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        12
+      ],
+      "uv_rect": [
+        0.736842,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 29,
+      "id": "bld_spore_dome",
+      "src": "assets/src_sprites/bld_spore_dome_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        696,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.763158,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 30,
+      "id": "bld_spore_heart",
+      "src": "assets/src_sprites/bld_spore_heart_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        720,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        8
+      ],
+      "uv_rect": [
+        0.789474,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 31,
+      "id": "bld_spore_launch",
+      "src": "assets/src_sprites/bld_spore_launch_0.png",
+      "native_size": [
+        24,
+        24
+      ],
+      "tier": 3,
+      "cell_px": [
+        744,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.815789,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 32,
+      "id": "craft_shuttle",
+      "src": "assets/src_sprites/craft_shuttle_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 3,
+      "cell_px": [
+        768,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        6
+      ],
+      "uv_rect": [
+        0.842105,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 33,
+      "id": "craft_shuttle_boost",
+      "src": "assets/src_sprites/craft_shuttle_1.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 3,
+      "cell_px": [
+        792,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        6
+      ],
+      "uv_rect": [
+        0.868421,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 34,
+      "id": "bld_shield_pylon",
+      "src": "assets/src_sprites/bld_shield_pylon_0.png",
+      "native_size": [
+        16,
+        20
+      ],
+      "tier": 2,
+      "cell_px": [
+        816,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        4
+      ],
+      "uv_rect": [
+        0.894737,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 35,
+      "id": "bld_shield_pylon_active",
+      "src": "assets/src_sprites/bld_shield_pylon_1.png",
+      "native_size": [
+        16,
+        20
+      ],
+      "tier": 2,
+      "cell_px": [
+        840,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        4
+      ],
+      "uv_rect": [
+        0.921053,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 36,
+      "id": "bld_quantum_gate",
+      "src": "assets/src_sprites/bld_quantum_gate_0.png",
+      "native_size": [
+        16,
+        20
+      ],
+      "tier": 4,
+      "cell_px": [
+        864,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        4
+      ],
+      "uv_rect": [
+        0.947368,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    },
+    {
+      "col": 37,
+      "id": "bld_quantum_gate_active",
+      "src": "assets/src_sprites/bld_quantum_gate_1.png",
+      "native_size": [
+        16,
+        20
+      ],
+      "tier": 4,
+      "cell_px": [
+        888,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        4
+      ],
+      "uv_rect": [
+        0.973684,
+        0.0,
+        0.026316,
+        1.0
+      ]
+    }
+  ]
+}

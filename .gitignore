@@ -1,0 +1,20 @@
+# Godot 4+ cache and editor artifacts
+.godot/
+*.import.tmp
+
+# Local research & third-party reference sheets (never publish)
+docs/worldbox_study/
+
+# Local build / export outputs
+build/
+dist/
+*.exe
+*.pck
+*.wasm
+*.zip
+
+# Verification runtime logs & Python bytecode
+screenshots/*.log
+__pycache__/
+.ruff_cache/
+*.pyc

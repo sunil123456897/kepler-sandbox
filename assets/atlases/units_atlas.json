@@ -1,0 +1,677 @@
+{
+  "atlas_path": "res://assets/atlases/units_atlas.png",
+  "mask_path": "res://assets/atlases/units_atlas_mask.png",
+  "atlas_size": [
+    192,
+    8
+  ],
+  "cell_size": [
+    8,
+    8
+  ],
+  "atlas_cols": 24,
+  "shader_mode": 3,
+  "shader_uniforms": {
+    "sprite_mode": 3,
+    "motion_mode": 2,
+    "atlas_cols": 24,
+    "sprite_size": [
+      8,
+      8
+    ],
+    "mask_tex": "res://assets/atlases/units_atlas_mask.png",
+    "hdr_emissive": 2.6
+  },
+  "columns": {
+    "HUMAN_WALK_A": 0,
+    "HUMAN_WALK_B": 1,
+    "HUMAN_WORK": 2,
+    "HUMAN_CARGO": 3,
+    "HUMAN_SOLDIER_A": 4,
+    "HUMAN_SOLDIER_B": 5,
+    "HUMAN_ENGINEER": 6,
+    "HUMAN_JETPACK": 7,
+    "ROBOT_DRONE_A": 8,
+    "ROBOT_DRONE_B": 9,
+    "ROBOT_WALKER_A": 10,
+    "ROBOT_WALKER_B": 11,
+    "ROBOT_HEAVY_A": 12,
+    "ROBOT_HEAVY_B": 13,
+    "ROBOT_CARGO": 14,
+    "SPORE_CRAWLER_A": 15,
+    "SPORE_CRAWLER_B": 16,
+    "SPORE_STALKER_A": 17,
+    "SPORE_STALKER_B": 18,
+    "SPORE_CARGO": 19,
+    "MUTANT_CRYSTAL_A": 20,
+    "MUTANT_CRYSTAL_B": 21,
+    "HUMAN_FARMER": 22,
+    "CARGO_PIP": 23
+  },
+  "cells": [
+    {
+      "col": 0,
+      "id": "human_walk_a",
+      "src": "assets/src_sprites/unit_human_walk_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        0,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.0,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 1,
+      "id": "human_walk_b",
+      "src": "assets/src_sprites/unit_human_walk_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        8,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.041667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 2,
+      "id": "human_work",
+      "src": "assets/src_sprites/unit_human_work.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        16,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.083333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 3,
+      "id": "human_cargo",
+      "src": "assets/src_sprites/unit_human_cargo.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        24,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.125,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 4,
+      "id": "human_soldier_a",
+      "src": "assets/src_sprites/unit_human_soldier_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        32,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.166667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 5,
+      "id": "human_soldier_b",
+      "src": "assets/src_sprites/unit_human_soldier_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        40,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.208333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 6,
+      "id": "human_engineer",
+      "src": "assets/src_sprites/unit_human_engineer.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        48,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.25,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 7,
+      "id": "human_jetpack",
+      "src": "assets/src_sprites/unit_human_jetpack.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        56,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.291667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 8,
+      "id": "robot_drone_a",
+      "src": "assets/src_sprites/unit_robot_drone_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        64,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.333333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 9,
+      "id": "robot_drone_b",
+      "src": "assets/src_sprites/unit_robot_drone_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        72,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.375,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 10,
+      "id": "robot_walker_a",
+      "src": "assets/src_sprites/unit_robot_walker_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        80,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.416667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 11,
+      "id": "robot_walker_b",
+      "src": "assets/src_sprites/unit_robot_walker_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        88,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.458333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 12,
+      "id": "robot_heavy_a",
+      "src": "assets/src_sprites/unit_robot_heavy_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        96,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.5,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 13,
+      "id": "robot_heavy_b",
+      "src": "assets/src_sprites/unit_robot_heavy_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        104,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.541667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 14,
+      "id": "robot_cargo",
+      "src": "assets/src_sprites/unit_robot_cargo.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        112,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.583333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 15,
+      "id": "spore_crawler_a",
+      "src": "assets/src_sprites/unit_spore_crawler_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        120,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.625,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 16,
+      "id": "spore_crawler_b",
+      "src": "assets/src_sprites/unit_spore_crawler_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        128,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.666667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 17,
+      "id": "spore_stalker_a",
+      "src": "assets/src_sprites/unit_spore_stalker_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        136,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.708333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 18,
+      "id": "spore_stalker_b",
+      "src": "assets/src_sprites/unit_spore_stalker_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        144,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.75,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 19,
+      "id": "spore_cargo",
+      "src": "assets/src_sprites/unit_spore_cargo.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        152,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.791667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 20,
+      "id": "mutant_crystal_a",
+      "src": "assets/src_sprites/unit_mutant_crystal_a.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        160,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.833333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 21,
+      "id": "mutant_crystal_b",
+      "src": "assets/src_sprites/unit_mutant_crystal_b.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        168,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.875,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 22,
+      "id": "human_farmer",
+      "src": "assets/src_sprites/unit_human_farmer.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        176,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.916667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 23,
+      "id": "cargo_pip",
+      "src": "assets/src_sprites/unit_cargo_pip.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        184,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.958333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    }
+  ]
+}
