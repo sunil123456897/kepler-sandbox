@@ -2,19 +2,20 @@
   "atlas_path": "res://assets/atlases/buildings_atlas.png",
   "mask_path": "res://assets/atlases/buildings_atlas_mask.png",
   "atlas_size": [
-    912,
+    1440,
     24
   ],
   "cell_size": [
     24,
     24
   ],
-  "atlas_cols": 38,
+  "atlas_cols": 60,
+  "cols": 60,
   "shader_mode": 3,
   "shader_uniforms": {
     "sprite_mode": 3,
     "motion_mode": 0,
-    "atlas_cols": 38,
+    "atlas_cols": 60,
     "sprite_size": [
       24,
       24
@@ -62,7 +63,91 @@
     "BLD_SHIELD_PYLON": 34,
     "BLD_SHIELD_PYLON_ACTIVE": 35,
     "BLD_QUANTUM_GATE": 36,
-    "BLD_QUANTUM_GATE_ACTIVE": 37
+    "BLD_QUANTUM_GATE_ACTIVE": 37,
+    "BLD_ROBOT_BEACON": 38,
+    "BLD_ROBOT_HAB": 39,
+    "BLD_ROBOT_SYNTH_DOME": 40,
+    "BLD_HUMAN_ARK_SPIRE": 41,
+    "BLD_ROBOT_MIRROR_NODE": 42,
+    "BLD_SPORE_LEVIATHAN_HEART": 43,
+    "BLD_DOCK": 44,
+    "BLD_BARRACKS": 45,
+    "BLD_DEFENSE_TURRET": 46,
+    "BLD_TRADE_HUB": 47,
+    "BLD_ARCHIVE": 48,
+    "BLD_MONOLITH": 49,
+    "BLD_HQ_L2_HUMAN": 50,
+    "BLD_HQ_L2_ROBOT": 51,
+    "BLD_HQ_L2_SPORE": 52,
+    "SHIP_FISH": 53,
+    "SHIP_TRADE": 54,
+    "SHIP_TROOP": 55,
+    "HAZARD_BOMB_BARREL": 56,
+    "HAZARD_LANDMINE": 57,
+    "HAZARD_GEYSER_STEAM": 58,
+    "HAZARD_GEYSER_ACID": 59
+  },
+  "columns": {
+    "BLD_CAMPFIRE": 0,
+    "BLD_TENT": 1,
+    "BLD_DRILL": 2,
+    "BLD_DEPOT": 3,
+    "BLD_SOLAR_ARRAY": 4,
+    "BLD_BIODOME": 5,
+    "BLD_FUSION_REACTOR": 6,
+    "BLD_LAUNCHPAD": 7,
+    "BLD_CAMPFIRE_1": 8,
+    "BLD_TENT_1": 9,
+    "BLD_DRILL_1": 10,
+    "BLD_DEPOT_1": 11,
+    "BLD_SOLAR_ARRAY_1": 12,
+    "BLD_BIODOME_1": 13,
+    "BLD_FUSION_REACTOR_1": 14,
+    "BLD_LAUNCHPAD_1": 15,
+    "BLD_LAUNCHPAD_2": 16,
+    "BLD_RUINS": 17,
+    "BLD_SCAFFOLD": 18,
+    "BLD_SCAFFOLD_LG": 19,
+    "BLD_ROBOT_EXTRACTOR": 20,
+    "BLD_ROBOT_DEPOT": 21,
+    "BLD_ROBOT_PYLON": 22,
+    "BLD_ROBOT_REACTOR": 23,
+    "BLD_ROBOT_GANTRY": 24,
+    "BLD_SPORE_POD": 25,
+    "BLD_SPORE_EXTRACTOR": 26,
+    "BLD_SPORE_HIVE": 27,
+    "BLD_SPORE_SPIRE": 28,
+    "BLD_SPORE_DOME": 29,
+    "BLD_SPORE_HEART": 30,
+    "BLD_SPORE_LAUNCH": 31,
+    "CRAFT_SHUTTLE": 32,
+    "CRAFT_SHUTTLE_BOOST": 33,
+    "BLD_SHIELD_PYLON": 34,
+    "BLD_SHIELD_PYLON_ACTIVE": 35,
+    "BLD_QUANTUM_GATE": 36,
+    "BLD_QUANTUM_GATE_ACTIVE": 37,
+    "BLD_ROBOT_BEACON": 38,
+    "BLD_ROBOT_HAB": 39,
+    "BLD_ROBOT_SYNTH_DOME": 40,
+    "BLD_HUMAN_ARK_SPIRE": 41,
+    "BLD_ROBOT_MIRROR_NODE": 42,
+    "BLD_SPORE_LEVIATHAN_HEART": 43,
+    "BLD_DOCK": 44,
+    "BLD_BARRACKS": 45,
+    "BLD_DEFENSE_TURRET": 46,
+    "BLD_TRADE_HUB": 47,
+    "BLD_ARCHIVE": 48,
+    "BLD_MONOLITH": 49,
+    "BLD_HQ_L2_HUMAN": 50,
+    "BLD_HQ_L2_ROBOT": 51,
+    "BLD_HQ_L2_SPORE": 52,
+    "SHIP_FISH": 53,
+    "SHIP_TRADE": 54,
+    "SHIP_TROOP": 55,
+    "HAZARD_BOMB_BARREL": 56,
+    "HAZARD_LANDMINE": 57,
+    "HAZARD_GEYSER_STEAM": 58,
+    "HAZARD_GEYSER_ACID": 59
   },
   "cells": [
     {
@@ -82,12 +167,12 @@
       ],
       "sprite_offset_in_cell": [
         8,
-        16
+        15
       ],
       "uv_rect": [
         0.0,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -108,12 +193,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.026316,
+        0.016667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -134,12 +219,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.052632,
+        0.033333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -160,12 +245,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.078947,
+        0.05,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -186,12 +271,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.105263,
+        0.066667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -212,12 +297,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.131579,
+        0.083333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -238,12 +323,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.157895,
+        0.1,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -267,9 +352,9 @@
         0
       ],
       "uv_rect": [
-        0.184211,
+        0.116667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -290,12 +375,12 @@
       ],
       "sprite_offset_in_cell": [
         8,
-        16
+        15
       ],
       "uv_rect": [
-        0.210526,
+        0.133333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -316,12 +401,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.236842,
+        0.15,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -342,12 +427,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.263158,
+        0.166667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -368,12 +453,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.289474,
+        0.183333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -394,12 +479,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.315789,
+        0.2,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -420,12 +505,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.342105,
+        0.216667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -446,12 +531,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.368421,
+        0.233333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -475,9 +560,9 @@
         0
       ],
       "uv_rect": [
-        0.394737,
+        0.25,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -501,9 +586,9 @@
         0
       ],
       "uv_rect": [
-        0.421053,
+        0.266667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -524,12 +609,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.447368,
+        0.283333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -550,12 +635,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.473684,
+        0.3,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -576,12 +661,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.5,
+        0.316667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -602,12 +687,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.526316,
+        0.333333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -628,12 +713,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.552632,
+        0.35,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -654,12 +739,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.578947,
+        0.366667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -680,12 +765,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.605263,
+        0.383333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -709,9 +794,9 @@
         0
       ],
       "uv_rect": [
-        0.631579,
+        0.4,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -732,12 +817,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.657895,
+        0.416667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -758,12 +843,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.684211,
+        0.433333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -784,12 +869,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.710526,
+        0.45,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -810,12 +895,12 @@
       ],
       "sprite_offset_in_cell": [
         6,
-        12
+        11
       ],
       "uv_rect": [
-        0.736842,
+        0.466667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -836,12 +921,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.763158,
+        0.483333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -862,12 +947,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        8
+        7
       ],
       "uv_rect": [
-        0.789474,
+        0.5,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -891,9 +976,9 @@
         0
       ],
       "uv_rect": [
-        0.815789,
+        0.516667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -917,9 +1002,9 @@
         6
       ],
       "uv_rect": [
-        0.842105,
+        0.533333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -943,9 +1028,9 @@
         6
       ],
       "uv_rect": [
-        0.868421,
+        0.55,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -966,12 +1051,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        4
+        3
       ],
       "uv_rect": [
-        0.894737,
+        0.566667,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -992,12 +1077,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        4
+        3
       ],
       "uv_rect": [
-        0.921053,
+        0.583333,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -1018,12 +1103,12 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        4
+        3
       ],
       "uv_rect": [
-        0.947368,
+        0.6,
         0.0,
-        0.026316,
+        0.016667,
         1.0
       ]
     },
@@ -1044,12 +1129,584 @@
       ],
       "sprite_offset_in_cell": [
         4,
-        4
+        3
       ],
       "uv_rect": [
-        0.973684,
+        0.616667,
         0.0,
-        0.026316,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 38,
+      "id": "bld_robot_beacon",
+      "src": "assets/src_sprites/bld_robot_beacon_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        912,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        11
+      ],
+      "uv_rect": [
+        0.633333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 39,
+      "id": "bld_robot_hab",
+      "src": "assets/src_sprites/bld_robot_hab_0.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        936,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        6,
+        11
+      ],
+      "uv_rect": [
+        0.65,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 40,
+      "id": "bld_robot_synth_dome",
+      "src": "assets/src_sprites/bld_robot_synth_dome_0.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        960,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        7
+      ],
+      "uv_rect": [
+        0.666667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 41,
+      "id": "bld_human_ark_spire",
+      "src": "assets/src_sprites/bld_human_ark_spire_0.png",
+      "native_size": [
+        24,
+        24
+      ],
+      "tier": 5,
+      "cell_px": [
+        984,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.683333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 42,
+      "id": "bld_robot_mirror_node",
+      "src": "assets/src_sprites/bld_robot_mirror_node_0.png",
+      "native_size": [
+        16,
+        20
+      ],
+      "tier": 5,
+      "cell_px": [
+        1008,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        3
+      ],
+      "uv_rect": [
+        0.7,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 43,
+      "id": "bld_spore_leviathan_heart",
+      "src": "assets/src_sprites/bld_spore_leviathan_heart_0.png",
+      "native_size": [
+        20,
+        20
+      ],
+      "tier": 5,
+      "cell_px": [
+        1032,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        2,
+        3
+      ],
+      "uv_rect": [
+        0.716667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 44,
+      "id": "bld_dock",
+      "src": "assets/src_sprites/bld_dock_0.png",
+      "native_size": [
+        18,
+        16
+      ],
+      "tier": 1,
+      "cell_px": [
+        1056,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        3,
+        7
+      ],
+      "uv_rect": [
+        0.733333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 45,
+      "id": "bld_barracks",
+      "src": "assets/src_sprites/bld_barracks_0.png",
+      "native_size": [
+        18,
+        18
+      ],
+      "tier": 2,
+      "cell_px": [
+        1080,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        3,
+        5
+      ],
+      "uv_rect": [
+        0.75,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 46,
+      "id": "bld_defense_turret",
+      "src": "assets/src_sprites/bld_defense_turret_0.png",
+      "native_size": [
+        14,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        1104,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        5,
+        7
+      ],
+      "uv_rect": [
+        0.766667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 47,
+      "id": "bld_trade_hub",
+      "src": "assets/src_sprites/bld_trade_hub_0.png",
+      "native_size": [
+        18,
+        16
+      ],
+      "tier": 2,
+      "cell_px": [
+        1128,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        3,
+        7
+      ],
+      "uv_rect": [
+        0.783333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 48,
+      "id": "bld_archive",
+      "src": "assets/src_sprites/bld_archive_0.png",
+      "native_size": [
+        18,
+        18
+      ],
+      "tier": 3,
+      "cell_px": [
+        1152,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        3,
+        5
+      ],
+      "uv_rect": [
+        0.8,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 49,
+      "id": "bld_monolith",
+      "src": "assets/src_sprites/bld_monolith_0.png",
+      "native_size": [
+        14,
+        22
+      ],
+      "tier": 4,
+      "cell_px": [
+        1176,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        5,
+        1
+      ],
+      "uv_rect": [
+        0.816667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 50,
+      "id": "bld_hq_l2_human",
+      "src": "assets/src_sprites/bld_hq_l2_human_0.png",
+      "native_size": [
+        22,
+        22
+      ],
+      "tier": 4,
+      "cell_px": [
+        1200,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        1,
+        1
+      ],
+      "uv_rect": [
+        0.833333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 51,
+      "id": "bld_hq_l2_robot",
+      "src": "assets/src_sprites/bld_hq_l2_robot_0.png",
+      "native_size": [
+        22,
+        22
+      ],
+      "tier": 4,
+      "cell_px": [
+        1224,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        1,
+        1
+      ],
+      "uv_rect": [
+        0.85,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 52,
+      "id": "bld_hq_l2_spore",
+      "src": "assets/src_sprites/bld_hq_l2_spore_0.png",
+      "native_size": [
+        22,
+        22
+      ],
+      "tier": 4,
+      "cell_px": [
+        1248,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        1,
+        1
+      ],
+      "uv_rect": [
+        0.866667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 53,
+      "id": "ship_fish",
+      "src": "assets/src_sprites/ship_fish_0.png",
+      "native_size": [
+        14,
+        12
+      ],
+      "tier": 1,
+      "cell_px": [
+        1272,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        5,
+        6
+      ],
+      "uv_rect": [
+        0.883333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 54,
+      "id": "ship_trade",
+      "src": "assets/src_sprites/ship_trade_0.png",
+      "native_size": [
+        16,
+        12
+      ],
+      "tier": 2,
+      "cell_px": [
+        1296,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        4,
+        6
+      ],
+      "uv_rect": [
+        0.9,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 55,
+      "id": "ship_troop",
+      "src": "assets/src_sprites/ship_troop_0.png",
+      "native_size": [
+        18,
+        14
+      ],
+      "tier": 3,
+      "cell_px": [
+        1320,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        3,
+        5
+      ],
+      "uv_rect": [
+        0.916667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 56,
+      "id": "hazard_bomb_barrel",
+      "src": "assets/src_sprites/hazard_bomb_barrel_0.png",
+      "native_size": [
+        10,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        1344,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        7,
+        11
+      ],
+      "uv_rect": [
+        0.933333,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 57,
+      "id": "hazard_landmine",
+      "src": "assets/src_sprites/hazard_landmine_0.png",
+      "native_size": [
+        10,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        1368,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        7,
+        15
+      ],
+      "uv_rect": [
+        0.95,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 58,
+      "id": "hazard_geyser_steam",
+      "src": "assets/src_sprites/hazard_geyser_steam_0.png",
+      "native_size": [
+        14,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        1392,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        5,
+        7
+      ],
+      "uv_rect": [
+        0.966667,
+        0.0,
+        0.016667,
+        1.0
+      ]
+    },
+    {
+      "col": 59,
+      "id": "hazard_geyser_acid",
+      "src": "assets/src_sprites/hazard_geyser_acid_0.png",
+      "native_size": [
+        14,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        1416,
+        0,
+        24,
+        24
+      ],
+      "sprite_offset_in_cell": [
+        5,
+        7
+      ],
+      "uv_rect": [
+        0.983333,
+        0.0,
+        0.016667,
         1.0
       ]
     }

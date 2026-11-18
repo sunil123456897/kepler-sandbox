@@ -2,7 +2,7 @@ shader_type canvas_item;
 
 uniform int sprite_mode : hint_range(0, 3) = 3;
 uniform int motion_mode : hint_range(0, 2) = 0;
-uniform int atlas_cols : hint_range(1, 64) = 4;
+uniform int atlas_cols : hint_range(1, 256) = 4;
 uniform vec2 sprite_size = vec2(8.0, 8.0);
 uniform sampler2D mask_tex : filter_nearest, repeat_disable;
 uniform float wind_speed = 2.6;
@@ -15,8 +15,8 @@ uniform float hdr_crystal = 2.4;
 uniform float hdr_lava = 2.6;
 uniform float hdr_emissive = 2.6;
 uniform float burn_amount : hint_range(0.0, 1.0) = 0.0;
-uniform float blueprint_col : hint_range(-1.0, 64.0) = 18.0;
-uniform float blueprint_col_hi : hint_range(-1.0, 64.0) = 19.0;
+uniform float blueprint_col : hint_range(-1.0, 256.0) = 18.0;
+uniform float blueprint_col_hi : hint_range(-1.0, 256.0) = 19.0;
 uniform float day_phase = 0.0;
 uniform float night_mix : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 age_tint = vec3(1.0, 1.0, 1.0);
@@ -31,11 +31,14 @@ float flora_sway_weight(float col_idx) {
 	if (col_idx > 4.5 && col_idx < 6.5) {
 		return 0.0; // boulder, magma_vent
 	}
-	if (abs(col_idx - 9.0) < 0.25) {
-		return 0.0; // ash_stump
+	if (abs(col_idx - 9.0) < 0.25 || abs(col_idx - 21.0) < 0.25) {
+		return 0.0; // ash_stump, cyber_spire
 	}
-	if (abs(col_idx - 3.0) < 0.25 || abs(col_idx - 4.0) < 0.25 || abs(col_idx - 11.0) < 0.25) {
-		return 0.12; // crystals sway very subtly
+	if (abs(col_idx - 3.0) < 0.25 || abs(col_idx - 4.0) < 0.25 || abs(col_idx - 11.0) < 0.25 || abs(col_idx - 15.0) < 0.25 || abs(col_idx - 23.0) < 0.25) {
+		return 0.12; // crystals & monolith shards sway very subtly
+	}
+	if (abs(col_idx - 17.0) < 0.25 || abs(col_idx - 20.0) < 0.25) {
+		return 0.22; // silica cactus & mycelium node
 	}
 	return 1.0;
 }
@@ -49,7 +52,9 @@ void vertex() {
 
 	if (sprite_mode == 0) {
 		float phase = INSTANCE_CUSTOM.r;
-		float speed_norm = INSTANCE_CUSTOM.g;
+		float raw_g = INSTANCE_CUSTOM.g;
+		float z_px = (raw_g >= 2.0) ? floor(raw_g * 0.25) : 0.0;
+		float speed_norm = (raw_g >= 2.0) ? clamp(raw_g - z_px * 4.0, 0.0, 1.99) : raw_g;
 		float facing_squash = INSTANCE_CUSTOM.b;
 		float flip_x = (facing_squash < 0.0) ? -1.0 : 1.0;
 		float sy = clamp(abs(facing_squash), 0.65, 1.35);
@@ -57,7 +62,7 @@ void vertex() {
 		float bob = sin(phase * 2.0) * 0.25 * clamp(speed_norm, 0.0, 1.0);
 
 		VERTEX.x *= sx;
-		VERTEX.y = pivot_y + (VERTEX.y - pivot_y) * sy + bob;
+		VERTEX.y = pivot_y + (VERTEX.y - pivot_y) * sy + bob - z_px;
 		VERTEX.x += flip_x * clamp(speed_norm - 0.85, 0.0, 0.75) * 1.1 * top_t;
 		v_local_uv = vec2((flip_x < 0.0) ? (1.0 - UV.x) : UV.x, 1.0 - UV.y);
 	} else if (sprite_mode == 1) {
@@ -79,20 +84,23 @@ void vertex() {
 		float phase = INSTANCE_CUSTOM.r;
 		float raw_g = INSTANCE_CUSTOM.g;
 		float raw_b = INSTANCE_CUSTOM.b;
-		float col_idx = floor(INSTANCE_CUSTOM.a + 0.5);
+		float raw_col = floor(INSTANCE_CUSTOM.a + 0.5);
+		float col_idx = (motion_mode == 2 && raw_col >= 100.0) ? mod(raw_col, 100.0) : raw_col;
 
 		if (motion_mode == 2) {
-			// Units: flip_x via negative b, squash-and-stretch, walk bob & sprint lean
-			float speed_norm = (raw_g <= -1.9) ? 0.55 : ((raw_g >= 2.0) ? 0.65 : clamp(raw_g, 0.0, 1.8));
+			// Units: flip_x via negative b, squash-and-stretch, walk bob, sprint lean & Z-height
+			float z_px = (raw_g >= 4.0) ? floor(raw_g * 0.25) : 0.0;
+			float local_g = (raw_g >= 4.0) ? (raw_g - z_px * 4.0) : raw_g;
+			float speed_norm = (local_g <= -1.9) ? 0.55 : ((local_g >= 2.0) ? 0.65 : clamp(local_g, 0.0, 1.8));
 			float flip_x = (raw_b < -0.001) ? -1.0 : 1.0;
 			float abs_b = abs(raw_b);
 			float sy = (abs_b <= 0.001) ? 1.0 : clamp(abs_b, 0.65, 1.35);
 			float sx = 1.0 / sqrt(sy);
 			float bob = sin(phase * 2.0) * 0.25 * clamp(speed_norm, 0.0, 1.0);
-			float burn_jitter = (raw_g >= 2.0) ? sin(TIME * shake_freq + phase * 5.0) * 0.35 * top_t : 0.0;
+			float burn_jitter = (local_g >= 2.0 && local_g < 3.99) ? sin(TIME * shake_freq + phase * 5.0) * 0.35 * top_t : 0.0;
 
 			VERTEX.x *= sx;
-			VERTEX.y = pivot_y + (VERTEX.y - pivot_y) * sy + bob;
+			VERTEX.y = pivot_y + (VERTEX.y - pivot_y) * sy + bob - z_px;
 			VERTEX.x += flip_x * clamp(speed_norm - 0.85, 0.0, 0.75) * 1.1 * top_t + burn_jitter;
 			v_local_uv = vec2((flip_x < 0.0) ? (1.0 - UV.x) : UV.x, 1.0 - UV.y);
 		} else if (motion_mode == 1) {
@@ -130,7 +138,13 @@ void vertex() {
 
 void fragment() {
 	float cols = max(float(atlas_cols), 1.0);
-	float col = clamp(floor(v_custom.a + 0.5), 0.0, cols - 1.0);
+	float raw_col = floor(v_custom.a + 0.5);
+	float cargo_slot = 0.0;
+	if (sprite_mode == 3 && motion_mode == 2 && raw_col >= 100.0) {
+		cargo_slot = floor(raw_col / 100.0);
+		raw_col = mod(raw_col, 100.0);
+	}
+	float col = clamp(raw_col, 0.0, cols - 1.0);
 	vec2 atlas_uv = vec2(
 		(col + clamp(v_local_uv.x, 0.002, 0.998)) / cols,
 		clamp(v_local_uv.y, 0.002, 0.998)
@@ -150,7 +164,8 @@ void fragment() {
 		} else if (tex.r > 0.90 && tex.g > 0.36 && tex.b < 0.22) {
 			rgb *= hdr_flame;
 		}
-		float heat_flash = clamp(v_custom.g - 1.25, 0.0, 1.0);
+		float local_g = (v_custom.g >= 4.0) ? (v_custom.g - floor(v_custom.g * 0.25) * 4.0) : v_custom.g;
+		float heat_flash = clamp(local_g - 1.25, 0.0, 1.0);
 		rgb = mix(rgb, vec3(2.4, 1.1, 0.35), heat_flash * 0.25);
 		COLOR = vec4(rgb, tex.a * v_inst_col.a);
 	} else if (sprite_mode == 1) {
@@ -168,88 +183,126 @@ void fragment() {
 		}
 		COLOR = vec4(rgb, tex.a * v_inst_col.a);
 	} else if (sprite_mode == 3) {
-		vec4 mask = texture(mask_tex, atlas_uv);
-		float tint_w = clamp(mask.r, 0.0, 1.0);
-		float glow_w = clamp(mask.g, 0.0, 1.0);
-		float spec_w = clamp(mask.b, 0.0, 1.0);
-		float solid_px = smoothstep(0.55, 0.95, tex.a);
+		if (tex.a < 0.20) {
+			discard;
+		}
+		if (tex.a < 0.55) {
+			// Baked 1px contact shadow: render directly without outline, tint, rim-light, or HDR
+			COLOR = vec4(tex.rgb, tex.a * v_inst_col.a);
+		} else {
+			vec4 mask = texture(mask_tex, atlas_uv);
+			float tint_w = clamp(mask.r, 0.0, 1.0);
+			float glow_w = clamp(mask.g, 0.0, 1.0);
+			float spec_w = clamp(mask.b, 0.0, 1.0);
+			float solid_px = smoothstep(0.55, 0.95, tex.a);
+			float tex_lum = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
 
-		vec3 base_rgb = tex.rgb * mix(vec3(1.0), v_inst_col.rgb, tint_w);
-		if (cargo_tint_override > 0.5) {
-			float lum = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
-			float is_fill = smoothstep(0.28, 0.50, lum);
-			float shade = clamp(lum * 1.48, 0.48, 1.0);
-			vec3 rim_rgb = tex.rgb * mix(vec3(1.0), v_inst_col.rgb, 0.28);
-			vec3 fill_rgb = v_inst_col.rgb * shade;
-			base_rgb = mix(rim_rgb, fill_rgb, is_fill);
-		}
-		if (spec_w > 0.02 && solid_px > 0.05) {
-			float shimmer = 0.5 + 0.5 * sin(TIME * 1.6 + v_custom.r + v_local_uv.x * 6.0);
-			base_rgb += vec3(0.08, 0.12, 0.16) * spec_w * shimmer * solid_px;
-		}
-		base_rgb = min(base_rgb, vec3(0.95));
-
-		// Optional world-age atmospheric tint + orbital day/sunset/night tint on non-emissive surfaces only
-		float at_str = clamp(age_tint_strength, 0.0, 1.0);
-		if (at_str > 0.001) {
-			base_rgb = min(mix(base_rgb, base_rgb * max(age_tint, vec3(0.0)), at_str), vec3(0.95));
-		}
-		float nm = clamp(night_mix, 0.0, 1.0);
-		float dusk = sin(nm * 3.14159265);
-		if (nm > 0.001) {
-			float orb = 0.94 + 0.06 * sin(day_phase * 6.2831853 + v_custom.r * 0.1);
-			vec3 dusk_rgb = mix(base_rgb, base_rgb * vec3(1.06, 0.82, 0.70), dusk * 0.36);
-			base_rgb = min(mix(dusk_rgb, base_rgb * vec3(0.42, 0.50, 0.74), nm) * orb, vec3(0.95));
-		}
-
-		// Construction blueprint hologram scanline pulse
-		bool is_blueprint = (motion_mode == 0) && (
-			v_custom.g < -0.02 ||
-			(blueprint_col >= 0.0 && abs(col - blueprint_col) < 0.25) ||
-			(blueprint_col_hi >= 0.0 && abs(col - blueprint_col_hi) < 0.25)
-		);
-		float bp_scan = 1.0;
-		float out_alpha = tex.a * v_inst_col.a;
-		if (is_blueprint && solid_px > 0.05) {
-			float prog_rate = (v_custom.g < -0.02) ? 6.5 : 4.8;
-			float wave = 0.5 + 0.5 * sin(TIME * prog_rate - v_local_uv.y * 16.0 + v_custom.r);
-			bp_scan = 0.72 + 0.44 * wave;
-			if (glow_w > 0.02) {
-				out_alpha *= mix(0.86, 1.0, wave);
+			vec3 base_rgb = tex.rgb * mix(vec3(1.0), v_inst_col.rgb, tint_w);
+			if (cargo_slot > 0.5 && spec_w > 0.5) {
+				vec3 cargo_col = vec3(0.533, 0.910, 0.322); // RES_FOOD
+				if (cargo_slot > 1.5 && cargo_slot < 2.5) {
+					cargo_col = vec3(0.322, 0.784, 1.000); // RES_ORE
+				} else if (cargo_slot > 2.5 && cargo_slot < 3.5) {
+					cargo_col = vec3(1.000, 0.878, 0.282); // RES_ENERGY
+				} else if (cargo_slot > 3.5 && cargo_slot < 4.5) {
+					cargo_col = vec3(0.792, 0.408, 0.941); // RES_SCIENCE
+				} else if (cargo_slot > 4.5) {
+					cargo_col = vec3(0.784, 0.510, 0.259); // RES_BUILD_WORK / RES_WOOD
+				}
+				float c_shade = clamp(tex_lum * 1.25, 0.58, 1.0);
+				base_rgb = cargo_col * c_shade;
+			} else if (cargo_tint_override > 0.5) {
+				float is_fill = smoothstep(0.28, 0.50, tex_lum);
+				float shade = clamp(tex_lum * 1.48, 0.48, 1.0);
+				vec3 rim_rgb = tex.rgb * mix(vec3(1.0), v_inst_col.rgb, 0.28);
+				vec3 fill_rgb = v_inst_col.rgb * shade;
+				base_rgb = mix(rim_rgb, fill_rgb, is_fill);
 			}
-		}
+			if (cargo_slot < 0.5 && spec_w > 0.02 && solid_px > 0.05) {
+				float shimmer = 0.5 + 0.5 * sin(TIME * 1.6 + v_custom.r + v_local_uv.x * 6.0);
+				base_rgb += vec3(0.08, 0.12, 0.16) * spec_w * shimmer * solid_px;
+			}
+			base_rgb = min(base_rgb, vec3(0.95));
 
-		vec3 out_rgb = base_rgb;
-		if (glow_w > 0.02 && solid_px > 0.05) {
-			float pulse = (0.90 + 0.12 * sin(TIME * 3.8 + v_custom.r)) * bp_scan;
-			float night_boost = 1.0 + 0.24 * nm;
-			float gain = mix(1.0, hdr_emissive * pulse * night_boost, glow_w);
-			vec3 emit_src = mix(tex.rgb, base_rgb, tint_w * 0.65);
-			out_rgb = min(emit_src * gain, vec3(4.5));
-		}
+			// Optional world-age atmospheric tint + orbital day/sunset/night tint on non-emissive surfaces only
+			float at_str = clamp(age_tint_strength, 0.0, 1.0);
+			if (at_str > 0.001) {
+				base_rgb = min(mix(base_rgb, base_rgb * max(age_tint, vec3(0.0)), at_str), vec3(0.95));
+			}
+			float nm = clamp(night_mix, 0.0, 1.0);
+			float dusk = sin(nm * 3.14159265);
+			if (nm > 0.001) {
+				float orb = 0.94 + 0.06 * sin(day_phase * 6.2831853 + v_custom.r * 0.1);
+				vec3 dusk_rgb = mix(base_rgb, base_rgb * vec3(1.06, 0.82, 0.70), dusk * 0.36);
+				base_rgb = min(mix(dusk_rgb, base_rgb * vec3(0.42, 0.50, 0.74), nm) * orb, vec3(0.95));
 
-		// Burning ember flicker (custom.g >= 2.0 or burn_amount uniform or burning flora columns 8/13)
-		float inst_burn = (v_custom.g >= 2.0) ? clamp(v_custom.g - 2.0, 0.0, 1.0) : 0.0;
-		float flora_auto_burn = (motion_mode == 1 && (abs(col - 8.0) < 0.25 || abs(col - 13.0) < 0.25)) ? 0.55 : 0.0;
-		float burn = clamp(max(max(burn_amount, inst_burn), flora_auto_burn), 0.0, 1.0);
-		if (burn > 0.01 && solid_px > 0.05) {
-			vec2 cell_px = floor(v_local_uv * sprite_size);
-			float cell_hash = fract(sin(dot(cell_px, vec2(12.9898, 78.233)) + floor(TIME * 11.0) * 0.37) * 43758.5453);
-			float f_wave = 0.62 + 0.38 * sin(TIME * 22.0 + v_custom.r * 5.3 + v_local_uv.y * 14.0);
-			float ember_mask = step(0.58, cell_hash) * (1.0 - 0.35 * v_local_uv.y) + glow_w * 0.6;
-			out_rgb = mix(out_rgb, out_rgb * vec3(0.45, 0.30, 0.24), burn * 0.45 * (1.0 - glow_w));
-			out_rgb += vec3(2.35, 0.88, 0.18) * burn * f_wave * ember_mask * solid_px;
-			out_rgb = min(out_rgb, vec3(4.5));
-		}
+				// Night NW rim-light + luma floor for non-tinted armor/stone plates
+				vec2 px_step = vec2(1.0 / max(sprite_size.x, 1.0), 1.0 / max(sprite_size.y, 1.0));
+				float nw_a = 0.0;
+				if (v_local_uv.x > px_step.x && v_local_uv.y > px_step.y) {
+					vec2 nw_uv = vec2((col + clamp(v_local_uv.x - px_step.x, 0.002, 0.998)) / cols, clamp(v_local_uv.y - px_step.y, 0.002, 0.998));
+					nw_a = texture(TEXTURE, nw_uv).a;
+				}
+				float nw_edge = (nw_a < 0.55) ? 1.0 : clamp(1.10 - (v_local_uv.x * 0.55 + v_local_uv.y * 0.65), 0.15, 0.85);
+				float plate_w = (1.0 - smoothstep(0.05, 0.25, tint_w)) * smoothstep(0.36, 0.56, tex_lum);
+				base_rgb = min(base_rgb + vec3(0.22, 0.34, 0.54) * 0.22 * nm * nw_edge * smoothstep(0.22, 0.55, tex_lum), vec3(0.95));
+				float target_floor = mix(0.0, 0.48 * smoothstep(0.36, 0.72, tex_lum), nm) * plate_w;
+				float cur_lum = dot(base_rgb, vec3(0.299, 0.587, 0.114));
+				if (cur_lum < target_floor && cur_lum > 0.001) {
+					base_rgb = min(base_rgb * (target_floor / cur_lum), vec3(0.95));
+				}
+			}
 
-		// Crisp hit-flash / possession glow on active units & flora (motion_mode != 0 keeps blueprint scanline intact)
-		if (motion_mode != 0 && v_custom.g <= -1.9) {
-			float lum = clamp(dot(out_rgb, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
-			float flash = clamp(-v_custom.g - 2.0, 0.0, 1.0) * 0.58 * mix(0.55, 1.0, smoothstep(0.18, 0.45, lum));
-			out_rgb = mix(out_rgb, vec3(1.95, 1.85, 1.45), flash);
-		}
+			// Construction blueprint hologram scanline pulse
+			bool is_blueprint = (motion_mode == 0) && (
+				v_custom.g < -0.02 ||
+				(blueprint_col >= 0.0 && abs(col - blueprint_col) < 0.25) ||
+				(blueprint_col_hi >= 0.0 && abs(col - blueprint_col_hi) < 0.25)
+			);
+			float bp_scan = 1.0;
+			float out_alpha = tex.a * v_inst_col.a;
+			if (is_blueprint && solid_px > 0.05) {
+				float prog_rate = (v_custom.g < -0.02) ? 6.5 : 4.8;
+				float wave = 0.5 + 0.5 * sin(TIME * prog_rate - v_local_uv.y * 16.0 + v_custom.r);
+				bp_scan = 0.72 + 0.44 * wave;
+				if (glow_w > 0.02) {
+					out_alpha *= mix(0.86, 1.0, wave);
+				}
+			}
 
-		COLOR = vec4(out_rgb, out_alpha);
+			vec3 out_rgb = base_rgb;
+			if (glow_w > 0.02 && solid_px > 0.05) {
+				float pulse = (0.90 + 0.12 * sin(TIME * 3.8 + v_custom.r)) * bp_scan;
+				float night_boost = 1.0 + 0.24 * nm;
+				float gain = mix(1.0, hdr_emissive * pulse * night_boost, glow_w);
+				vec3 emit_src = mix(tex.rgb, base_rgb, tint_w * 0.65);
+				out_rgb = min(emit_src * gain, vec3(4.5));
+			}
+
+			// Burning ember flicker (custom.g 2.0..3.99 or decoded local_g >= 2.0 or burn_amount uniform or burning flora columns 8/13)
+			float local_g_burn = (motion_mode == 2 && v_custom.g >= 4.0) ? (v_custom.g - floor(v_custom.g * 0.25) * 4.0) : v_custom.g;
+			float inst_burn = (local_g_burn >= 2.0 && local_g_burn < 3.99) ? clamp(local_g_burn - 2.0, 0.0, 1.0) : 0.0;
+			float flora_auto_burn = (motion_mode == 1 && (abs(col - 8.0) < 0.25 || abs(col - 13.0) < 0.25)) ? 0.55 : 0.0;
+			float burn = clamp(max(max(burn_amount, inst_burn), flora_auto_burn), 0.0, 1.0);
+			if (burn > 0.01 && solid_px > 0.05) {
+				vec2 cell_px = floor(v_local_uv * sprite_size);
+				float cell_hash = fract(sin(dot(cell_px, vec2(12.9898, 78.233)) + floor(TIME * 11.0) * 0.37) * 43758.5453);
+				float f_wave = 0.62 + 0.38 * sin(TIME * 22.0 + v_custom.r * 5.3 + v_local_uv.y * 14.0);
+				float ember_mask = step(0.58, cell_hash) * (1.0 - 0.35 * v_local_uv.y) + glow_w * 0.6;
+				out_rgb = mix(out_rgb, out_rgb * vec3(0.45, 0.30, 0.24), burn * 0.45 * (1.0 - glow_w));
+				out_rgb += vec3(2.35, 0.88, 0.18) * burn * f_wave * ember_mask * solid_px;
+				out_rgb = min(out_rgb, vec3(4.5));
+			}
+
+			// Crisp hit-flash / possession glow on active units & flora (motion_mode != 0 keeps blueprint scanline intact)
+			if (motion_mode != 0 && v_custom.g <= -1.9) {
+				float lum = clamp(dot(out_rgb, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
+				float flash = clamp(-v_custom.g - 2.0, 0.0, 1.0) * 0.58 * mix(0.55, 1.0, smoothstep(0.18, 0.45, lum));
+				out_rgb = mix(out_rgb, vec3(1.95, 1.85, 1.45), flash);
+			}
+
+			COLOR = vec4(out_rgb, out_alpha);
+		}
 	} else {
 		float hdr_mult = max(v_custom.r, 0.1);
 		COLOR = vec4(tex.rgb * v_inst_col.rgb * hdr_mult, tex.a * v_inst_col.a);

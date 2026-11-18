@@ -12,6 +12,15 @@ const DIPLO_REBELLION: int = 3
 const PLOT_WAR: int = 0
 const PLOT_PACT: int = 1
 const PLOT_REBEL: int = 2
+const PLOT_PEACE: int = 3
+const PLOT_ALLIANCE_FORM: int = 4
+const PLOT_ALLIANCE_JOIN: int = 5
+const PLOT_ALLIANCE_BREAK: int = 6
+const PLOT_SCHISM: int = 7
+const PLOT_CODEX: int = 8
+const PLOT_ORBITAL_SHIELD: int = 9
+const PLOT_ASCEND_MONOLITH: int = 10
+const PLOT_REFORM_SUCCESSION: int = 11
 
 const FACTION_HUMAN: int = 0
 const FACTION_ROBOT: int = 1
@@ -30,20 +39,67 @@ const SHUTTLE_KIND_BOAT: int = 2
 const ZONE_FLAG_BUILT: int = 4
 const ZONE_FLAG_FARM: int = 1
 
+const STRIP_SHIELD: int = 5
 const STRIP_PACT: int = 8
 const STRIP_WAR: int = 9
 const STRIP_REBEL: int = 10
+const STRIP_PORTAL: int = 11
+const STRIP_PLOT_WAR: int = 12
+const STRIP_PLOT_PACT: int = 13
+const STRIP_PLOT_REBEL: int = 14
+const STRIP_CROWN_BANNER: int = 15
+const STRIP_RELIC_DIAMOND: int = 16
+const STRIP_FEUD_SWORDS: int = 17
+const STRIP_PLOT_PEACE: int = 23
+const STRIP_PLOT_ALLIANCE: int = 24
+const STRIP_PLOT_SCHISM: int = 25
+const STRIP_PLOT_CODEX: int = 26
 
 const MAX_KINGDOMS: int = 64
 const MAX_PLOTS: int = 16
 const MAX_EXPEDITIONS: int = 16
 const MAX_CHRONICLE: int = 32
+const MAX_NOTABLES: int = 32
+const NOTABLE_MEM_SLOTS: int = 12
+const MAX_RELICS: int = 16
+const MAX_FEUDS: int = 16
+
+const RANK_HERO: int = 0
+const RANK_BANNER: int = 1
+const RANK_RULER: int = 2
+const RANK_HERETIC: int = 3
+const RANK_HERALD: int = 4
+
+const TR_VENGEFUL: int = 1
+const TR_SCHISMATIC: int = 2
+const TR_ASHBORN: int = 4
+const TR_BLESSED_HALO: int = 8
+const TR_FERAL_ALPHA: int = 16
+
+const NSTATE_DORMANT: int = 0
+const NSTATE_BREWING: int = 1
+const NSTATE_RECRUITING: int = 2
+const NSTATE_FEUD_HUNT: int = 3
+const NSTATE_DUEL: int = 4
+
+const MEM_NONE: int = 0
+const MEM_FOUNDED: int = 1
+const MEM_CROWNED: int = 2
+const MEM_DUEL_WON: int = 3
+const MEM_RELIC_TAKEN: int = 4
+const MEM_FEUD_SWORN: int = 5
+const MEM_BETRAYED: int = 6
+const MEM_BLESSED: int = 7
+const MEM_MUTATED: int = 8
+const MEM_SURVIVED: int = 9
 
 const REBEL_IMMUNITY_SEC: float = 180.0
 const PLOT_MIN_SEC: float = 10.0
 const PLOT_MAX_SEC: float = 14.0
 const EXPEDITION_MIN_DIST_PX: float = 72.0
 const EXPEDITION_MAX_DIST_PX: float = 160.0
+const FEUD_TTL_SEC: float = 300.0
+const DUEL_DETECT_RADIUS_PX: float = 14.0
 
 const KINGDOM_PALETTES := [
 	[Color("#38F0FF"), Color("#56B8FF"), Color("#2BE0AC"), Color("#78D8FF"), Color("#4AE6D2")],
@@ -57,12 +113,68 @@ const KINGDOM_NAME_POOLS := [
 	["Мицелий", "Ризома", "Споры", "Крона", "Мхи", "Венец", "Симбиоз", "Гифы"],
 ]
 
+const NOTABLE_NAME_POOLS := [
+	["Артан", "Веслава", "Корвин", "Мира", "Север", "Злата", "Тарон", "Ярина", "Бран", "Лада", "Глеб", "Орья"],
+	["Узел-7", "Ирис-М", "Анод-3", "Спектр", "Кварц-9", "Реле-2", "Вектор", "Омега-4", "Скан-8", "Ротор", "Сигма-1", "Импульс"],
+	["Споровик", "Гифа", "Хорд", "Мховик", "Ризома", "Зев", "Крона", "Симб", "Роса", "Лишай", "Пыльца", "Тяж"],
+]
+
+const RELIC_NAME_POOLS := [
+	["Венец Кеплера", "Клинок Зари", "Компас Базальта", "Искра Меридиана"],
+	["Матрица Ядра", "Линза Анода", "Ключ Сигмы", "Контур Ротора"],
+	["Сердце Мицелия", "Споровый Венец", "Янтарная Гифа", "Корень Роя"],
+]
+
+const RANK_NAMES_RU := ["Герой", "Знаменосец", "Правитель", "Отступник", "Вестник"]
+const MEM_VERBS_RU := ["", "Основал", "Коронован", "Победил в дуэли", "Взял реликт", "Клятва мести", "Раскрыт заговор", "Благословлён", "Мутация", "Выжил"]
+
 var _plot_active: PackedByteArray
 var _plot_kind: PackedByteArray
 var _plot_src_cid: PackedInt32Array
 var _plot_dst_cid: PackedInt32Array
 var _plot_elapsed: PackedFloat32Array
 var _plot_dur: PackedFloat32Array
+var _plot_instigator_nid: PackedInt32Array
+var _plot_strip_cd: PackedFloat32Array
+
+var _not_active: PackedByteArray
+var _not_uid: PackedInt32Array
+var _not_slot: PackedInt32Array
+var _not_faction: PackedByteArray
+var _not_rank: PackedByteArray
+var _not_city_id: PackedInt32Array
+var _not_kingdom_id: PackedInt32Array
+var _not_clan_id: PackedInt32Array
+var _not_traits: PackedInt32Array
+var _not_relic_id: PackedInt32Array
+var _not_state: PackedByteArray
+var _not_pinned: PackedByteArray
+var _not_duel_uid: PackedInt32Array
+var _not_renown: PackedInt32Array
+var _not_name: PackedStringArray
+var _not_last_pos: PackedVector2Array
+var _not_mem_count: PackedByteArray
+var _not_mem_head: PackedByteArray
+var _not_mem_verb: PackedByteArray
+var _not_mem_subj_uid: PackedInt32Array
+var _not_mem_city: PackedInt32Array
+var _not_mem_time: PackedFloat32Array
+
+var _rel_active: PackedByteArray
+var _rel_kind: PackedByteArray
+var _rel_holder_uid: PackedInt32Array
+var _rel_holder_nid: PackedInt32Array
+var _rel_pos: PackedVector2Array
+var _rel_origin_cid: PackedInt32Array
+var _rel_name: PackedStringArray
+var _rel_renown: PackedInt32Array
+
+var _feud_active: PackedByteArray
+var _feud_src_clan: PackedInt32Array
+var _feud_tgt_uid: PackedInt32Array
+var _feud_tgt_clan: PackedInt32Array
+var _feud_ttl: PackedFloat32Array
+var _feud_reason: PackedByteArray
 
 var _exp_active: PackedByteArray
 var _exp_src_cid: PackedInt32Array
@@ -77,6 +189,12 @@ var _chronicle: Array[Dictionary] = []
 var _army_orders_cache: Dictionary = {}
 var _orders_dirty: bool = true
 var _allocated: bool = false
+var _relic_strip_cd: float = 0.0
+var _notable_sync_cd: float = 0.0
+var _notable_last_sync_t: float = -10.0
+var _relic_last_scan_t: float = -10.0
+var _exp_active_cnt: int = 0
+var _colonize_cd_active: bool = false
 
 var _kingdom_colonize_cd: PackedFloat32Array
 var _prev_alerted: PackedByteArray
@@ -89,12 +207,20 @@ func ensure_allocated() -> void:
 	if _allocated:
 		return
 	_allocated = true
+	_alloc_plots_and_exp()
+	_alloc_social_tables()
+	reset_all()
+
+
+func _alloc_plots_and_exp() -> void:
 	_plot_active.resize(MAX_PLOTS)
 	_plot_kind.resize(MAX_PLOTS)
 	_plot_src_cid.resize(MAX_PLOTS)
 	_plot_dst_cid.resize(MAX_PLOTS)
 	_plot_elapsed.resize(MAX_PLOTS)
 	_plot_dur.resize(MAX_PLOTS)
+	_plot_instigator_nid.resize(MAX_PLOTS)
+	_plot_strip_cd.resize(MAX_PLOTS)
 
 	_exp_active.resize(MAX_EXPEDITIONS)
 	_exp_src_cid.resize(MAX_EXPEDITIONS)
@@ -109,7 +235,48 @@ func ensure_allocated() -> void:
 	_prev_alerted.resize(MAX_KINGDOMS)
 	_prev_threat.resize(MAX_KINGDOMS)
 	_best_dist2.resize(MAX_KINGDOMS)
-	reset_all()
+
+
+func _alloc_social_tables() -> void:
+	_not_active.resize(MAX_NOTABLES)
+	_not_uid.resize(MAX_NOTABLES)
+	_not_slot.resize(MAX_NOTABLES)
+	_not_faction.resize(MAX_NOTABLES)
+	_not_rank.resize(MAX_NOTABLES)
+	_not_city_id.resize(MAX_NOTABLES)
+	_not_kingdom_id.resize(MAX_NOTABLES)
+	_not_clan_id.resize(MAX_NOTABLES)
+	_not_traits.resize(MAX_NOTABLES)
+	_not_relic_id.resize(MAX_NOTABLES)
+	_not_state.resize(MAX_NOTABLES)
+	_not_pinned.resize(MAX_NOTABLES)
+	_not_duel_uid.resize(MAX_NOTABLES)
+	_not_renown.resize(MAX_NOTABLES)
+	_not_name.resize(MAX_NOTABLES)
+	_not_last_pos.resize(MAX_NOTABLES)
+	_not_mem_count.resize(MAX_NOTABLES)
+	_not_mem_head.resize(MAX_NOTABLES)
+	var mem_tot: int = MAX_NOTABLES * NOTABLE_MEM_SLOTS
+	_not_mem_verb.resize(mem_tot)
+	_not_mem_subj_uid.resize(mem_tot)
+	_not_mem_city.resize(mem_tot)
+	_not_mem_time.resize(mem_tot)
+
+	_rel_active.resize(MAX_RELICS)
+	_rel_kind.resize(MAX_RELICS)
+	_rel_holder_uid.resize(MAX_RELICS)
+	_rel_holder_nid.resize(MAX_RELICS)
+	_rel_pos.resize(MAX_RELICS)
+	_rel_origin_cid.resize(MAX_RELICS)
+	_rel_name.resize(MAX_RELICS)
+	_rel_renown.resize(MAX_RELICS)
+
+	_feud_active.resize(MAX_FEUDS)
+	_feud_src_clan.resize(MAX_FEUDS)
+	_feud_tgt_uid.resize(MAX_FEUDS)
+	_feud_tgt_clan.resize(MAX_FEUDS)
+	_feud_ttl.resize(MAX_FEUDS)
+	_feud_reason.resize(MAX_FEUDS)
 
 
 func reset_all() -> void:
@@ -120,7 +287,8 @@ func reset_all() -> void:
 	_plot_dst_cid.fill(-1)
 	_plot_elapsed.fill(0.0)
 	_plot_dur.fill(12.0)
-
+	_plot_instigator_nid.fill(-1)
+	_plot_strip_cd.fill(0.0)
 	_exp_active.fill(0)
 	_exp_src_cid.fill(-1)
 	_exp_kingdom_id.fill(-1)
@@ -129,7 +297,7 @@ func reset_all() -> void:
 	_exp_target.fill(Vector2.ZERO)
 	_exp_settlers.fill(4)
 	_exp_step_accum.fill(0.0)
-
+	_reset_social_tables()
 	_kingdom_colonize_cd.fill(0.0)
 	_prev_alerted.fill(0)
 	_prev_threat.fill(Vector2.ZERO)
@@ -138,6 +306,55 @@ func reset_all() -> void:
 	_chronicle.clear()
 	_army_orders_cache.clear()
 	_orders_dirty = true
+	_relic_strip_cd = 0.0
+	_notable_sync_cd = 0.0
+	_notable_last_sync_t = -10.0
+	_relic_last_scan_t = -10.0
+	_exp_active_cnt = 0
+	_colonize_cd_active = false
+
+
+func _reset_social_tables() -> void:
+	_not_active.fill(0)
+	_not_uid.fill(-1)
+	_not_slot.fill(-1)
+	_not_faction.fill(0)
+	_not_rank.fill(0)
+	_not_city_id.fill(-1)
+	_not_kingdom_id.fill(-1)
+	_not_clan_id.fill(-1)
+	_not_traits.fill(0)
+	_not_relic_id.fill(-1)
+	_not_state.fill(NSTATE_DORMANT)
+	_not_pinned.fill(0)
+	_not_duel_uid.fill(-1)
+	_not_renown.fill(0)
+	for i in range(MAX_NOTABLES):
+		_not_name[i] = ""
+	_not_last_pos.fill(Vector2.ZERO)
+	_not_mem_count.fill(0)
+	_not_mem_head.fill(0)
+	_not_mem_verb.fill(0)
+	_not_mem_subj_uid.fill(-1)
+	_not_mem_city.fill(-1)
+	_not_mem_time.fill(0.0)
+
+	_rel_active.fill(0)
+	_rel_kind.fill(0)
+	_rel_holder_uid.fill(-1)
+	_rel_holder_nid.fill(-1)
+	_rel_pos.fill(Vector2.ZERO)
+	_rel_origin_cid.fill(-1)
+	for r in range(MAX_RELICS):
+		_rel_name[r] = ""
+	_rel_renown.fill(0)
+
+	_feud_active.fill(0)
+	_feud_src_clan.fill(-1)
+	_feud_tgt_uid.fill(-1)
+	_feud_tgt_clan.fill(-1)
+	_feud_ttl.fill(0.0)
+	_feud_reason.fill(0)
 
 
 func push_chronicle(text: String, pos: Vector2, color: Color) -> void:
@@ -185,6 +402,8 @@ func create_kingdom(civ: Node2D, capital_cid: int, is_rebel: bool = false) -> in
 		var pal: Array = KINGDOM_PALETTES[f_id]
 		civ._kingdom_color[free_kid] = pal[same_f_count % pal.size()]
 	assign_city_to_kingdom(civ, capital_cid, free_kid)
+	if civ._meta != null:
+		civ._meta.on_kingdom_created(civ, Vector2i(free_kid, capital_cid), is_rebel)
 	return free_kid
 
 
@@ -225,6 +444,12 @@ func on_city_collapsed(civ: Node2D, cid: int) -> void:
 	civ._city_kingdom_id[cid] = -1
 	_cancel_plots_involving(cid)
 	_cancel_expeditions_from(cid)
+	if civ._meta != null:
+		civ._meta.on_city_collapsed(civ, cid)
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] != 0 and _not_city_id[n] == cid:
+			_not_city_id[n] = -1
+			_not_kingdom_id[n] = -1
 	if kid >= 0 and kid < MAX_KINGDOMS and civ._kingdom_active[kid] != 0:
 		civ._kingdom_city_count[kid] = maxi(0, civ._kingdom_city_count[kid] - 1)
 		if civ._kingdom_capital_cid[kid] == cid:
@@ -387,6 +612,10 @@ func _scan_zone_frontier_clashes(civ: Node2D, active_cids: Array[int], best_dist
 	var zw: int = civ._zone_w
 	var zh: int = civ._zone_h
 	var zpx: float = float(civ._zone_px)
+	var max_c: int = civ._max_cities
+	var diplo: PackedByteArray = civ._diplo_matrix
+	var active: PackedByteArray = civ._city_active
+	var facs: PackedByteArray = civ._city_faction
 	for c_id in active_cids:
 		var cc: Vector2 = civ._city_center[c_id]
 		var czx: int = clampi(int(floor(cc.x / zpx)), 0, zw - 1)
@@ -395,6 +624,8 @@ func _scan_zone_frontier_clashes(civ: Node2D, active_cids: Array[int], best_dist
 		var zy_end: int = mini(zh, czy + b_r + 1)
 		var zx0: int = maxi(0, czx - b_r)
 		var zx_end: int = mini(zw, czx + b_r + 1)
+		var row_c: int = c_id * max_c
+		var fc: int = int(facs[c_id])
 		for zy in range(maxi(0, czy - b_r), zy_end):
 			var row_off: int = zy * zw
 			for zx in range(zx0, zx_end):
@@ -403,26 +634,25 @@ func _scan_zone_frontier_clashes(civ: Node2D, active_cids: Array[int], best_dist
 					continue
 				if zx + 1 < zw:
 					var ob_e: int = z_owners[zidx + 1]
-					if ob_e != c_id and ob_e >= 0:
-						pairs += _check_frontier_pair(civ, c_id, ob_e, Vector2(float(zx + 1) * zpx, (float(zy) + 0.5) * zpx), best_dist2)
+					if ob_e != c_id and ob_e >= 0 and active[ob_e] != 0:
+						var dst_e: int = int(diplo[row_c + ob_e])
+						if dst_e != DIPLO_PACT:
+							civ._tmp_frontier_contacts[row_c + ob_e] += 1
+							civ._tmp_frontier_contacts[ob_e * max_c + c_id] += 1
+							if dst_e >= DIPLO_TOTAL_WAR or int(facs[ob_e]) != fc:
+								_mark_hostile_frontier(civ, c_id, ob_e, Vector2(float(zx + 1) * zpx, (float(zy) + 0.5) * zpx), best_dist2)
+								pairs += 1
 				if zy + 1 < zh:
 					var ob_s: int = z_owners[zidx + zw]
-					if ob_s != c_id and ob_s >= 0:
-						pairs += _check_frontier_pair(civ, c_id, ob_s, Vector2((float(zx) + 0.5) * zpx, float(zy + 1) * zpx), best_dist2)
+					if ob_s != c_id and ob_s >= 0 and active[ob_s] != 0:
+						var dst_s: int = int(diplo[row_c + ob_s])
+						if dst_s != DIPLO_PACT:
+							civ._tmp_frontier_contacts[row_c + ob_s] += 1
+							civ._tmp_frontier_contacts[ob_s * max_c + c_id] += 1
+							if dst_s >= DIPLO_TOTAL_WAR or int(facs[ob_s]) != fc:
+								_mark_hostile_frontier(civ, c_id, ob_s, Vector2((float(zx) + 0.5) * zpx, float(zy + 1) * zpx), best_dist2)
+								pairs += 1
 	return pairs
-
-
-func _check_frontier_pair(civ: Node2D, oa: int, ob: int, fpos: Vector2, best_dist2: PackedFloat32Array) -> int:
-	if ob < 0 or ob == oa or civ._city_active[ob] == 0:
-		return 0
-	if int(civ._diplo_matrix[oa * civ._max_cities + ob]) == DIPLO_PACT:
-		return 0
-	civ._tmp_frontier_contacts[oa * civ._max_cities + ob] += 1
-	civ._tmp_frontier_contacts[ob * civ._max_cities + oa] += 1
-	if civ._are_cities_hostile(oa, ob) or int(civ._city_faction[ob]) != int(civ._city_faction[oa]):
-		_mark_hostile_frontier(civ, oa, ob, fpos, best_dist2)
-		return 1
-	return 0
 
 
 func _mark_hostile_frontier(civ: Node2D, ca: int, cb: int, fpos: Vector2, best_dist2: PackedFloat32Array) -> void:
@@ -442,15 +672,24 @@ func step_city_loyalty(civ: Node2D, cid: int, pace_dt: float) -> void:
 	if civ._city_is_rebel[cid] != 0:
 		return
 	var stress: float = 0.0
-	var hunger: float = civ.get_city_hunger_pressure(cid)
-	if hunger > 0.45:
-		stress += (hunger - 0.35) * 1.35
+	if int(civ._city_faction[cid]) != FACTION_ROBOT:
+		var need_f: float = maxf(float(civ._city_pop[cid]) * 2.5, 16.0)
+		var hunger: float = clampf(1.0 - civ._city_food[cid] / need_f, 0.0, 1.0)
+		if hunger > 0.45:
+			stress += (hunger - 0.35) * 1.35
 	if civ._city_emp_timer[cid] > 0.0:
 		stress += 0.85
 	var ov: int = civ._city_overlord[cid]
 	if ov >= 0 and ov < civ._max_cities and civ._city_active[ov] != 0:
-		if civ._city_center[cid].distance_to(civ._city_center[ov]) > civ._k_rebel_cap_dist:
+		var cap_d: float = civ._k_rebel_cap_dist
+		if civ._city_center[cid].distance_squared_to(civ._city_center[ov]) > cap_d * cap_d:
 			stress += 0.55
+	if civ._meta != null:
+		var l_bonus: float = civ._meta.calc_extra_loyalty_bonus_fast(civ, cid)
+		if l_bonus < 0.0:
+			stress += -l_bonus
+		elif stress > 0.0:
+			stress = maxf(0.0, stress - minf(0.25, l_bonus * 0.4))
 
 	var prev_loy: float = civ._city_loyalty[cid]
 	if stress > 0.0:
@@ -466,21 +705,25 @@ func step_city_loyalty(civ: Node2D, cid: int, pace_dt: float) -> void:
 func step_diplomacy_and_plots(civ: Node2D, pace_dt: float) -> void:
 	_step_diplomacy_tension(civ, pace_dt)
 	_step_active_plots(civ, pace_dt)
+	step_notables_and_relics(civ, pace_dt)
 
 
 func _step_diplomacy_tension(civ: Node2D, pace_dt: float) -> void:
 	var war_th: float = civ._k_diplo_war_th
 	var pact_th: float = civ._k_diplo_pact_th
 	var max_dist2: float = 280.0 * 280.0
+	_active_cids.clear()
+	for c in range(civ._max_cities):
+		if civ._city_active[c] != 0:
+			_active_cids.append(c)
+	var act_n: int = _active_cids.size()
 
-	for a in range(civ._max_cities):
-		if civ._city_active[a] == 0:
-			continue
+	for ai in range(act_n):
+		var a: int = _active_cids[ai]
 		var fa: int = int(civ._city_faction[a])
 		var reb_a: bool = civ._city_is_rebel[a] != 0
-		for b in range(a + 1, civ._max_cities):
-			if civ._city_active[b] == 0:
-				continue
+		for bi in range(ai + 1, act_n):
+			var b: int = _active_cids[bi]
 			var fb: int = int(civ._city_faction[b])
 			var reb_b: bool = civ._city_is_rebel[b] != 0
 			var idx_ab: int = a * civ._max_cities + b
@@ -527,11 +770,47 @@ func _step_diplomacy_tension(civ: Node2D, pace_dt: float) -> void:
 						start_plot(civ, PLOT_PACT, Vector2i(a, b))
 
 
+func _is_self_only_plot(kind: int) -> bool:
+	return (
+		kind == PLOT_REBEL
+		or kind == PLOT_ALLIANCE_BREAK
+		or kind == PLOT_SCHISM
+		or kind == PLOT_CODEX
+		or kind == PLOT_ORBITAL_SHIELD
+		or kind == PLOT_ASCEND_MONOLITH
+		or kind == PLOT_REFORM_SUCCESSION
+	)
+
+
+func _plot_strip_id(kind: int) -> int:
+	match kind:
+		PLOT_WAR:
+			return STRIP_PLOT_WAR
+		PLOT_PACT:
+			return STRIP_PLOT_PACT
+		PLOT_REBEL:
+			return STRIP_PLOT_REBEL
+		PLOT_PEACE:
+			return STRIP_PLOT_PEACE
+		PLOT_ALLIANCE_FORM, PLOT_ALLIANCE_JOIN, PLOT_ALLIANCE_BREAK:
+			return STRIP_PLOT_ALLIANCE
+		PLOT_SCHISM:
+			return STRIP_PLOT_SCHISM
+		PLOT_CODEX, PLOT_REFORM_SUCCESSION:
+			return STRIP_PLOT_CODEX
+		PLOT_ORBITAL_SHIELD:
+			return STRIP_SHIELD
+		PLOT_ASCEND_MONOLITH:
+			return STRIP_PORTAL
+	return STRIP_PLOT_WAR
+
+
 func has_plot_for(src_cid: int, dst_cid: int, kind: int) -> bool:
+	var self_only: bool = _is_self_only_plot(kind)
 	for i in range(MAX_PLOTS):
 		if _plot_active[i] == 0 or int(_plot_kind[i]) != kind:
 			continue
-		if kind == PLOT_REBEL and _plot_src_cid[i] == src_cid:
+		if self_only and _plot_src_cid[i] == src_cid:
 			return true
 		if (_plot_src_cid[i] == src_cid and _plot_dst_cid[i] == dst_cid) or (_plot_src_cid[i] == dst_cid and _plot_dst_cid[i] == src_cid):
 			return true
@@ -539,22 +818,109 @@ func has_plot_for(src_cid: int, dst_cid: int, kind: int) -> bool:
 
 
 func start_plot(civ: Node2D, kind: int, pair: Vector2i) -> bool:
+	var k: int = clampi(kind, PLOT_WAR, PLOT_REFORM_SUCCESSION)
 	var src_cid: int = pair.x
 	var dst_cid: int = pair.y
-	if kind == PLOT_WAR and not civ._law_diplomacy_wars:
+	if k == PLOT_WAR and not civ._law_diplomacy_wars:
 		return false
-	if kind == PLOT_REBEL and not can_city_rebel(civ, src_cid):
+	if k == PLOT_REBEL and not can_city_rebel(civ, src_cid):
+		return false
+	return _insert_plot(civ, k, src_cid, dst_cid)
+
+
+func force_diplomatic_plot(civ: Node2D, plot_type: int, pair: Vector2i) -> bool:
+	ensure_allocated()
+	var k: int = clampi(plot_type, PLOT_WAR, PLOT_REFORM_SUCCESSION)
+	var src: int = pair.x
+	var dst: int = pair.y
+	if src < 0 or src >= civ._max_cities or civ._city_active[src] == 0:
+		for c in range(civ._max_cities):
+			if civ._city_active[c] != 0:
+				src = c
+				break
+	if src < 0 or src >= civ._max_cities or civ._city_active[src] == 0:
+		return false
+	var self_only: bool = _is_self_only_plot(k)
+	if self_only:
+		dst = -1
+	elif dst < 0 or dst >= civ._max_cities or civ._city_active[dst] == 0 or dst == src:
+		dst = -1
+		for c in range(civ._max_cities):
+			if c != src and civ._city_active[c] != 0:
+				dst = c
+				break
+		if dst < 0:
+			return false
+	if has_plot_for(src, dst, k):
+		return true
+	return _insert_plot(civ, k, src, dst)
+
+
+func start_test_plot(civ: Node2D, kind: int) -> bool:
+	ensure_allocated()
+	var k: int = clampi(kind, PLOT_WAR, PLOT_REFORM_SUCCESSION)
+	var src: int = -1
+	var dst: int = -1
+	for c in range(civ._max_cities):
+		if civ._city_active[c] == 0:
+			continue
+		if k == PLOT_REBEL and src < 0 and can_city_rebel(civ, c):
+			src = c
+		elif src < 0:
+			src = c
+		elif dst < 0 and c != src:
+			dst = c
+	if src < 0:
+		return false
+	if not _is_self_only_plot(k) and dst < 0:
+		return false
+	return _insert_plot(civ, k, src, dst)
+
+
+func _insert_plot(civ: Node2D, kind: int, src_cid: int, dst_cid: int) -> bool:
+	if src_cid < 0 or src_cid >= civ._max_cities or civ._city_active[src_cid] == 0:
+		return false
+	var self_only: bool = _is_self_only_plot(kind)
+	if not self_only and (dst_cid < 0 or dst_cid >= civ._max_cities or civ._city_active[dst_cid] == 0 or dst_cid == src_cid):
 		return false
 	for i in range(MAX_PLOTS):
-		if _plot_active[i] == 0:
-			_plot_active[i] = 1
-			_plot_kind[i] = kind
-			_plot_src_cid[i] = src_cid
-			_plot_dst_cid[i] = dst_cid
-			_plot_elapsed[i] = 0.0
+		if _plot_active[i] != 0:
+			continue
+		_plot_active[i] = 1
+		_plot_kind[i] = kind
+		_plot_src_cid[i] = src_cid
+		_plot_dst_cid[i] = -1 if self_only else dst_cid
+		_plot_elapsed[i] = 0.0
+		if kind <= PLOT_REBEL or civ._meta == null:
 			_plot_dur[i] = civ._rng.randf_range(PLOT_MIN_SEC, PLOT_MAX_SEC)
-			return true
+		else:
+			_plot_dur[i] = civ._meta._meta_rng.randf_range(PLOT_MIN_SEC, PLOT_MAX_SEC)
+		_plot_strip_cd[i] = 1.6
+		var inst_nid: int = _assign_plot_instigator(civ, src_cid, kind)
+		_plot_instigator_nid[i] = inst_nid
+		_emit_plot_start_events(civ, kind, src_cid, _plot_dst_cid[i], inst_nid)
+		return true
 	return false
+
+
+func _emit_plot_start_events(civ: Node2D, kind: int, src_cid: int, dst_cid: int, inst_nid: int) -> void:
+	var src_name: String = civ._city_name[src_cid]
+	var ev_pos: Vector2 = _not_last_pos[inst_nid] if (inst_nid >= 0 and _not_active[inst_nid] != 0) else civ._city_center[src_cid]
+	var strip_id: int = _plot_strip_id(kind)
+	if kind == PLOT_WAR:
+		push_chronicle("Заговор: %s готовит войну с %s" % [src_name, civ._city_name[dst_cid]], ev_pos, Color("#FFB84D"))
+	elif kind == PLOT_PACT:
+		push_chronicle("Переговоры: %s и %s готовят пакт" % [src_name, civ._city_name[dst_cid]], ev_pos, Color("#7CE7FF"))
+	elif kind == PLOT_REBEL:
+		push_chronicle("Брожение: %s замышляет мятеж" % src_name, ev_pos, Color("#FF9B26"))
+	else:
+		var p_ru: String = civ._meta.get_plot_name_ru(kind) if civ._meta != null else "Заговор"
+		if dst_cid >= 0 and dst_cid < civ._max_cities and civ._city_active[dst_cid] != 0:
+			push_chronicle("%s: %s и %s" % [p_ru, src_name, civ._city_name[dst_cid]], ev_pos, Color("#A8D8FF"))
+		else:
+			push_chronicle("%s: %s" % [p_ru, src_name], ev_pos, Color("#A8D8FF"))
+	if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+		civ._fx.call("spawn_reaction_strip", ev_pos + Vector2(0.0, -8.0), strip_id)
 
 
 func _step_active_plots(civ: Node2D, pace_dt: float) -> void:
@@ -565,24 +931,41 @@ func _step_active_plots(civ: Node2D, pace_dt: float) -> void:
 		var src: int = _plot_src_cid[i]
 		var dst: int = _plot_dst_cid[i]
 		if src < 0 or src >= civ._max_cities or civ._city_active[src] == 0:
-			_plot_active[i] = 0
+			_clear_plot_slot(i)
 			continue
-		if kind == PLOT_WAR and not civ._law_diplomacy_wars:
-			_plot_active[i] = 0
+		if (kind == PLOT_WAR and not civ._law_diplomacy_wars) or (kind == PLOT_REBEL and not civ._law_rebellions):
+			_clear_plot_slot(i)
 			continue
-		if kind == PLOT_REBEL and not civ._law_rebellions:
-			_plot_active[i] = 0
+		if not _is_self_only_plot(kind) and (dst < 0 or dst >= civ._max_cities or civ._city_active[dst] == 0):
+			_clear_plot_slot(i)
 			continue
-		if kind != PLOT_REBEL and (dst < 0 or dst >= civ._max_cities or civ._city_active[dst] == 0):
-			_plot_active[i] = 0
+		var nid: int = _plot_instigator_nid[i]
+		if nid >= 0 and _not_active[nid] == 0:
+			_clear_plot_slot(i)
 			continue
 
-		_plot_elapsed[i] += pace_dt
+		var spd: float = civ._meta.get_plot_speed_mult(civ, src) if civ._meta != null else 1.0
+		_plot_elapsed[i] += pace_dt * spd
+		if civ._sim_pace_mult < 15.0 and civ._fx != null and civ._fx_has_spawn_reaction_strip:
+			_plot_strip_cd[i] -= pace_dt / maxf(1.0, civ._sim_pace_mult)
+			if _plot_strip_cd[i] <= 0.0:
+				_plot_strip_cd[i] = 1.4
+				var s_pos: Vector2 = _not_last_pos[nid] if (nid >= 0 and _not_active[nid] != 0) else civ._city_center[src]
+				civ._fx.call("spawn_reaction_strip", s_pos + Vector2(0.0, -8.0), _plot_strip_id(kind))
 		if _plot_elapsed[i] < _plot_dur[i]:
 			continue
 
-		_plot_active[i] = 0
+		_clear_plot_slot(i)
 		_resolve_plot(civ, kind, src, dst)
+
+
+func _clear_plot_slot(i: int) -> void:
+	var nid: int = _plot_instigator_nid[i]
+	if nid >= 0 and nid < MAX_NOTABLES and _not_active[nid] != 0:
+		if int(_not_state[nid]) == NSTATE_BREWING or int(_not_state[nid]) == NSTATE_RECRUITING:
+			_not_state[nid] = NSTATE_DORMANT
+	_plot_active[i] = 0
+	_plot_instigator_nid[i] = -1
 
 
 func _resolve_plot(civ: Node2D, kind: int, src: int, dst: int) -> void:
@@ -597,12 +980,19 @@ func _resolve_plot(civ: Node2D, kind: int, src: int, dst: int) -> void:
 	elif kind == PLOT_REBEL:
 		if can_city_rebel(civ, src) and civ._city_loyalty[src] < civ._k_rebel_loy_thresh + 20.0:
 			trigger_city_rebellion(civ, src, false)
+	elif civ._meta != null:
+		civ._meta.resolve_extended_plot(civ, kind, Vector2i(src, dst))
 
 
 func _cancel_plots_involving(cid: int) -> void:
 	for i in range(MAX_PLOTS):
 		if _plot_active[i] != 0 and (_plot_src_cid[i] == cid or _plot_dst_cid[i] == cid):
-			_plot_active[i] = 0
+			_clear_plot_slot(i)
+
+
+func _plot_kind_key(kind_i: int) -> String:
+	var keys := ["war", "pact", "rebel", "peace", "alliance_form", "alliance_join", "alliance_break", "schism", "codex", "orbital_shield", "ascend_monolith", "reform_succession"]
+	return keys[clampi(kind_i, 0, keys.size() - 1)]
 
 
 func get_active_plots(civ: Node2D) -> Array[Dictionary]:
@@ -614,12 +1004,17 @@ func get_active_plots(civ: Node2D) -> Array[Dictionary]:
 		if src < 0 or src >= civ._max_cities or civ._city_active[src] == 0:
 			continue
 		var kind_i: int = int(_plot_kind[i])
-		var kind_s: String = "war" if kind_i == PLOT_WAR else ("pact" if kind_i == PLOT_PACT else "rebel")
+		var nid: int = _plot_instigator_nid[i]
+		var p_pos: Vector2 = _not_last_pos[nid] if (nid >= 0 and nid < MAX_NOTABLES and _not_active[nid] != 0) else (civ._city_center[src] + Vector2(0.0, -10.0))
 		out.append({
-			"pos": civ._city_center[src] + Vector2(0.0, -10.0),
-			"kind": kind_s,
+			"pos": p_pos,
+			"kind": _plot_kind_key(kind_i),
+			"kind_id": kind_i,
+			"title_ru": civ._meta.get_plot_name_ru(kind_i) if civ._meta != null else _plot_kind_key(kind_i),
 			"progress": clampf(_plot_elapsed[i] / maxf(0.1, _plot_dur[i]), 0.0, 1.0),
 			"faction": int(civ._city_faction[src]),
+			"instigator_nid": nid,
+			"instigator_uid": _not_uid[nid] if nid >= 0 else -1,
 		})
 	return out
 
@@ -681,6 +1076,8 @@ func apply_diplomacy_state(civ: Node2D, pair: Vector2i, state_opts: Vector2i) ->
 			civ._fx.call("spawn_reaction_strip", mid, STRIP_WAR)
 		elif st == DIPLO_REBELLION:
 			civ._fx.call("spawn_reaction_strip", mid, STRIP_REBEL)
+	if prev_st != st and civ._meta != null:
+		civ._meta.on_diplomacy_changed(civ, Vector2i(city_a, city_b), st)
 
 
 func trigger_city_rebellion(civ: Node2D, cid: int, allow_bypass: bool = false) -> void:
@@ -768,34 +1165,61 @@ func _reset_contested_scratch(civ: Node2D) -> void:
 
 
 func _accumulate_zone_combat_weights(civ: Node2D, u_pos: PackedVector2Array, u_city: PackedInt32Array, u_role: PackedByteArray, has_roles: bool, u_cnt: int) -> void:
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var max_c: int = civ._max_cities
+	var zpx_inv: float = 1.0 / float(civ._zone_px)
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var c_act: PackedByteArray = civ._city_active
+	var diplo: PackedByteArray = civ._diplo_matrix
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var in_cont: PackedByteArray = civ._zone_in_contested
+	var cont_list: PackedInt32Array = civ._contested_z_list
+	var def_cnt: PackedInt32Array = civ._tmp_zone_def_cnt
+	var att_cid_a: PackedInt32Array = civ._tmp_zone_att_cid
+	var att_cnt_a: PackedInt32Array = civ._tmp_zone_att_cnt
+	var att_sol_a: PackedByteArray = civ._tmp_zone_att_sol
+	var roles_sz: int = u_role.size()
 	for i in range(u_cnt):
 		var ucid: int = u_city[i]
-		if ucid < 0 or ucid >= civ._max_cities or civ._city_active[ucid] == 0:
+		if ucid < 0 or ucid >= max_c or c_act[ucid] == 0:
 			continue
-		var zx: int = clampi(int(floor(u_pos[i].x / float(civ._zone_px))), 0, civ._zone_w - 1)
-		var zy: int = clampi(int(floor(u_pos[i].y / float(civ._zone_px))), 0, civ._zone_h - 1)
-		var owner: int = civ._get_zone_owner(zx, zy)
-		if owner < 0 or owner >= civ._max_cities or civ._city_active[owner] == 0:
+		var up: Vector2 = u_pos[i]
+		var zx: int = clampi(int(floor(up.x * zpx_inv)), 0, zw - 1)
+		var zy: int = clampi(int(floor(up.y * zpx_inv)), 0, zh - 1)
+		var zidx: int = zy * zw + zx
+		var owner: int = z_owners[zidx]
+		if owner < 0 or owner >= max_c or c_act[owner] == 0:
 			continue
-		var zidx: int = zy * civ._zone_w + zx
-		var is_sol: bool = has_roles and i < u_role.size() and int(u_role[i]) == 4
+		var is_sol: bool = has_roles and i < roles_sz and int(u_role[i]) == 4
 		var w: int = 2 if is_sol else 1
 		if owner == ucid:
-			civ._tmp_zone_def_cnt[zidx] += w
-			_mark_contested(civ, zidx)
-		elif civ._are_cities_hostile(ucid, owner):
-			_mark_contested(civ, zidx)
-			if civ._tmp_zone_att_cid[zidx] < 0 or civ._tmp_zone_att_cid[zidx] == ucid:
-				civ._tmp_zone_att_cid[zidx] = ucid
-				civ._tmp_zone_att_cnt[zidx] += w
-				if is_sol:
-					civ._tmp_zone_att_sol[zidx] = 1
-			elif is_sol and civ._tmp_zone_att_sol[zidx] == 0:
-				civ._tmp_zone_att_cid[zidx] = ucid
-				civ._tmp_zone_att_cnt[zidx] += w
-				civ._tmp_zone_att_sol[zidx] = 1
-			else:
-				civ._tmp_zone_att_cnt[zidx] += w
+			def_cnt[zidx] += w
+			if in_cont[zidx] == 0:
+				in_cont[zidx] = 1
+				cont_list[civ._contested_z_count] = zidx
+				civ._contested_z_count += 1
+		else:
+			var dst: int = int(diplo[ucid * max_c + owner])
+			if dst == DIPLO_TOTAL_WAR or dst == DIPLO_REBELLION:
+				if in_cont[zidx] == 0:
+					in_cont[zidx] = 1
+					cont_list[civ._contested_z_count] = zidx
+					civ._contested_z_count += 1
+				var cur_att: int = att_cid_a[zidx]
+				if cur_att < 0 or cur_att == ucid:
+					att_cid_a[zidx] = ucid
+					att_cnt_a[zidx] += w
+					if is_sol and int(att_sol_a[zidx]) < 255:
+						att_sol_a[zidx] += 1
+				elif is_sol and int(att_sol_a[zidx]) == 0:
+					att_cid_a[zidx] = ucid
+					att_cnt_a[zidx] = w
+					att_sol_a[zidx] = 1
+				elif kids[ucid] >= 0 and kids[ucid] == kids[cur_att]:
+					att_cnt_a[zidx] += w
+					if is_sol and int(att_sol_a[zidx]) < 255:
+						att_sol_a[zidx] += 1
 
 
 func _mark_contested(civ: Node2D, zidx: int) -> void:
@@ -805,6 +1229,55 @@ func _mark_contested(civ: Node2D, zidx: int) -> void:
 		civ._contested_z_count += 1
 
 
+func _zone_has_living_campfire(civ: Node2D, zx: int, zy: int, owner_cid: int) -> bool:
+	var px0: float = float(zx * civ._zone_px)
+	var py0: float = float(zy * civ._zone_px)
+	var px1: float = px0 + float(civ._zone_px)
+	var py1: float = py0 + float(civ._zone_px)
+	for bi in range(civ._bld_count):
+		if civ._bld_city_id[bi] != owner_cid or int(civ._bld_type[bi]) != BLD_CAMPFIRE or civ._bld_hp[bi] <= 0.0:
+			continue
+		var bp: Vector2 = civ._bld_pos[bi]
+		if bp.x >= px0 and bp.x < px1 and bp.y >= py0 and bp.y < py1:
+			return true
+	return false
+
+
+func _can_capture_zone(civ: Node2D, zx: int, zy: int, att_cid: int, att_sol: int) -> bool:
+	var zidx: int = zy * civ._zone_w + zx
+	var prev_owner: int = civ._get_zone_owner(zx, zy)
+	if prev_owner < 0 or prev_owner >= civ._max_cities or civ._city_active[prev_owner] == 0:
+		return false
+	if civ._city_zones_count[prev_owner] > 2:
+		var czx: int = clampi(int(floor(civ._city_center[prev_owner].x / float(civ._zone_px))), 0, civ._zone_w - 1)
+		var czy: int = clampi(int(floor(civ._city_center[prev_owner].y / float(civ._zone_px))), 0, civ._zone_h - 1)
+		if (zx == czx and zy == czy) or ((int(civ._zone_flags[zidx]) & ZONE_FLAG_BUILT) != 0 and _zone_has_living_campfire(civ, zx, zy, prev_owner)):
+			return false
+	var att_kid: int = civ._city_kingdom_id[att_cid]
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var active: PackedByteArray = civ._city_active
+	if zx > 0:
+		var nb_w: int = z_owners[zidx - 1]
+		if nb_w >= 0 and active[nb_w] != 0 and (nb_w == att_cid or (att_kid >= 0 and kids[nb_w] == att_kid)):
+			return true
+	if zx + 1 < zw:
+		var nb_e: int = z_owners[zidx + 1]
+		if nb_e >= 0 and active[nb_e] != 0 and (nb_e == att_cid or (att_kid >= 0 and kids[nb_e] == att_kid)):
+			return true
+	if zy > 0:
+		var nb_n: int = z_owners[zidx - zw]
+		if nb_n >= 0 and active[nb_n] != 0 and (nb_n == att_cid or (att_kid >= 0 and kids[nb_n] == att_kid)):
+			return true
+	if zy + 1 < zh:
+		var nb_s: int = z_owners[zidx + zw]
+		if nb_s >= 0 and active[nb_s] != 0 and (nb_s == att_cid or (att_kid >= 0 and kids[nb_s] == att_kid)):
+			return true
+	return civ._territory.is_zone_coastal(civ, zx, zy) and att_sol >= 3
+
+
 func _advance_zone_captures(civ: Node2D, pace_dt: float, has_roles: bool) -> void:
 	var hold_sec: float = civ._k_war_zone_cap_sec
 	for k in range(civ._contested_z_count):
@@ -812,20 +1285,29 @@ func _advance_zone_captures(civ: Node2D, pace_dt: float, has_roles: bool) -> voi
 		var att_cid: int = civ._tmp_zone_att_cid[zidx]
 		var att_n: int = civ._tmp_zone_att_cnt[zidx]
 		var def_n: int = civ._tmp_zone_def_cnt[zidx]
-		var can_cap: bool = att_cid >= 0 and att_n > def_n and (not has_roles or civ._tmp_zone_att_sol[zidx] != 0 or (def_n == 0 and att_n >= 2))
+		var att_sol: int = int(civ._tmp_zone_att_sol[zidx])
+		var can_cap: bool = att_cid >= 0 and att_n > def_n and (not has_roles or att_sol > 0 or (def_n == 0 and att_n >= 2))
 		if not can_cap:
 			continue
+		var zx: int = zidx % civ._zone_w
+		var zy: int = zidx / civ._zone_w
+		if not _can_capture_zone(civ, zx, zy, att_cid, att_sol):
+			continue
+		var prev_own: int = civ._get_zone_owner(zx, zy)
+		var cap_dt: float = pace_dt
+		if civ._meta != null and prev_own >= 0 and civ._meta.has_defense_turret_near_zone(civ, Vector2i(zx, zy), prev_own):
+			cap_dt = pace_dt * 0.38
 		if civ._zone_capture_cid[zidx] == att_cid:
-			civ._zone_capture_timer[zidx] += pace_dt
+			civ._zone_capture_timer[zidx] += cap_dt
 		else:
 			civ._zone_capture_cid[zidx] = att_cid
-			civ._zone_capture_timer[zidx] = pace_dt
+			civ._zone_capture_timer[zidx] = cap_dt
 			if civ._zone_in_active_cap[zidx] == 0:
 				civ._zone_in_active_cap[zidx] = 1
 				civ._active_cap_zones[civ._active_cap_count] = zidx
 				civ._active_cap_count += 1
 		if civ._zone_capture_timer[zidx] >= hold_sec:
-			capture_zone_by_war(civ, Vector2i(zidx % civ._zone_w, zidx / civ._zone_w), att_cid)
+			capture_zone_by_war(civ, Vector2i(zx, zy), att_cid)
 
 
 func _decay_inactive_captures(civ: Node2D, pace_dt: float, has_roles: bool) -> void:
@@ -841,11 +1323,15 @@ func _decay_inactive_captures(civ: Node2D, pace_dt: float, has_roles: bool) -> v
 		else:
 			var att_n: int = civ._tmp_zone_att_cnt[zidx]
 			var def_n: int = civ._tmp_zone_def_cnt[zidx]
+			var att_sol: int = int(civ._tmp_zone_att_sol[zidx])
+			var zx: int = zidx % civ._zone_w
+			var zy: int = zidx / civ._zone_w
 			var still_holding: bool = (
 				civ._zone_in_contested[zidx] != 0
 				and civ._tmp_zone_att_cid[zidx] == cap_cid
 				and att_n > def_n
-				and (not has_roles or civ._tmp_zone_att_sol[zidx] != 0 or (def_n == 0 and att_n >= 2))
+				and (not has_roles or att_sol > 0 or (def_n == 0 and att_n >= 2))
+				and _can_capture_zone(civ, zx, zy, cap_cid, att_sol)
 			)
 			if not still_holding:
 				civ._zone_capture_timer[zidx] = maxf(0.0, civ._zone_capture_timer[zidx] - pace_dt * 1.25)
@@ -870,9 +1356,16 @@ func capture_zone_by_war(civ: Node2D, zpt: Vector2i, new_owner: int) -> void:
 		return
 	if not civ._are_cities_hostile(new_owner, prev_owner):
 		return
+	var zidx: int = zy * civ._zone_w + zx
+	if not _can_capture_zone(civ, zx, zy, new_owner, int(civ._tmp_zone_att_sol[zidx])):
+		return
 
 	civ._claim_zone(zx, zy, new_owner, int(civ._city_faction[new_owner]))
 	_transfer_buildings_in_zone(civ, zx, zy, prev_owner, new_owner)
+	civ._territory.smooth_enclaves_for_city(civ, prev_owner)
+	civ._territory.smooth_enclaves_for_city(civ, new_owner)
+	if civ._meta != null:
+		civ._meta.on_zone_captured(civ, prev_owner, new_owner)
 
 	var z_mid := Vector2((float(zx) + 0.5) * float(civ._zone_px), (float(zy) + 0.5) * float(civ._zone_px))
 	if civ._fx != null and civ._fx_has_spawn_burst:
@@ -943,11 +1436,7 @@ func try_colonize_and_shuttles(civ: Node2D) -> void:
 	var shuttle_cap: int = mini(civ._max_cities - 2, 10 if civ._total_shuttles_launched == 0 else 8)
 	if active_cities >= shuttle_cap:
 		return
-	var active_exps: int = 0
-	for ei in range(MAX_EXPEDITIONS):
-		if _exp_active[ei] != 0:
-			active_exps += 1
-	if active_exps >= 2:
+	if _exp_active_cnt >= 2:
 		return
 
 	var req_ore: float = civ._k_shuttle_ore
@@ -978,6 +1467,7 @@ func try_colonize_and_shuttles(civ: Node2D) -> void:
 			launched = _try_dispatch_overland_expedition(civ, cid)
 		if launched:
 			_kingdom_colonize_cd[kid] = 180.0
+			_colonize_cd_active = true
 			break
 
 
@@ -1110,6 +1600,7 @@ func _try_dispatch_overland_expedition(civ: Node2D, cid: int) -> bool:
 	civ._city_shuttle_cd[cid] = 90.0
 
 	_exp_active[slot] = 1
+	_exp_active_cnt += 1
 	_exp_src_cid[slot] = cid
 	_exp_kingdom_id[slot] = civ._city_kingdom_id[cid]
 	_exp_faction[slot] = f_id
@@ -1121,9 +1612,18 @@ func _try_dispatch_overland_expedition(civ: Node2D, cid: int) -> bool:
 
 
 func step_expeditions(civ: Node2D, pace_dt: float) -> void:
-	for kid in range(MAX_KINGDOMS):
-		if _kingdom_colonize_cd[kid] > 0.0:
-			_kingdom_colonize_cd[kid] = maxf(0.0, _kingdom_colonize_cd[kid] - pace_dt)
+	if _colonize_cd_active:
+		var any_cd: bool = false
+		for kid in range(MAX_KINGDOMS):
+			if _kingdom_colonize_cd[kid] > 0.0:
+				var next_kcd: float = maxf(0.0, _kingdom_colonize_cd[kid] - pace_dt)
+				_kingdom_colonize_cd[kid] = next_kcd
+				if next_kcd > 0.0:
+					any_cd = true
+		_colonize_cd_active = any_cd
+	if _exp_active_cnt <= 0:
+		return
+	var rem_exp: int = 0
 	for i in range(MAX_EXPEDITIONS):
 		if _exp_active[i] == 0:
 			continue
@@ -1141,6 +1641,7 @@ func step_expeditions(civ: Node2D, pace_dt: float) -> void:
 			if civ.can_settle_near(target):
 				civ._found_daughter_settlement(src_cid, target, _exp_settlers[i])
 			continue
+		rem_exp += 1
 		var next_pos: Vector2 = pos + (delta_v / dist) * step_dist
 		_exp_pos[i] = next_pos
 		_exp_step_accum[i] += pace_dt
@@ -1150,9 +1651,12 @@ func step_expeditions(civ: Node2D, pace_dt: float) -> void:
 			civ.record_foot_step(next_pos, src_cid)
 			if civ._sim_pace_mult < 15.0 and civ._fx != null and civ._fx_has_spawn_burst:
 				civ._fx.spawn_burst(next_pos, 1, Color(0.85, 0.80, 0.65, 0.55), 5.0, 0.35, -4.0)
+	_exp_active_cnt = rem_exp
 
 
 func _city_has_active_expedition(cid: int) -> bool:
+	if _exp_active_cnt <= 0:
+		return false
 	for i in range(MAX_EXPEDITIONS):
 		if _exp_active[i] != 0 and _exp_src_cid[i] == cid:
 			return true
@@ -1160,9 +1664,12 @@ func _city_has_active_expedition(cid: int) -> bool:
 
 
 func _cancel_expeditions_from(cid: int) -> void:
+	if _exp_active_cnt <= 0:
+		return
 	for i in range(MAX_EXPEDITIONS):
 		if _exp_active[i] != 0 and _exp_src_cid[i] == cid:
 			_exp_active[i] = 0
+			_exp_active_cnt = maxi(0, _exp_active_cnt - 1)
 
 
 func get_army_orders(civ: Node2D) -> Dictionary:
@@ -1233,3 +1740,801 @@ func _build_city_army_order(civ: Node2D, cid: int, war_st: int) -> Dictionary:
 		"portal_pos": portal_pos,
 		"color": civ._get_city_border_color(cid),
 	}
+
+
+func get_notables_count() -> int:
+	var c: int = 0
+	for i in range(MAX_NOTABLES):
+		if _not_active[i] != 0:
+			c += 1
+	return c
+
+
+func get_relics_count() -> int:
+	var c: int = 0
+	for i in range(MAX_RELICS):
+		if _rel_active[i] != 0:
+			c += 1
+	return c
+
+
+func get_feuds_count() -> int:
+	var c: int = 0
+	for i in range(MAX_FEUDS):
+		if _feud_active[i] != 0:
+			c += 1
+	return c
+
+
+func _find_notable_by_uid(uid: int) -> int:
+	if uid <= 0:
+		return -1
+	for i in range(MAX_NOTABLES):
+		if _not_active[i] != 0 and _not_uid[i] == uid:
+			return i
+	return -1
+
+
+func _alloc_notable_slot() -> int:
+	for i in range(MAX_NOTABLES):
+		if _not_active[i] == 0:
+			return i
+	var worst_i: int = -1
+	var worst_score: int = 1 << 29
+	for i in range(MAX_NOTABLES):
+		if _not_pinned[i] != 0 or int(_not_rank[i]) == RANK_RULER or int(_not_rank[i]) == RANK_HERALD:
+			continue
+		var sc: int = _not_renown[i] + (40 if _not_relic_id[i] >= 0 else 0)
+		if sc < worst_score:
+			worst_score = sc
+			worst_i = i
+	return worst_i
+
+
+func _record_notable_mem(nid: int, verb: int, subj_uid: int, cid: int, t_sec: float) -> void:
+	if nid < 0 or nid >= MAX_NOTABLES or _not_active[nid] == 0:
+		return
+	var cnt: int = int(_not_mem_count[nid])
+	var head: int = int(_not_mem_head[nid]) % NOTABLE_MEM_SLOTS
+	var base: int = nid * NOTABLE_MEM_SLOTS
+	_not_mem_verb[base + head] = verb
+	_not_mem_subj_uid[base + head] = subj_uid
+	_not_mem_city[base + head] = cid
+	_not_mem_time[base + head] = t_sec
+	_not_mem_head[nid] = (head + 1) % NOTABLE_MEM_SLOTS
+	if cnt < NOTABLE_MEM_SLOTS:
+		_not_mem_count[nid] = cnt + 1
+
+
+func _sync_physics_notable_idx(civ: Node2D, uid: int, nid: int) -> void:
+	if civ._physics == null or uid <= 0:
+		return
+	var uid_map_v: Variant = civ._physics.get("_uid_to_idx")
+	if not (uid_map_v is Dictionary):
+		return
+	var uid_map := uid_map_v as Dictionary
+	if not uid_map.has(uid):
+		return
+	var u_idx: int = int(uid_map[uid])
+	var n_arr_v: Variant = civ._physics.get("_u_notable_idx")
+	if n_arr_v is PackedInt32Array:
+		var n_arr := n_arr_v as PackedInt32Array
+		if u_idx >= 0 and u_idx < n_arr.size():
+			n_arr[u_idx] = nid
+
+
+func _pick_notable_name(civ: Node2D, fac: int, nid: int) -> String:
+	var pool: Array = NOTABLE_NAME_POOLS[clampi(fac, 0, NOTABLE_NAME_POOLS.size() - 1)]
+	var base: int = (nid + civ._rng.randi()) % pool.size()
+	for off in range(pool.size()):
+		var cand: String = str(pool[(base + off) % pool.size()])
+		var used: bool = false
+		for i in range(MAX_NOTABLES):
+			if _not_active[i] != 0 and _not_name[i] == cand:
+				used = true
+				break
+		if not used:
+			return cand
+	return "%s-%d" % [str(pool[nid % pool.size()]), nid + 1]
+
+
+func _promote_unit_notable(civ: Node2D, uid: int, u_idx: int, rank: int, traits: int) -> int:
+	var existing: int = _find_notable_by_uid(uid)
+	if existing >= 0:
+		if rank == RANK_RULER or rank == RANK_HERALD:
+			_not_rank[existing] = rank
+		_not_traits[existing] |= traits
+		_sync_physics_notable_idx(civ, uid, existing)
+		return existing
+	var nid: int = _alloc_notable_slot()
+	if nid < 0:
+		return -1
+	var phys: Node2D = civ._physics
+	var cid: int = int(phys._u_city_id[u_idx]) if (phys != null and u_idx >= 0 and u_idx < phys._u_city_id.size()) else -1
+	var fac: int = int(phys._u_faction_id[u_idx]) if (phys != null and u_idx >= 0 and u_idx < phys._u_faction_id.size()) else 0
+	fac = clampi(fac, 0, 2)
+	var pos := Vector2(phys._px[u_idx], phys._py[u_idx]) if (phys != null and u_idx >= 0 and u_idx < phys._px.size()) else Vector2.ZERO
+	_not_active[nid] = 1
+	_not_uid[nid] = uid
+	_not_slot[nid] = u_idx
+	_not_faction[nid] = fac
+	_not_rank[nid] = rank
+	_not_city_id[nid] = cid
+	_not_kingdom_id[nid] = civ._city_kingdom_id[cid] if (cid >= 0 and cid < civ._max_cities) else -1
+	_not_clan_id[nid] = (cid + 1) if cid >= 0 else (nid + 100)
+	_not_traits[nid] = traits
+	_not_relic_id[nid] = -1
+	_not_state[nid] = NSTATE_DORMANT
+	_not_pinned[nid] = 0
+	_not_duel_uid[nid] = -1
+	_not_renown[nid] = 10 if rank == RANK_RULER else 4
+	_not_name[nid] = _pick_notable_name(civ, fac, nid)
+	_not_last_pos[nid] = pos
+	_not_mem_count[nid] = 0
+	_not_mem_head[nid] = 0
+	_sync_physics_notable_idx(civ, uid, nid)
+	return nid
+
+
+func _assign_plot_instigator(civ: Node2D, src_cid: int, kind: int) -> int:
+	for i in range(MAX_NOTABLES):
+		if _not_active[i] != 0 and _not_city_id[i] == src_cid and int(_not_rank[i]) != RANK_RULER and int(_not_rank[i]) != RANK_HERALD:
+			_not_state[i] = NSTATE_RECRUITING
+			_not_traits[i] |= TR_SCHISMATIC
+			return i
+	if civ._physics == null:
+		return -1
+	var phys: Node2D = civ._physics
+	var u_cnt: int = int(phys._unit_count)
+	var ruler_uid: int = -1
+	for i in range(MAX_NOTABLES):
+		if _not_active[i] != 0 and _not_city_id[i] == src_cid and int(_not_rank[i]) == RANK_RULER:
+			ruler_uid = _not_uid[i]
+			break
+	for u in range(u_cnt):
+		if phys._u_city_id[u] != src_cid:
+			continue
+		var uid: int = phys._u_uid[u]
+		if uid == ruler_uid or uid <= 0:
+			continue
+		var nid: int = _promote_unit_notable(civ, uid, u, RANK_HERETIC if kind == PLOT_REBEL else RANK_BANNER, TR_SCHISMATIC)
+		if nid >= 0:
+			_not_state[nid] = NSTATE_RECRUITING
+			return nid
+	return -1
+
+
+func _spawn_city_crown_relic(civ: Node2D, nid: int, cid: int, fac: int) -> void:
+	if nid < 0 or _not_relic_id[nid] >= 0:
+		return
+	var r_slot: int = -1
+	for r in range(MAX_RELICS):
+		if _rel_active[r] == 0:
+			r_slot = r
+			break
+	if r_slot < 0:
+		return
+	var pool: Array = RELIC_NAME_POOLS[clampi(fac, 0, RELIC_NAME_POOLS.size() - 1)]
+	_rel_active[r_slot] = 1
+	_rel_kind[r_slot] = r_slot % 4
+	_rel_holder_uid[r_slot] = _not_uid[nid]
+	_rel_holder_nid[r_slot] = nid
+	_rel_pos[r_slot] = _not_last_pos[nid]
+	_rel_origin_cid[r_slot] = cid
+	_rel_name[r_slot] = str(pool[(cid + r_slot) % pool.size()])
+	_rel_renown[r_slot] = 15
+	_not_relic_id[nid] = r_slot
+	_record_notable_mem(nid, MEM_CROWNED, _not_uid[nid], cid, civ._sim_time)
+
+
+func sync_notables(civ: Node2D, _pace_dt: float) -> void:
+	ensure_allocated()
+	if civ._physics == null:
+		return
+	var phys: Node2D = civ._physics
+	var uid_map_v: Variant = phys.get("_uid_to_idx")
+	if not (uid_map_v is Dictionary):
+		return
+	var uid_map := uid_map_v as Dictionary
+	var p_uid_v: Variant = phys.get("_possessed_uid")
+	if p_uid_v is int and int(p_uid_v) > 0 and uid_map.has(int(p_uid_v)):
+		var p_uid: int = int(p_uid_v)
+		if _find_notable_by_uid(p_uid) < 0:
+			var p_idx: int = int(uid_map[p_uid])
+			var h_nid: int = _promote_unit_notable(civ, p_uid, p_idx, RANK_HERALD, TR_BLESSED_HALO)
+			if h_nid >= 0:
+				_record_notable_mem(h_nid, MEM_BLESSED, p_uid, _not_city_id[h_nid], civ._sim_time)
+
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] == 0:
+			continue
+		var uid: int = _not_uid[n]
+		if not uid_map.has(uid):
+			_handle_notable_loss(civ, n, -1, _not_last_pos[n])
+			continue
+		var idx: int = int(uid_map[uid])
+		if idx < 0 or idx >= phys._unit_count:
+			_handle_notable_loss(civ, n, -1, _not_last_pos[n])
+			continue
+		_not_slot[n] = idx
+		_not_last_pos[n] = Vector2(phys._px[idx], phys._py[idx])
+		_not_city_id[n] = phys._u_city_id[idx]
+		var rid: int = _not_relic_id[n]
+		if rid >= 0 and rid < MAX_RELICS and _rel_active[rid] != 0:
+			_rel_pos[rid] = _not_last_pos[n]
+		_sync_physics_notable_idx(civ, uid, n)
+
+	_ensure_city_rulers(civ)
+
+
+func _ensure_city_rulers(civ: Node2D) -> void:
+	var phys: Node2D = civ._physics
+	if phys == null or phys._unit_count <= 0:
+		return
+	var active_nots: int = 0
+	var has_ruler := PackedByteArray()
+	has_ruler.resize(civ._max_cities)
+	has_ruler.fill(0)
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] != 0:
+			active_nots += 1
+			if int(_not_rank[n]) == RANK_RULER:
+				var ncid: int = _not_city_id[n]
+				if ncid >= 0 and ncid < civ._max_cities:
+					has_ruler[ncid] = 1
+	if active_nots >= MAX_NOTABLES:
+		return
+	var need_any: bool = false
+	for cid in range(civ._max_cities):
+		if civ._city_active[cid] != 0 and has_ruler[cid] == 0:
+			need_any = true
+			break
+	if not need_any:
+		return
+	var best_u := PackedInt32Array()
+	var best_sc := PackedInt32Array()
+	best_u.resize(civ._max_cities)
+	best_u.fill(-1)
+	best_sc.resize(civ._max_cities)
+	best_sc.fill(-1)
+	for u in range(phys._unit_count):
+		var cid: int = phys._u_city_id[u]
+		if cid < 0 or cid >= civ._max_cities or has_ruler[cid] != 0 or civ._city_active[cid] == 0 or phys._u_uid[u] <= 0:
+			continue
+		var sc: int = phys._u_kills[u] * 4 + (8 if int(phys._u_role[u]) == 4 else 1)
+		if sc > best_sc[cid]:
+			best_sc[cid] = sc
+			best_u[cid] = u
+	for cid in range(civ._max_cities):
+		var bu: int = best_u[cid]
+		if bu >= 0:
+			var nid: int = _promote_unit_notable(civ, phys._u_uid[bu], bu, RANK_RULER, 0)
+			if nid >= 0:
+				_spawn_city_crown_relic(civ, nid, cid, int(civ._city_faction[cid]))
+
+
+func step_notables_and_relics(civ: Node2D, pace_dt: float) -> void:
+	if civ._sim_time - _notable_last_sync_t >= 1.2:
+		_notable_last_sync_t = civ._sim_time
+		sync_notables(civ, pace_dt)
+
+	for f in range(MAX_FEUDS):
+		if _feud_active[f] != 0:
+			_feud_ttl[f] -= pace_dt
+			if _feud_ttl[f] <= 0.0:
+				_feud_active[f] = 0
+
+	var relic_int: float = 1.5 if civ._sim_pace_mult >= 10.0 else 0.45
+	if civ._sim_time - _relic_last_scan_t >= relic_int:
+		_relic_last_scan_t = civ._sim_time
+		_step_ground_relics(civ, pace_dt)
+
+
+func _step_ground_relics(civ: Node2D, pace_dt: float) -> void:
+	var has_ground: bool = false
+	for r in range(MAX_RELICS):
+		if _rel_active[r] != 0 and _rel_holder_uid[r] < 0:
+			has_ground = true
+			break
+	if not has_ground:
+		return
+	if civ._sim_pace_mult < 15.0 and civ._fx != null and civ._fx_has_spawn_reaction_strip:
+		_relic_strip_cd -= pace_dt / maxf(1.0, civ._sim_pace_mult)
+		if _relic_strip_cd <= 0.0:
+			_relic_strip_cd = 1.2
+			for r in range(MAX_RELICS):
+				if _rel_active[r] != 0 and _rel_holder_uid[r] < 0:
+					civ._fx.call("spawn_reaction_strip", _rel_pos[r] + Vector2(0.0, -4.0), STRIP_RELIC_DIAMOND)
+	var phys: Node2D = civ._physics
+	if phys == null or phys._unit_count <= 0:
+		return
+	var u_cnt: int = int(phys._unit_count)
+	var u_px: PackedFloat32Array = phys._px
+	var u_py: PackedFloat32Array = phys._py
+	var u_uid: PackedInt32Array = phys._u_uid
+	var cs: int = maxi(1, int(phys._cell_size))
+	var gw: int = int(phys._grid_w)
+	var gh: int = int(phys._grid_h)
+	var cell_head: PackedInt32Array = phys._cell_head
+	var unit_next: PackedInt32Array = phys._unit_next
+	var use_grid: bool = cell_head.size() == gw * gh and unit_next.size() >= u_cnt
+	for r in range(MAX_RELICS):
+		if _rel_active[r] == 0 or _rel_holder_uid[r] >= 0:
+			continue
+		var rpos: Vector2 = _rel_pos[r]
+		if use_grid:
+			var cx0: int = clampi(int(rpos.x) / cs, 0, gw - 1)
+			var cy0: int = clampi(int(rpos.y) / cs, 0, gh - 1)
+			var picked: bool = false
+			for oy in range(-1, 2):
+				var cy: int = cy0 + oy
+				if cy < 0 or cy >= gh or picked:
+					continue
+				var row_c: int = cy * gw
+				for ox in range(-1, 2):
+					var cx: int = cx0 + ox
+					if cx < 0 or cx >= gw or picked:
+						continue
+					var u: int = cell_head[row_c + cx]
+					var guard: int = 0
+					while u >= 0 and u < u_cnt and guard < 128:
+						var dx: float = u_px[u] - rpos.x
+						var dy: float = u_py[u] - rpos.y
+						if dx * dx + dy * dy <= 36.0:
+							_assign_relic_to_unit(civ, r, u_uid[u], u)
+							picked = true
+							break
+						u = unit_next[u]
+						guard += 1
+		else:
+			for u in range(u_cnt):
+				var dx: float = u_px[u] - rpos.x
+				var dy: float = u_py[u] - rpos.y
+				if dx * dx + dy * dy <= 36.0:
+					_assign_relic_to_unit(civ, r, u_uid[u], u)
+					break
+
+
+func _assign_relic_to_unit(civ: Node2D, rid: int, uid: int, u_idx: int) -> int:
+	if rid < 0 or rid >= MAX_RELICS or _rel_active[rid] == 0 or uid <= 0:
+		return -1
+	var nid: int = _find_notable_by_uid(uid)
+	if nid < 0:
+		nid = _promote_unit_notable(civ, uid, u_idx, RANK_HERO, TR_BLESSED_HALO)
+	if nid < 0:
+		return -1
+	if _not_relic_id[nid] >= 0 and _not_relic_id[nid] != rid:
+		var old_r: int = _not_relic_id[nid]
+		_rel_holder_uid[old_r] = -1
+		_rel_holder_nid[old_r] = -1
+		_rel_pos[old_r] = _not_last_pos[nid]
+	_not_relic_id[nid] = rid
+	_not_renown[nid] += 8
+	_rel_holder_uid[rid] = uid
+	_rel_holder_nid[rid] = nid
+	_rel_pos[rid] = _not_last_pos[nid]
+	_record_notable_mem(nid, MEM_RELIC_TAKEN, uid, _not_city_id[nid], civ._sim_time)
+	if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+		civ._fx.call("spawn_reaction_strip", _not_last_pos[nid] + Vector2(0.0, -8.0), STRIP_CROWN_BANNER)
+	push_chronicle("%s поднял реликт %s" % [_not_name[nid], _rel_name[rid]], _not_last_pos[nid], Color("#FFD84A"))
+	return nid
+
+
+func _create_feud(src_clan: int, tgt_uid: int, tgt_clan: int, reason: int) -> void:
+	if src_clan < 0:
+		return
+	for f in range(MAX_FEUDS):
+		if _feud_active[f] != 0 and _feud_src_clan[f] == src_clan and _feud_tgt_uid[f] == tgt_uid:
+			_feud_ttl[f] = FEUD_TTL_SEC
+			return
+	var slot: int = -1
+	var min_ttl: float = 1e9
+	for f in range(MAX_FEUDS):
+		if _feud_active[f] == 0:
+			slot = f
+			break
+		if _feud_ttl[f] < min_ttl:
+			min_ttl = _feud_ttl[f]
+			slot = f
+	if slot >= 0:
+		_feud_active[slot] = 1
+		_feud_src_clan[slot] = src_clan
+		_feud_tgt_uid[slot] = tgt_uid
+		_feud_tgt_clan[slot] = tgt_clan
+		_feud_ttl[slot] = FEUD_TTL_SEC
+		_feud_reason[slot] = reason
+
+
+func _handle_notable_loss(civ: Node2D, nid: int, killer_uid: int, pos: Vector2) -> void:
+	if nid < 0 or nid >= MAX_NOTABLES or _not_active[nid] == 0:
+		return
+	var was_ruler: bool = int(_not_rank[nid]) == RANK_RULER
+	var fac: int = int(_not_faction[nid])
+	var clan: int = _not_clan_id[nid]
+	var cid: int = _not_city_id[nid]
+	var rid: int = _not_relic_id[nid]
+	if rid >= 0 and rid < MAX_RELICS and _rel_active[rid] != 0:
+		_rel_holder_uid[rid] = -1
+		_rel_holder_nid[rid] = -1
+		_rel_pos[rid] = pos
+		if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+			civ._fx.call("spawn_reaction_strip", pos + Vector2(0.0, -5.0), STRIP_RELIC_DIAMOND)
+	if killer_uid > 0:
+		var k_nid: int = _find_notable_by_uid(killer_uid)
+		var k_clan: int = _not_clan_id[k_nid] if k_nid >= 0 else -1
+		_create_feud(clan, killer_uid, k_clan, MEM_FEUD_SWORN)
+		if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+			civ._fx.call("spawn_reaction_strip", pos + Vector2(0.0, -9.0), STRIP_FEUD_SWORDS)
+	if was_ruler or _not_pinned[nid] != 0:
+		push_chronicle("Пал %s" % _not_name[nid], pos, Color("#FF6A5C"))
+	if was_ruler and civ._meta != null and cid >= 0 and cid < civ._max_cities:
+		civ._meta.on_ruler_died(civ, cid, civ._city_kingdom_id[cid])
+	if was_ruler and fac == FACTION_HUMAN and cid >= 0 and cid < civ._max_cities and get_feuds_count() >= 2:
+		var kid: int = civ._city_kingdom_id[cid]
+		for oc in range(civ._max_cities):
+			if oc != cid and civ._city_active[oc] != 0 and civ._city_kingdom_id[oc] == kid:
+				civ._city_loyalty[oc] = maxf(0.0, civ._city_loyalty[oc] - 25.0)
+	for p in range(MAX_PLOTS):
+		if _plot_active[p] != 0 and _plot_instigator_nid[p] == nid:
+			_plot_active[p] = 0
+			_plot_instigator_nid[p] = -1
+	_not_active[nid] = 0
+	_not_uid[nid] = -1
+	_not_relic_id[nid] = -1
+
+
+func on_unit_killed(civ: Node2D, uid_pair: Vector2i, pos: Vector2) -> void:
+	ensure_allocated()
+	var victim_uid: int = uid_pair.x
+	var killer_uid: int = uid_pair.y
+	var v_nid: int = _find_notable_by_uid(victim_uid)
+	var v_cid: int = _not_city_id[v_nid] if v_nid >= 0 else -1
+	var k_cid: int = -1
+	var phys: Node2D = civ._physics
+	var uid_map: Dictionary = {}
+	if phys != null:
+		var uid_map_v: Variant = phys.get("_uid_to_idx")
+		if uid_map_v is Dictionary:
+			uid_map = uid_map_v as Dictionary
+			if v_cid < 0 and victim_uid > 0 and uid_map.has(victim_uid):
+				var v_idx: int = int(uid_map[victim_uid])
+				if v_idx >= 0 and v_idx < phys._u_city_id.size():
+					v_cid = phys._u_city_id[v_idx]
+	if v_nid >= 0:
+		_handle_notable_loss(civ, v_nid, killer_uid, pos)
+
+	if phys != null and killer_uid > 0 and uid_map.has(killer_uid):
+		var k_idx: int = int(uid_map[killer_uid])
+		if k_idx >= 0 and k_idx < phys._u_city_id.size():
+			k_cid = phys._u_city_id[k_idx]
+		var k_nid: int = _find_notable_by_uid(killer_uid)
+		if k_nid < 0 and (v_nid >= 0 or (k_idx >= 0 and k_idx < phys._u_kills.size() and phys._u_kills[k_idx] >= 3)):
+			k_nid = _promote_unit_notable(civ, killer_uid, k_idx, RANK_HERO, TR_VENGEFUL)
+		if k_nid >= 0:
+			_not_renown[k_nid] += 10 if v_nid >= 0 else 3
+			_record_notable_mem(k_nid, MEM_DUEL_WON, victim_uid, _not_city_id[k_nid], civ._sim_time)
+
+	if civ._meta != null:
+		civ._meta.on_unit_killed(civ, v_cid, k_cid)
+
+	var zx: int = clampi(int(floor(pos.x / float(civ._zone_px))), 0, civ._zone_w - 1)
+	var zy: int = clampi(int(floor(pos.y / float(civ._zone_px))), 0, civ._zone_h - 1)
+	var zidx: int = zy * civ._zone_w + zx
+	var zowner: int = civ._zone_city_id[zidx]
+	if zowner >= 0 and zowner < civ._max_cities and civ._city_active[zowner] != 0:
+		var zfac: int = int(civ._city_faction[zowner])
+		if zfac == FACTION_SPORE:
+			civ._city_food[zowner] = minf(civ._city_storage_cap[zowner], civ._city_food[zowner] + 3.0)
+			civ._add_city_science(zowner, 1.5)
+		elif zfac == FACTION_ROBOT:
+			civ._zone_ore[zidx] += 2
+
+
+func try_avatar_gesture(civ: Node2D, uid: int, world_pos: Vector2) -> int:
+	ensure_allocated()
+	var nid: int = _find_notable_by_uid(uid)
+	if nid < 0 and civ._physics != null and uid > 0:
+		var uid_map_v: Variant = civ._physics.get("_uid_to_idx")
+		if uid_map_v is Dictionary and (uid_map_v as Dictionary).has(uid):
+			nid = _promote_unit_notable(civ, uid, int((uid_map_v as Dictionary)[uid]), RANK_HERALD, TR_BLESSED_HALO)
+
+	for p in range(MAX_PLOTS):
+		if _plot_active[p] == 0:
+			continue
+		var src_cid: int = _plot_src_cid[p]
+		var inst_nid: int = _plot_instigator_nid[p]
+		var p_pos: Vector2 = _not_last_pos[inst_nid] if (inst_nid >= 0 and _not_active[inst_nid] != 0) else (civ._city_center[src_cid] if (src_cid >= 0 and src_cid < civ._max_cities) else Vector2(-9999.0, -9999.0))
+		if world_pos.distance_squared_to(p_pos) <= 22.0 * 22.0:
+			_clear_plot_slot(p)
+			if src_cid >= 0 and src_cid < civ._max_cities and civ._city_active[src_cid] != 0:
+				civ._city_loyalty[src_cid] = minf(100.0, civ._city_loyalty[src_cid] + 15.0)
+				push_chronicle("Вестник сорвал заговор в %s" % civ._city_name[src_cid], p_pos, Color("#5AE88E"))
+			if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+				civ._fx.call("spawn_reaction_strip", p_pos + Vector2(0.0, -8.0), STRIP_CROWN_BANNER)
+			return 1
+
+	for r in range(MAX_RELICS):
+		if _rel_active[r] != 0 and _rel_holder_uid[r] < 0 and world_pos.distance_squared_to(_rel_pos[r]) <= 14.0 * 14.0:
+			var u_idx: int = _not_slot[nid] if nid >= 0 else -1
+			if u_idx >= 0 and _assign_relic_to_unit(civ, r, uid, u_idx) >= 0:
+				return 2
+
+	if civ.get_zone_owner_at(world_pos) < 0 and civ.can_settle_near(world_pos):
+		var f_id: int = int(_not_faction[nid]) if nid >= 0 else 0
+		var new_cid: int = civ.try_self_found_settlement(world_pos, f_id, PackedInt32Array([uid]) if uid > 0 else PackedInt32Array())
+		if new_cid >= 0:
+			if nid >= 0:
+				_not_city_id[nid] = new_cid
+				_not_kingdom_id[nid] = civ._city_kingdom_id[new_cid]
+				_not_rank[nid] = RANK_RULER
+				_record_notable_mem(nid, MEM_FOUNDED, uid, new_cid, civ._sim_time)
+			return 3
+	return 0
+
+
+func pin_notable(uid: int, pinned: bool) -> bool:
+	var nid: int = _find_notable_by_uid(uid)
+	if nid < 0:
+		return false
+	_not_pinned[nid] = 1 if pinned else 0
+	return true
+
+
+func _build_notable_dict(n: int) -> Dictionary:
+	var rid: int = _not_relic_id[n]
+	var r_name: String = _rel_name[rid] if (rid >= 0 and rid < MAX_RELICS and _rel_active[rid] != 0) else ""
+	var rk: int = clampi(int(_not_rank[n]), 0, RANK_NAMES_RU.size() - 1)
+	var mem_arr: Array[String] = []
+	var cnt: int = mini(int(_not_mem_count[n]), NOTABLE_MEM_SLOTS)
+	var head: int = int(_not_mem_head[n]) % NOTABLE_MEM_SLOTS
+	var base: int = n * NOTABLE_MEM_SLOTS
+	for k in range(cnt):
+		var slot: int = (head - 1 - k + NOTABLE_MEM_SLOTS * 2) % NOTABLE_MEM_SLOTS
+		var v: int = int(_not_mem_verb[base + slot])
+		if v > 0 and v < MEM_VERBS_RU.size():
+			mem_arr.append("[%dс] %s" % [int(_not_mem_time[base + slot]), MEM_VERBS_RU[v]])
+	return {
+		"notable_id": n,
+		"uid": _not_uid[n],
+		"name": _not_name[n],
+		"faction": int(_not_faction[n]),
+		"rank": rk,
+		"rank_name": RANK_NAMES_RU[rk],
+		"city_id": _not_city_id[n],
+		"kingdom_id": _not_kingdom_id[n],
+		"clan_id": _not_clan_id[n],
+		"traits": _not_traits[n],
+		"relic_id": rid,
+		"relic_name": r_name,
+		"state": int(_not_state[n]),
+		"pinned": _not_pinned[n] != 0,
+		"renown": _not_renown[n],
+		"pos": _not_last_pos[n],
+		"memory": mem_arr,
+	}
+
+
+func get_notables_summary() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] != 0:
+			out.append(_build_notable_dict(n))
+	return out
+
+
+func get_notable_card(uid: int) -> Dictionary:
+	var n: int = _find_notable_by_uid(uid)
+	if n < 0:
+		return {"found": false}
+	var d: Dictionary = _build_notable_dict(n)
+	d["found"] = true
+	return d
+
+
+func pack_social_extensions(buf: StreamPeerBuffer) -> void:
+	ensure_allocated()
+	buf.put_u8(MAX_PLOTS)
+	for i in range(MAX_PLOTS):
+		buf.put_u8(_plot_active[i])
+		if _plot_active[i] != 0:
+			buf.put_u8(_plot_kind[i])
+			buf.put_32(_plot_src_cid[i])
+			buf.put_32(_plot_dst_cid[i])
+			buf.put_float(_plot_elapsed[i])
+			buf.put_float(_plot_dur[i])
+			buf.put_32(_plot_instigator_nid[i])
+	_pack_notables_and_relics(buf)
+
+
+func _pack_notables_and_relics(buf: StreamPeerBuffer) -> void:
+	buf.put_u8(MAX_NOTABLES)
+	for n in range(MAX_NOTABLES):
+		buf.put_u8(_not_active[n])
+		if _not_active[n] == 0:
+			continue
+		buf.put_32(_not_uid[n])
+		buf.put_32(_not_slot[n])
+		buf.put_u8(_not_faction[n])
+		buf.put_u8(_not_rank[n])
+		buf.put_32(_not_city_id[n])
+		buf.put_32(_not_kingdom_id[n])
+		buf.put_32(_not_clan_id[n])
+		buf.put_32(_not_traits[n])
+		buf.put_32(_not_relic_id[n])
+		buf.put_u8(_not_state[n])
+		buf.put_u8(_not_pinned[n])
+		buf.put_32(_not_duel_uid[n])
+		buf.put_32(_not_renown[n])
+		buf.put_utf8_string(_not_name[n])
+		buf.put_float(_not_last_pos[n].x)
+		buf.put_float(_not_last_pos[n].y)
+		buf.put_u8(_not_mem_count[n])
+		buf.put_u8(_not_mem_head[n])
+		var base: int = n * NOTABLE_MEM_SLOTS
+		for m in range(NOTABLE_MEM_SLOTS):
+			buf.put_u8(_not_mem_verb[base + m])
+			buf.put_32(_not_mem_subj_uid[base + m])
+			buf.put_32(_not_mem_city[base + m])
+			buf.put_float(_not_mem_time[base + m])
+	buf.put_u8(MAX_RELICS)
+	for r in range(MAX_RELICS):
+		buf.put_u8(_rel_active[r])
+		if _rel_active[r] != 0:
+			buf.put_u8(_rel_kind[r])
+			buf.put_32(_rel_holder_uid[r])
+			buf.put_32(_rel_holder_nid[r])
+			buf.put_float(_rel_pos[r].x)
+			buf.put_float(_rel_pos[r].y)
+			buf.put_32(_rel_origin_cid[r])
+			buf.put_utf8_string(_rel_name[r])
+			buf.put_32(_rel_renown[r])
+	buf.put_u8(MAX_FEUDS)
+	for f in range(MAX_FEUDS):
+		buf.put_u8(_feud_active[f])
+		if _feud_active[f] != 0:
+			buf.put_32(_feud_src_clan[f])
+			buf.put_32(_feud_tgt_uid[f])
+			buf.put_32(_feud_tgt_clan[f])
+			buf.put_float(_feud_ttl[f])
+			buf.put_u8(_feud_reason[f])
+
+
+func unpack_social_extensions(buf: StreamPeerBuffer) -> void:
+	ensure_allocated()
+	_notable_last_sync_t = -10.0
+	_relic_last_scan_t = -10.0
+	_exp_active_cnt = 0
+	_colonize_cd_active = false
+	if buf.get_available_bytes() <= 0:
+		return
+	var p_cnt: int = buf.get_u8()
+	for i in range(p_cnt):
+		if buf.get_available_bytes() <= 0:
+			return
+		var act: int = buf.get_u8()
+		if i < MAX_PLOTS:
+			_plot_active[i] = act
+		if act != 0:
+			var k: int = buf.get_u8()
+			var src: int = buf.get_32()
+			var dst: int = buf.get_32()
+			var el: float = buf.get_float()
+			var dur: float = buf.get_float()
+			var inst: int = buf.get_32()
+			if i < MAX_PLOTS:
+				_plot_kind[i] = k
+				_plot_src_cid[i] = src
+				_plot_dst_cid[i] = dst
+				_plot_elapsed[i] = el
+				_plot_dur[i] = dur
+				_plot_instigator_nid[i] = inst
+	if buf.get_available_bytes() > 0:
+		_unpack_notables(buf)
+	if buf.get_available_bytes() > 0:
+		_unpack_relics_and_feuds(buf)
+
+
+func _unpack_notables(buf: StreamPeerBuffer) -> void:
+	var n_cnt: int = buf.get_u8()
+	for n in range(n_cnt):
+		if buf.get_available_bytes() <= 0:
+			return
+		var act: int = buf.get_u8()
+		if act == 0:
+			if n < MAX_NOTABLES:
+				_not_active[n] = 0
+			continue
+		var uid: int = buf.get_32()
+		var sl: int = buf.get_32()
+		var fac: int = buf.get_u8()
+		var rk: int = buf.get_u8()
+		var cid: int = buf.get_32()
+		var kid: int = buf.get_32()
+		var cln: int = buf.get_32()
+		var tr: int = buf.get_32()
+		var rid: int = buf.get_32()
+		var st: int = buf.get_u8()
+		var pin: int = buf.get_u8()
+		var du: int = buf.get_32()
+		var ren: int = buf.get_32()
+		var nm: String = buf.get_utf8_string()
+		var lp := Vector2(buf.get_float(), buf.get_float())
+		var mc: int = buf.get_u8()
+		var mh: int = buf.get_u8()
+		if n < MAX_NOTABLES:
+			_not_active[n] = 1
+			_not_uid[n] = uid
+			_not_slot[n] = sl
+			_not_faction[n] = fac
+			_not_rank[n] = rk
+			_not_city_id[n] = cid
+			_not_kingdom_id[n] = kid
+			_not_clan_id[n] = cln
+			_not_traits[n] = tr
+			_not_relic_id[n] = rid
+			_not_state[n] = st
+			_not_pinned[n] = pin
+			_not_duel_uid[n] = du
+			_not_renown[n] = ren
+			_not_name[n] = nm
+			_not_last_pos[n] = lp
+			_not_mem_count[n] = mc
+			_not_mem_head[n] = mh
+		var base: int = n * NOTABLE_MEM_SLOTS
+		for m in range(NOTABLE_MEM_SLOTS):
+			var mv: int = buf.get_u8()
+			var msu: int = buf.get_32()
+			var mc2: int = buf.get_32()
+			var mt: float = buf.get_float()
+			if n < MAX_NOTABLES:
+				_not_mem_verb[base + m] = mv
+				_not_mem_subj_uid[base + m] = msu
+				_not_mem_city[base + m] = mc2
+				_not_mem_time[base + m] = mt
+
+
+func _unpack_relics_and_feuds(buf: StreamPeerBuffer) -> void:
+	var r_cnt: int = buf.get_u8()
+	for r in range(r_cnt):
+		if buf.get_available_bytes() <= 0:
+			return
+		var act: int = buf.get_u8()
+		if r < MAX_RELICS:
+			_rel_active[r] = act
+		if act != 0:
+			var rk: int = buf.get_u8()
+			var hu: int = buf.get_32()
+			var hn: int = buf.get_32()
+			var rp := Vector2(buf.get_float(), buf.get_float())
+			var oc: int = buf.get_32()
+			var rn: String = buf.get_utf8_string()
+			var rr: int = buf.get_32()
+			if r < MAX_RELICS:
+				_rel_kind[r] = rk
+				_rel_holder_uid[r] = hu
+				_rel_holder_nid[r] = hn
+				_rel_pos[r] = rp
+				_rel_origin_cid[r] = oc
+				_rel_name[r] = rn
+				_rel_renown[r] = rr
+	if buf.get_available_bytes() <= 0:
+		return
+	var f_cnt: int = buf.get_u8()
+	for f in range(f_cnt):
+		if buf.get_available_bytes() <= 0:
+			return
+		var act: int = buf.get_u8()
+		if f < MAX_FEUDS:
+			_feud_active[f] = act
+		if act != 0:
+			var sc: int = buf.get_32()
+			var tu: int = buf.get_32()
+			var tc: int = buf.get_32()
+			var tt: float = buf.get_float()
+			var rs: int = buf.get_u8()
+			if f < MAX_FEUDS:
+				_feud_src_clan[f] = sc
+				_feud_tgt_uid[f] = tu
+				_feud_tgt_clan[f] = tc
+				_feud_ttl[f] = tt
+				_feud_reason[f] = rs

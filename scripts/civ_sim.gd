@@ -8,8 +8,10 @@ class_name CivSim
 const UNIT_SPRITE_SHADER := preload("res://shaders/unit_sprite.gdshader")
 const CivTerritoryScript := preload("res://scripts/civ_territory.gd")
 const CivDiplomacyScript := preload("res://scripts/civ_diplomacy.gd")
+const CivMetaScript := preload("res://scripts/civ_meta_noosphere.gd")
 const BUILDINGS_ATLAS_PATH := "res://assets/atlases/buildings_atlas.png"
 const BUILDINGS_MASK_PATH := "res://assets/atlases/buildings_atlas_mask.png"
+const BUILDINGS_ATLAS_JSON_PATH := "res://assets/atlases/buildings_atlas.json"
 
 const TUNING_KNOBS := {
 	"MAP_WIDTH": 640,
@@ -60,10 +62,7 @@ const TUNING_KNOBS := {
 	"SHIELD_IMPACT_RAD_MUL": 0.35,
 	"SHIELD_BASE_RECHARGE": 0.12,
 	"SHIELD_FLASH_DECAY": 2.4,
-	"SHADOW_GROUP_ALPHA": 0.34,
-	"SHADOW_FADE_START_ZOOM": 2.2,
-	"SHADOW_FADE_END_ZOOM": 1.8,
-	"SHADOW_HIDE_ZOOM": 1.65,
+	"SPORE_CREEP_INTERVAL_SEC": 12.0,
 	"SUPPLY_SCAN_SEC": 4.0,
 	"SUPPLY_RICH_FOOD": 90.0,
 	"SUPPLY_RICH_ORE": 75.0,
@@ -75,7 +74,7 @@ const TUNING_KNOBS := {
 	"TIER2_AGE_SEC": 480.0,
 	"TIER3_AGE_SEC": 750.0,
 	"TIER4_AGE_SEC": 1320.0,
-	"TIER3_SCI_REQ": 260.0,
+	"TIER3_SCI_REQ": 195.0,
 	"TIER3_SCORE_REQ": 11.0,
 	"TIER4_SCI_REQ": 650.0,
 	"TIER4_SCORE_REQ": 18.0,
@@ -121,6 +120,12 @@ enum BuildingType {
 	LAUNCHPAD = 7,
 	SHIELD_PYLON = 8,
 	QUANTUM_GATE = 9,
+	DOCK = 10,
+	BARRACKS = 11,
+	DEFENSE_TURRET = 12,
+	TRADE_HUB = 13,
+	ARCHIVE = 14,
+	MONOLITH = 15,
 }
 
 enum ResourceType {
@@ -130,6 +135,7 @@ enum ResourceType {
 	SCIENCE = 3,
 	BUILD_WORK = 4,
 	WOOD = 5,
+	CREDITS = 6,
 }
 
 const TIER_CLOSE_OCEAN: int = 1
@@ -150,11 +156,12 @@ const ROAD_NONE: int = 0
 const ROAD_DIRT: int = 1
 const ROAD_CONDUIT: int = 2
 
-const BLD_TYPE_COUNT: int = 10
-const ATLAS_COLS: int = 38
+const BLD_TYPE_COUNT: int = 16
+const ATLAS_COLS: int = 60
+const MAX_SHIPS: int = 32
 const BUILDING_CELL_PX: float = 24.0
 const SAVE_MAGIC: int = 0x43495632 # "CIV2"
-const SAVE_VERSION: int = 6
+const SAVE_VERSION: int = 7
 
 const SHUTTLE_KIND_COLONIZE: int = 0
 const SHUTTLE_KIND_SUPPLY: int = 1
@@ -177,17 +184,30 @@ const BLD_COL_SHIELD: int = 34
 const BLD_COL_SHIELD_ACTIVE: int = 35
 const BLD_COL_QUANTUM_GATE: int = 36
 const BLD_COL_QUANTUM_GATE_ACTIVE: int = 37
+const BLD_COL_HUMAN_ARK_SPIRE: int = 41
+const BLD_COL_ROBOT_MIRROR_NODE: int = 42
+const BLD_COL_SPORE_LEVIATHAN_HEART: int = 43
+const BLD_COL_DOCK: int = 44
+const BLD_COL_BARRACKS: int = 45
+const BLD_COL_DEFENSE_TURRET: int = 46
+const BLD_COL_TRADE_HUB: int = 47
+const BLD_COL_ARCHIVE: int = 48
+const BLD_COL_MONOLITH: int = 49
+const BLD_COL_HQ_L2_HUMAN: int = 50
+const BLD_COL_HQ_L2_ROBOT: int = 51
+const BLD_COL_HQ_L2_SPORE: int = 52
 
-const BLD_COLS_HUMAN := [0, 1, 2, 3, 4, 5, 6, 7, BLD_COL_SHIELD, BLD_COL_QUANTUM_GATE]
-const BLD_COLS_ROBOT := [22, 9, 20, 21, 22, 21, 23, 24, BLD_COL_SHIELD, BLD_COL_QUANTUM_GATE]
-const BLD_COLS_SPORE := [25, 27, 26, 27, 28, 29, 30, 31, BLD_COL_SHIELD, BLD_COL_QUANTUM_GATE]
+const BLD_COLS_HUMAN := [0, 1, 2, 3, 4, 5, 6, 7, BLD_COL_SHIELD, BLD_COL_QUANTUM_GATE, BLD_COL_DOCK, BLD_COL_BARRACKS, BLD_COL_DEFENSE_TURRET, BLD_COL_TRADE_HUB, BLD_COL_ARCHIVE, BLD_COL_MONOLITH]
+const BLD_COLS_ROBOT := [38, 39, 20, 21, 22, 40, 23, 24, BLD_COL_SHIELD, BLD_COL_QUANTUM_GATE, BLD_COL_DOCK, BLD_COL_BARRACKS, BLD_COL_DEFENSE_TURRET, BLD_COL_TRADE_HUB, BLD_COL_ARCHIVE, BLD_COL_MONOLITH]
+const BLD_COLS_SPORE := [25, 27, 26, 27, 28, 29, 30, 31, BLD_COL_SHIELD, BLD_COL_QUANTUM_GATE, BLD_COL_DOCK, BLD_COL_BARRACKS, BLD_COL_DEFENSE_TURRET, BLD_COL_TRADE_HUB, BLD_COL_ARCHIVE, BLD_COL_MONOLITH]
+const TIER_SCIENCE_CAPS: Array[float] = [42.0, 135.0, 360.0, 880.0, 1600.0, 2500.0]
 
 const FACTION_NAMES := ["Human", "Robot", "Spore"]
-const BUILDING_NAMES := ["Campfire", "Tent", "Drill", "Depot", "Solar Array", "Biodome", "Fusion Reactor", "Launchpad", "Shield Pylon", "Quantum Gate"]
+const BUILDING_NAMES := ["Campfire", "Tent", "Drill", "Depot", "Solar Array", "Biodome", "Fusion Reactor", "Launchpad", "Shield Pylon", "Quantum Gate", "Dock", "Barracks", "Defense Turret", "Trade Hub", "Archive", "Monolith"]
 const CITY_NAME_POOLS := [
-	["Kepler Outpost", "Basalt Haven", "Caldera Port", "Meridian Reach", "Redoubt Seven", "Vesper Ridge", "Cinder Bay", "Atoll Station"],
-	["Ferrite Node", "Grid Kiln", "Anode Basin", "Relay Array", "Quartz Matrix", "Silica Foundry", "Torus Core", "Lattice Four"],
-	["Mycelia Crown", "Lichen Shelf", "Fern Hollow", "Moss Spire", "Spore Delta", "Kelp Trench", "Rhizome Crest", "Pollen Verge"],
+	["Пост Кеплера", "Базальт-Гавань", "Кальдера-Порт", "Меридиан", "Редут Семь", "Вечерний Хребет", "Пепельная Бухта", "Станция Атолл"],
+	["Узел Феррит", "Сетка-Печь", "Анодный Бассейн", "Релейный Луч", "Кварц-Сборка", "Кремневый Цех", "Ядро Торуса", "Решётка Четыре"],
+	["Венец Мицелия", "Лишайный Уступ", "Папоротниковый Лог", "Моховой Шпиль", "Споровая Дельта", "Водорослевый Ров", "Гребень Ризомы", "Пыльцевой Край"],
 ]
 
 const REBEL_TERRITORY_COLOR := Color("#FF9B26")
@@ -195,15 +215,16 @@ const REBEL_ACCENT_COLOR := Color("#FFE156")
 const FACTION_BORDER_COLORS := [Color("#38F0FF"), Color("#E63B3B"), Color("#B84DFF")]
 const FACTION_TINT_COLORS := [Color("#38D8EE"), Color("#E03B3B"), Color("#A846E6")]
 
-const BLD_TECH_POINTS: Array[float] = [1.0, 1.5, 2.5, 2.5, 3.5, 4.0, 5.0, 6.0, 5.5, 7.0]
-const BLD_ORE_COSTS: Array[float] = [2.0, 4.0, 7.0, 6.0, 9.0, 11.0, 14.0, 16.0, 14.0, 18.0]
-const BLD_ENERGY_COSTS: Array[float] = [0.0, 0.5, 1.5, 1.2, 0.0, 2.5, 4.0, 4.0, 3.5, 8.0]
-const BLD_BUILD_TIMES: Array[float] = [12.0, 12.0, 15.0, 14.5, 17.0, 18.5, 21.0, 22.0, 18.5, 22.0]
-const BLD_FOOTPRINTS: Array[float] = [10.0, 13.5, 14.0, 14.0, 14.0, 18.0, 18.0, 22.0, 18.0, 18.0]
-const BLD_AVOID_RADII: Array[float] = [8.0, 10.0, 10.5, 10.5, 10.5, 12.5, 12.5, 13.5, 12.0, 12.0]
+const BLD_TECH_POINTS: Array[float] = [1.0, 1.5, 2.5, 2.5, 3.5, 4.0, 5.0, 6.0, 5.5, 7.0, 2.8, 2.6, 3.0, 3.2, 3.8, 6.5]
+const BLD_ORE_COSTS: Array[float] = [2.0, 4.0, 7.0, 6.0, 9.0, 11.0, 14.0, 16.0, 14.0, 18.0, 10.0, 9.0, 11.0, 10.0, 11.0, 22.0]
+const BLD_ENERGY_COSTS: Array[float] = [0.0, 0.5, 1.5, 1.2, 0.0, 2.5, 4.0, 4.0, 3.5, 8.0, 1.0, 1.5, 2.5, 1.5, 2.0, 6.0]
+const BLD_BUILD_TIMES: Array[float] = [12.0, 8.5, 15.0, 14.5, 17.0, 18.5, 21.0, 22.0, 18.5, 22.0, 16.0, 15.0, 17.0, 16.0, 18.0, 24.0]
+const BLD_FOOTPRINTS: Array[float] = [10.0, 13.5, 14.0, 14.0, 14.0, 18.0, 18.0, 22.0, 14.5, 18.0, 15.0, 14.5, 12.5, 15.0, 15.0, 19.0]
+const BLD_AVOID_RADII: Array[float] = [8.0, 10.0, 10.5, 10.5, 10.5, 12.5, 12.5, 13.5, 10.5, 12.0, 11.0, 10.5, 9.5, 11.0, 11.0, 13.0]
 
 var _territory: RefCounted = null
 var _diplomacy: RefCounted = null
+var _meta: RefCounted = null
 var _world: Node2D = null
 var _physics: Node2D = null
 var _fx: Node2D = null
@@ -219,6 +240,7 @@ var _zone_city_id: PackedInt32Array
 var _zone_faction_id: PackedByteArray
 var _zone_flags: PackedByteArray
 var _zone_ore: PackedInt32Array
+var _zone_ore_frac: PackedFloat32Array
 var _zone_fertility: PackedFloat32Array
 var _zone_close_n: PackedByteArray
 var _zone_land_n: PackedByteArray
@@ -240,6 +262,7 @@ var _dirty_zy0: int = 45
 var _dirty_zx1: int = -1
 var _dirty_zy1: int = -1
 var _border_tint_alpha_cache: int = -1
+var _border_thick_cache: int = -1
 var _border_flush_cd: float = 0.0
 var _sim_tick_idx: int = 0
 
@@ -288,6 +311,14 @@ var _city_coastal_cache: PackedByteArray
 var _city_bld_counts: PackedInt32Array
 var _city_kingdom_id: PackedInt32Array
 var _city_age_sec: PackedFloat32Array
+var _city_dome_powered: PackedByteArray
+var _city_tier5_done: PackedByteArray
+var _city_spore_creep_cd: PackedFloat32Array
+var _city_drill_dep_mul: PackedFloat32Array
+var _city_credits: PackedFloat32Array
+var _city_hq_level: PackedByteArray
+var _tmp_city_drill_cnt: PackedInt32Array
+var _tmp_city_drill_sum: PackedFloat32Array
 
 var _kingdom_active: PackedByteArray
 var _kingdom_faction: PackedByteArray
@@ -335,6 +366,7 @@ var _bld_phase: PackedFloat32Array
 var _bld_color: PackedColorArray
 var _bld_shield_charge: PackedFloat32Array
 var _bld_shield_flash: PackedFloat32Array
+var _bld_level: PackedByteArray
 
 var _max_ruins: int = int(TUNING_KNOBS["MAX_RUINS"])
 var _ruin_count: int = 0
@@ -356,11 +388,12 @@ var _shuttle_src_city: PackedInt32Array
 var _shuttle_trail_t: PackedFloat32Array
 var _shuttle_kind: PackedByteArray
 var _shuttle_target_city: PackedInt32Array
+var _shuttle_cargo_food: PackedFloat32Array
+var _shuttle_cargo_ore: PackedFloat32Array
+var _shuttle_cargo_energy: PackedFloat32Array
 
-var _shadow_group: CanvasGroup
-var _mm_bld_shadows: MultiMeshInstance2D
-var _shadow_tex: Texture2D
 var _zoom_val: float = 2.4
+var _bld_atlas_cols: int = ATLAS_COLS
 var _mm_buildings: MultiMeshInstance2D
 var _bld_mat: ShaderMaterial
 var _atlas_tex: Texture2D
@@ -375,11 +408,17 @@ var _bld_removed_dirty: bool = false
 var _bld_upg_idx: int = -1
 var _road_mask_dirty: bool = true
 var _buildings_dirty: bool = false
+var _ships_mm_slot_base: int = 0
 var _has_bld_springs: bool = false
 var _spring_cache_dirty: bool = false
 var _spring_indices: PackedInt32Array
+var _spring_dirty_ids: PackedInt32Array
 var _shield_cache_dirty: bool = true
 var _shield_indices: PackedInt32Array
+var _drill_cache_dirty: bool = true
+var _drill_indices: PackedInt32Array
+var _drill_pace_acc: float = 0.0
+var _drill_active_cnt: int = 0
 var _physics_has_get_city_pop: bool = false
 var _physics_has_set_goal_buffers: bool = false
 var _physics_has_sync_light_goals: bool = false
@@ -443,10 +482,7 @@ var _k_shield_min_ch: float = 0.25
 var _k_shield_impact_mul: float = 0.35
 var _k_shield_recharge: float = 0.12
 var _k_shield_flash_decay: float = 2.4
-var _k_shadow_alpha: float = 0.34
-var _k_shadow_fade_hi: float = 2.2
-var _k_shadow_fade_lo: float = 1.8
-var _k_shadow_hide_z: float = 1.65
+var _k_spore_creep_int: float = 12.0
 var _k_supply_scan_sec: float = 4.0
 var _k_supply_rich_food: float = 90.0
 var _k_supply_rich_ore: float = 75.0
@@ -458,7 +494,7 @@ var _k_tier1_age: float = 195.0
 var _k_tier2_age: float = 480.0
 var _k_tier3_age: float = 750.0
 var _k_tier4_age: float = 1320.0
-var _k_tier3_sci: float = 260.0
+var _k_tier3_sci: float = 195.0
 var _k_tier3_score: float = 11.0
 var _k_tier4_sci: float = 650.0
 var _k_tier4_score: float = 18.0
@@ -486,6 +522,7 @@ var _law_rebellions: bool = true
 var _law_cosmic_ages: bool = true
 var _law_disasters: bool = true
 var _law_rad_mutations: bool = true
+var _world_laws_dict: Dictionary = {}
 
 var _total_harvested: float = 0.0
 var _total_shuttles_launched: int = 0
@@ -493,6 +530,7 @@ var _shield_blocked_total: int = 0
 var _supply_deliveries: int = 0
 var _border_clash_count: int = 0
 var _rebellions_total: int = 0
+var _tier5_victories: int = 0
 var _ecology_events_sent_total: int = 0
 var _ecology_cursor: int = 0
 var _ecology_events_scratch: Array = []
@@ -554,17 +592,13 @@ func _exit_tree() -> void:
 	_last_pushed_physics = null
 	_goal_buffers.clear()
 	_ecology_events_scratch.clear()
+	_world_laws_dict.clear()
 	_territory = null
 	_diplomacy = null
+	_meta = null
 
 	if _border_sprite != null and is_instance_valid(_border_sprite):
 		_border_sprite.texture = null
-	if _mm_bld_shadows != null and is_instance_valid(_mm_bld_shadows):
-		_mm_bld_shadows.texture = null
-		_mm_bld_shadows.multimesh = null
-	_mm_bld_shadows = null
-	_shadow_group = null
-	_shadow_tex = null
 	if _mm_buildings != null and is_instance_valid(_mm_buildings):
 		_mm_buildings.texture = null
 		_mm_buildings.material = null
@@ -588,12 +622,33 @@ func set_sim_pace(mult: float) -> void:
 
 
 func set_world_laws(laws: Dictionary) -> void:
+	for k in laws:
+		_world_laws_dict[str(k)] = laws[k]
 	_law_self_founding = bool(laws.get("self_founding", _law_self_founding))
 	_law_diplomacy_wars = bool(laws.get("diplomacy_wars", _law_diplomacy_wars))
 	_law_rebellions = bool(laws.get("rebellions", _law_rebellions))
 	_law_cosmic_ages = bool(laws.get("cosmic_ages", _law_cosmic_ages))
 	_law_disasters = bool(laws.get("disasters", _law_disasters))
 	_law_rad_mutations = bool(laws.get("rad_mutations", _law_rad_mutations))
+
+
+func is_law_enabled(law_key: String, default_val: bool = true) -> bool:
+	if _world_laws_dict.has(law_key):
+		return bool(_world_laws_dict[law_key])
+	match law_key:
+		"self_founding":
+			return _law_self_founding
+		"diplomacy_wars":
+			return _law_diplomacy_wars
+		"rebellions":
+			return _law_rebellions
+		"cosmic_ages":
+			return _law_cosmic_ages
+		"disasters":
+			return _law_disasters
+		"rad_mutations":
+			return _law_rad_mutations
+	return default_val
 
 
 func set_day_phase(phase: float, night_mix: float) -> void:
@@ -719,10 +774,7 @@ func _cache_tuning_knobs() -> void:
 	_k_shield_impact_mul = float(TUNING_KNOBS["SHIELD_IMPACT_RAD_MUL"])
 	_k_shield_recharge = float(TUNING_KNOBS["SHIELD_BASE_RECHARGE"])
 	_k_shield_flash_decay = float(TUNING_KNOBS["SHIELD_FLASH_DECAY"])
-	_k_shadow_alpha = float(TUNING_KNOBS["SHADOW_GROUP_ALPHA"])
-	_k_shadow_fade_hi = float(TUNING_KNOBS["SHADOW_FADE_START_ZOOM"])
-	_k_shadow_fade_lo = float(TUNING_KNOBS["SHADOW_FADE_END_ZOOM"])
-	_k_shadow_hide_z = float(TUNING_KNOBS["SHADOW_HIDE_ZOOM"])
+	_k_spore_creep_int = float(TUNING_KNOBS["SPORE_CREEP_INTERVAL_SEC"])
 	_k_supply_scan_sec = float(TUNING_KNOBS["SUPPLY_SCAN_SEC"])
 	_k_supply_rich_food = float(TUNING_KNOBS["SUPPLY_RICH_FOOD"])
 	_k_supply_rich_ore = float(TUNING_KNOBS["SUPPLY_RICH_ORE"])
@@ -763,6 +815,8 @@ func _ensure_initialized() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_territory = CivTerritoryScript.new()
 	_diplomacy = CivDiplomacyScript.new()
+	_meta = CivMetaScript.new()
+	_meta.ensure_allocated()
 
 	_zone_px = maxi(1, int(TUNING_KNOBS["TILE_ZONE_PX"]))
 	_zone_w = ceili(float(_map_w) / float(_zone_px))
@@ -771,7 +825,6 @@ func _ensure_initialized() -> void:
 
 	_alloc_buffers()
 	_build_border_layer()
-	_build_shadows_layer()
 	_build_buildings_layer()
 	_reset_state_arrays()
 
@@ -787,6 +840,7 @@ func _alloc_zone_and_road_buffers() -> void:
 	_zone_faction_id.resize(_zone_count)
 	_zone_flags.resize(_zone_count)
 	_zone_ore.resize(_zone_count)
+	_zone_ore_frac.resize(_zone_count)
 	_zone_fertility.resize(_zone_count)
 	_zone_close_n.resize(_zone_count)
 	_zone_land_n.resize(_zone_count)
@@ -839,6 +893,14 @@ func _alloc_city_and_kingdom_buffers() -> void:
 	_city_bld_counts.resize(_max_cities * BLD_TYPE_COUNT)
 	_city_kingdom_id.resize(_max_cities)
 	_city_age_sec.resize(_max_cities)
+	_city_dome_powered.resize(_max_cities)
+	_city_tier5_done.resize(_max_cities)
+	_city_spore_creep_cd.resize(_max_cities)
+	_city_drill_dep_mul.resize(_max_cities)
+	_city_credits.resize(_max_cities)
+	_city_hq_level.resize(_max_cities)
+	_tmp_city_drill_cnt.resize(_max_cities)
+	_tmp_city_drill_sum.resize(_max_cities)
 
 	_kingdom_active.resize(_max_cities)
 	_kingdom_faction.resize(_max_cities)
@@ -885,6 +947,7 @@ func _alloc_entity_and_capture_buffers() -> void:
 	_bld_color.resize(_max_buildings)
 	_bld_shield_charge.resize(_max_buildings)
 	_bld_shield_flash.resize(_max_buildings)
+	_bld_level.resize(_max_buildings)
 
 	_ruin_pos.resize(_max_ruins)
 	_ruin_ore.resize(_max_ruins)
@@ -902,6 +965,9 @@ func _alloc_entity_and_capture_buffers() -> void:
 	_shuttle_trail_t.resize(_max_shuttles)
 	_shuttle_kind.resize(_max_shuttles)
 	_shuttle_target_city.resize(_max_shuttles)
+	_shuttle_cargo_food.resize(_max_shuttles)
+	_shuttle_cargo_ore.resize(_max_shuttles)
+	_shuttle_cargo_energy.resize(_max_shuttles)
 
 
 func _reset_state_arrays() -> void:
@@ -912,6 +978,7 @@ func _reset_state_arrays() -> void:
 	_supply_deliveries = 0
 	_border_clash_count = 0
 	_rebellions_total = 0
+	_tier5_victories = 0
 	_ecology_events_sent_total = 0
 	_ecology_cursor = 0
 	_clash_scan_timer = 0.25
@@ -941,6 +1008,8 @@ func _reset_state_arrays() -> void:
 
 	_reset_zone_and_city_arrays()
 	_diplomacy.reset_all()
+	if _meta != null:
+		_meta.reset_all(_rng_seed + 7919)
 	_territory.reset_border_chunks()
 	_border_flush_cd = 0.0
 
@@ -953,6 +1022,7 @@ func _reset_state_arrays() -> void:
 	_dirty_zx1 = -1
 	_dirty_zy1 = -1
 	_border_tint_alpha_cache = -1
+	_border_thick_cache = -1
 
 	_goals_dirty = true
 	_light_goals_dirty = false
@@ -962,14 +1032,18 @@ func _reset_state_arrays() -> void:
 	_bld_upg_idx = -1
 	_road_mask_dirty = true
 	_buildings_dirty = true
+	_ships_mm_slot_base = 0
 	_has_bld_springs = false
 	_spring_cache_dirty = false
 	_spring_indices.clear()
+	_spring_dirty_ids.clear()
 	_shield_cache_dirty = true
 	_shield_indices.clear()
+	_drill_cache_dirty = true
+	_drill_indices.clear()
+	_drill_pace_acc = 0.0
+	_drill_active_cnt = 0
 	_bld_anim_step = -1
-	if _mm_bld_shadows != null and _mm_bld_shadows.multimesh != null:
-		_mm_bld_shadows.multimesh.visible_instance_count = 0
 	if _mm_buildings != null and _mm_buildings.multimesh != null:
 		_mm_buildings.multimesh.visible_instance_count = 0
 
@@ -979,6 +1053,7 @@ func _reset_zone_and_city_arrays() -> void:
 	_zone_faction_id.fill(255)
 	_zone_flags.fill(0)
 	_zone_ore.fill(0)
+	_zone_ore_frac.fill(0.0)
 	_zone_fertility.fill(0.5)
 	_zone_close_n.fill(255)
 	_zone_land_n.fill(255)
@@ -1029,6 +1104,12 @@ func _reset_zone_and_city_arrays() -> void:
 	_city_bld_counts.fill(0)
 	_city_kingdom_id.fill(-1)
 	_city_age_sec.fill(0.0)
+	_city_dome_powered.fill(1)
+	_city_tier5_done.fill(0)
+	_city_spore_creep_cd.fill(_k_spore_creep_int)
+	_city_drill_dep_mul.fill(1.0)
+	_city_credits.fill(10.0)
+	_city_hq_level.fill(0)
 
 	_kingdom_active.fill(0)
 	_kingdom_faction.fill(0)
@@ -1061,8 +1142,12 @@ func _reset_zone_and_city_arrays() -> void:
 	_bld_radius.fill(0.0)
 	_bld_shield_charge.fill(0.0)
 	_bld_shield_flash.fill(0.0)
+	_bld_level.fill(0)
 	_shuttle_kind.fill(SHUTTLE_KIND_COLONIZE)
 	_shuttle_target_city.fill(-1)
+	_shuttle_cargo_food.fill(0.0)
+	_shuttle_cargo_ore.fill(0.0)
+	_shuttle_cargo_energy.fill(0.0)
 
 
 func _build_border_layer() -> void:
@@ -1078,44 +1163,6 @@ func _build_border_layer() -> void:
 	add_child(_border_sprite)
 
 
-func _make_soft_oval_texture() -> Texture2D:
-	var w: int = 16
-	var h: int = 10
-	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.0, 0.0, 0.0, 0.0))
-	for py in range(h):
-		var ny: float = (float(py) + 0.5 - float(h) * 0.5) / (float(h) * 0.45)
-		for px in range(w):
-			var nx: float = (float(px) + 0.5 - float(w) * 0.5) / (float(w) * 0.46)
-			if nx * nx + ny * ny <= 1.0:
-				img.set_pixel(px, py, Color(1.0, 1.0, 1.0, 1.0))
-	return ImageTexture.create_from_image(img)
-
-
-func _build_shadows_layer() -> void:
-	_shadow_tex = _make_soft_oval_texture()
-	_shadow_group = CanvasGroup.new()
-	_shadow_group.z_index = 0
-	_shadow_group.self_modulate = Color(0.04, 0.06, 0.14, _k_shadow_alpha)
-	_shadow_group.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-
-	_mm_bld_shadows = MultiMeshInstance2D.new()
-	_mm_bld_shadows.z_index = 0
-	_mm_bld_shadows.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_mm_bld_shadows.texture = _shadow_tex
-	var quad := QuadMesh.new()
-	quad.size = Vector2(1.0, 1.0)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_2D
-	mm.mesh = quad
-	mm.instance_count = _max_buildings + _max_cities + _max_ruins + _max_shuttles
-	mm.visible_instance_count = 0
-	_mm_bld_shadows.multimesh = mm
-	_shadow_group.add_child(_mm_bld_shadows)
-	add_child(_shadow_group)
-	set_zoom_lod(_zoom_val)
-
-
 func _load_png_texture(res_path: String) -> Texture2D:
 	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(res_path)
 	if not bytes.is_empty():
@@ -1129,6 +1176,22 @@ func _load_png_texture(res_path: String) -> Texture2D:
 	return null
 
 
+func _read_atlas_cols_from_json(json_path: String, fallback_cols: int) -> int:
+	if not FileAccess.file_exists(json_path):
+		return maxi(1, fallback_cols)
+	var txt: String = FileAccess.get_file_as_string(json_path)
+	if txt.is_empty():
+		return maxi(1, fallback_cols)
+	var parsed: Variant = JSON.parse_string(txt)
+	if parsed is Dictionary:
+		var d: Dictionary = parsed as Dictionary
+		if d.has("atlas_cols"):
+			return maxi(1, int(d["atlas_cols"]))
+		if d.has("cols"):
+			return maxi(1, int(d["cols"]))
+	return maxi(1, fallback_cols)
+
+
 func _build_buildings_layer() -> void:
 	_atlas_tex = _load_png_texture(BUILDINGS_ATLAS_PATH)
 	_mask_tex = _load_png_texture(BUILDINGS_MASK_PATH)
@@ -1140,6 +1203,10 @@ func _build_buildings_layer() -> void:
 		var fallback_m := Image.create(ATLAS_COLS * 24, 24, false, Image.FORMAT_RGBA8)
 		fallback_m.fill(Color(0.0, 0.0, 0.0, 1.0))
 		_mask_tex = ImageTexture.create_from_image(fallback_m)
+	var tex_cols: int = maxi(1, int(_atlas_tex.get_width() / 24))
+	_bld_atlas_cols = _read_atlas_cols_from_json(BUILDINGS_ATLAS_JSON_PATH, tex_cols)
+	if tex_cols > 0 and _bld_atlas_cols > tex_cols:
+		_bld_atlas_cols = tex_cols
 
 	_mm_buildings = MultiMeshInstance2D.new()
 	_mm_buildings.z_index = 1
@@ -1149,7 +1216,7 @@ func _build_buildings_layer() -> void:
 	_bld_mat.shader = UNIT_SPRITE_SHADER
 	_bld_mat.set_shader_parameter("sprite_mode", 3)
 	_bld_mat.set_shader_parameter("motion_mode", 0)
-	_bld_mat.set_shader_parameter("atlas_cols", ATLAS_COLS)
+	_bld_mat.set_shader_parameter("atlas_cols", _bld_atlas_cols)
 	_bld_mat.set_shader_parameter("sprite_size", Vector2(BUILDING_CELL_PX, BUILDING_CELL_PX))
 	_bld_mat.set_shader_parameter("mask_tex", _mask_tex)
 	_bld_mat.set_shader_parameter("hdr_emissive", 2.6)
@@ -1166,7 +1233,7 @@ func _build_buildings_layer() -> void:
 	mm.use_colors = true
 	mm.use_custom_data = true
 	mm.mesh = quad
-	mm.instance_count = _max_buildings + _max_cities + _max_ruins + _max_shuttles
+	mm.instance_count = _max_buildings + _max_cities + _max_ruins + _max_shuttles + MAX_SHIPS
 	mm.visible_instance_count = 0
 	_mm_buildings.multimesh = mm
 	add_child(_mm_buildings)
@@ -1371,11 +1438,19 @@ func _init_city_record(cid: int, safe_pos: Vector2, f_clamped: int, kingdom_id: 
 	_city_war_cooldown[cid] = 0.0
 	_city_overlord[cid] = overlord_cid
 	_city_tech_floor[cid] = 0
+	_city_dome_powered[cid] = 1
+	_city_tier5_done[cid] = 0
+	_city_spore_creep_cd[cid] = _k_spore_creep_int
+	_city_drill_dep_mul[cid] = 1.0
+	_city_credits[cid] = 10.0
+	_city_hq_level[cid] = 0
 
 	if kingdom_id >= 0 and kingdom_id < _max_cities and _kingdom_active[kingdom_id] != 0:
 		_diplomacy.assign_city_to_kingdom(self, cid, kingdom_id)
 	else:
 		_diplomacy.create_kingdom(self, cid, false)
+	if _meta != null:
+		_meta.on_city_created(self, cid, overlord_cid)
 	_city_color[cid] = _get_city_tint_color(cid)
 
 	var base_b: int = cid * BLD_TYPE_COUNT
@@ -1443,6 +1518,7 @@ func spawn_colony(world_pos: Vector2, faction_id: int = 0) -> int:
 	_finalize_city_spawn(cid, safe_pos, f_clamped, true)
 	if _physics != null and _physics_has_spawn_colony_units:
 		_city_pop[cid] = int(_physics.spawn_colony_units(cid, safe_pos, _k_start_city_pop))
+	_diplomacy.sync_notables(self, 0.0)
 	var k_name: String = _kingdom_name[_city_kingdom_id[cid]] if _city_kingdom_id[cid] >= 0 else _city_name[cid]
 	_diplomacy.push_chronicle("Основана колония %s (%s)" % [_city_name[cid], k_name], safe_pos, _get_city_border_color(cid))
 	return cid
@@ -1469,6 +1545,7 @@ func try_self_found_settlement(world_pos: Vector2, faction_id: int, founder_uids
 	if _physics != null and _physics.has_method("recruit_settlers_to_city"):
 		recruited = int(_physics.recruit_settlers_to_city(cid, founder_uids))
 	_city_pop[cid] = maxi(recruited, founder_uids.size())
+	_diplomacy.sync_notables(self, 0.0)
 
 	var k_name: String = _kingdom_name[_city_kingdom_id[cid]] if _city_kingdom_id[cid] >= 0 else _city_name[cid]
 	_diplomacy.push_chronicle("Лагерь %s (%s)" % [_city_name[cid], k_name], safe_pos, _get_city_border_color(cid))
@@ -1496,6 +1573,7 @@ func _found_daughter_settlement(src_cid: int, world_pos: Vector2, settlers_count
 	_finalize_city_spawn(cid, safe_pos, f_clamped, false, false)
 	if _physics != null and _physics_has_spawn_colony_units:
 		_city_pop[cid] = int(_physics.spawn_colony_units(cid, safe_pos, clampi(settlers_count, 4, 5)))
+	_diplomacy.sync_notables(self, 0.0)
 	var k_name: String = _kingdom_name[kid] if kid >= 0 else _city_name[src_cid]
 	_diplomacy.push_chronicle("Дочерняя деревня %s (%s)" % [_city_name[cid], k_name], safe_pos, _get_city_border_color(cid))
 	return cid
@@ -1521,6 +1599,7 @@ func _place_building(city_id: int, bld_type: int, pos: Vector2, quiet_audio: boo
 	_bld_color[bidx] = _get_city_tint_color(city_id)
 	_bld_shield_charge[bidx] = 0.85 if bld_type == BuildingType.SHIELD_PYLON else 0.0
 	_bld_shield_flash[bidx] = 0.0
+	_bld_level[bidx] = 0
 
 	_city_bld_counts[city_id * BLD_TYPE_COUNT + bld_type] += 1
 	_city_tech_dirty[city_id] = 1
@@ -1529,6 +1608,8 @@ func _place_building(city_id: int, bld_type: int, pos: Vector2, quiet_audio: boo
 	_spring_cache_dirty = true
 	if bld_type == BuildingType.SHIELD_PYLON:
 		_shield_cache_dirty = true
+	elif bld_type == BuildingType.DRILL:
+		_drill_cache_dirty = true
 	_bld_footprints_dirty = true
 	_goals_dirty = true
 	if bld_type == BuildingType.BIODOME:
@@ -1541,7 +1622,7 @@ func _place_building(city_id: int, bld_type: int, pos: Vector2, quiet_audio: boo
 	var zx: int = clampi(int(floor(pos.x / float(_zone_px))), 0, _zone_w - 1)
 	var zy: int = clampi(int(floor(pos.y / float(_zone_px))), 0, _zone_h - 1)
 	var zidx: int = zy * _zone_w + zx
-	if _zone_city_id[zidx] == -1:
+	if _zone_city_id[zidx] == -1 and (_city_zones_count[city_id] == 0 or _territory.has_cardinal_owner(self, Vector2i(zx, zy), city_id)):
 		_claim_zone(zx, zy, city_id, int(_city_faction[city_id]))
 	if (_zone_flags[zidx] & ZONE_FLAG_FARM) != 0:
 		_city_farm_scan_cd[city_id] = 0.0
@@ -1565,6 +1646,7 @@ func _remove_building(bidx: int) -> void:
 	if bidx < 0 or bidx >= _bld_count:
 		return
 	_shield_cache_dirty = true
+	_drill_cache_dirty = true
 	_spring_cache_dirty = true
 	var cid: int = _bld_city_id[bidx]
 	var btype: int = int(_bld_type[bidx])
@@ -1591,11 +1673,43 @@ func _remove_building(bidx: int) -> void:
 		_bld_color[bidx] = _bld_color[last]
 		_bld_shield_charge[bidx] = _bld_shield_charge[last]
 		_bld_shield_flash[bidx] = _bld_shield_flash[last]
+		_bld_level[bidx] = _bld_level[last]
 	_bld_count = last
 	_buildings_dirty = true
 	_bld_footprints_dirty = true
 	_bld_removed_dirty = true
 	_goals_dirty = true
+
+
+func _has_clear_walk_line(a: Vector2, b: Vector2, f_id: int) -> bool:
+	if _world == null:
+		return true
+	if _territory._w_cache_owner != _world:
+		_territory._refresh_world_byte_caches(self)
+	var mw: int = _map_w
+	var mh: int = _map_h
+	var w_tiers: PackedByteArray = _territory._w_tiers_cache
+	var w_biomes: PackedByteArray = _territory._w_biomes_cache
+	var w_temp: PackedFloat32Array = _territory._w_temp_cache
+	if w_tiers.size() == mw * mh and w_biomes.size() == mw * mh and w_temp.size() == mw * mh:
+		var c_off: float = _territory.get_cosmic_temp_offset(self)
+		var max_t: float = 95.0 if f_id == Faction.ROBOT else 65.0
+		for s in range(1, 9):
+			var pt: Vector2 = a.lerp(b, float(s) / 9.0)
+			var px: int = int(floor(pt.x))
+			var py: int = int(floor(pt.y))
+			if px < 4 or px >= mw - 4 or py < 4 or py >= mh - 4:
+				return false
+			var idx: int = py * mw + px
+			var t: int = int(w_tiers[idx])
+			if t <= TIER_SHALLOW or t >= TIER_SUMMIT or int(w_biomes[idx]) == BIOME_LAVA or (w_temp[idx] + c_off) > max_t:
+				return false
+		return true
+	for s in range(1, 9):
+		var pt2: Vector2 = a.lerp(b, float(s) / 9.0)
+		if not _territory.is_pixel_walkable(self, Vector2i(int(floor(pt2.x)), int(floor(pt2.y))), f_id):
+			return false
+	return true
 
 
 func _is_building_spot_valid(pos: Vector2, bld_type: int, faction_id: int = 0) -> bool:
@@ -1604,15 +1718,56 @@ func _is_building_spot_valid(pos: Vector2, bld_type: int, faction_id: int = 0) -
 	if px < 10 or px >= _map_w - 10 or py < 14 or py >= _map_h - 8:
 		return false
 	if _world != null:
-		for sy in range(3):
-			var oy: int = -3 if sy == 0 else (0 if sy == 1 else 2)
-			for sx in range(3):
-				if not _territory.is_pixel_walkable(self, Vector2i(px + (sx - 1) * 4, py + oy), faction_id):
+		if _territory._w_cache_owner != _world:
+			_territory._refresh_world_byte_caches(self)
+		var mw: int = _map_w
+		var mh: int = _map_h
+		var w_tiers: PackedByteArray = _territory._w_tiers_cache
+		var w_biomes: PackedByteArray = _territory._w_biomes_cache
+		var w_temp: PackedFloat32Array = _territory._w_temp_cache
+		var use_cache: bool = (w_tiers.size() == mw * mh and w_biomes.size() == mw * mh and w_temp.size() == mw * mh)
+		var t_center: int = int(w_tiers[py * mw + px]) if use_cache else int(_world.get_tier(px, py))
+		if bld_type != BuildingType.DRILL and t_center >= 7:
+			return false
+		if use_cache:
+			var c_off: float = _territory.get_cosmic_temp_offset(self)
+			var max_t: float = 95.0 if faction_id == Faction.ROBOT else 65.0
+			for sy in range(3):
+				var ty: int = py + (-3 if sy == 0 else (0 if sy == 1 else 2))
+				if ty < 4 or ty >= mh - 4:
 					return false
+				var row_off: int = ty * mw
+				for sx in range(3):
+					var tx: int = px + (sx - 1) * 4
+					if tx < 4 or tx >= mw - 4:
+						return false
+					var idx: int = row_off + tx
+					var t: int = int(w_tiers[idx])
+					if t <= TIER_SHALLOW or t >= TIER_SUMMIT or int(w_biomes[idx]) == BIOME_LAVA or (w_temp[idx] + c_off) > max_t:
+						return false
+		else:
+			for sy in range(3):
+				var oy: int = -3 if sy == 0 else (0 if sy == 1 else 2)
+				for sx in range(3):
+					if not _territory.is_pixel_walkable(self, Vector2i(px + (sx - 1) * 4, py + oy), faction_id):
+						return false
 	var min_sep: float = BLD_FOOTPRINTS[bld_type]
+	if bld_type == BuildingType.DOCK and not _has_water_near(px, py, 24):
+		return false
+	var px_f: float = pos.x
+	var py_f: float = pos.y
+	var b_pos: PackedVector2Array = _bld_pos
+	var b_type: PackedByteArray = _bld_type
 	for i in range(_bld_count):
-		var req: float = (min_sep + BLD_FOOTPRINTS[int(_bld_type[i])]) * 0.5
-		if _bld_pos[i].distance_squared_to(pos) < req * req:
+		var req: float = (min_sep + BLD_FOOTPRINTS[int(b_type[i])]) * 0.5
+		var bp: Vector2 = b_pos[i]
+		var dx: float = bp.x - px_f
+		if absf(dx) >= req:
+			continue
+		var dy: float = bp.y - py_f
+		if absf(dy) >= req:
+			continue
+		if dx * dx + dy * dy < req * req:
 			return false
 	return true
 
@@ -1622,6 +1777,8 @@ func _find_building_spot(city_id: int, bld_type: int) -> Vector2:
 	var f_id: int = int(_city_faction[city_id])
 	var best_pos := Vector2(-1.0, -1.0)
 	var best_score: float = -1e9
+	var fb_pos := Vector2(-1.0, -1.0)
+	var fb_score: float = -1e9
 	var czx: int = clampi(int(floor(center.x / float(_zone_px))), 0, _zone_w - 1)
 	var czy: int = clampi(int(floor(center.y / float(_zone_px))), 0, _zone_h - 1)
 	var scan_r: int = 7 if _city_zones_count[city_id] >= 12 else 5
@@ -1630,8 +1787,9 @@ func _find_building_spot(city_id: int, bld_type: int) -> Vector2:
 		for zx in range(maxi(0, czx - scan_r), mini(_zone_w, czx + scan_r + 1)):
 			var zidx: int = zy * _zone_w + zx
 			var owner: int = _zone_city_id[zidx]
-			if owner != city_id and (owner != -1 or not _is_zone_claimable(zx, zy, f_id)):
-				continue
+			if owner != city_id:
+				if owner != -1 or not _is_zone_claimable(zx, zy, f_id) or not _territory.has_cardinal_owner(self, Vector2i(zx, zy), city_id):
+					continue
 			var cand: Vector2 = _territory.zone_walkable_center(self, Vector2i(zx, zy), f_id)
 			if cand.x < 0.0:
 				continue
@@ -1640,39 +1798,119 @@ func _find_building_spot(city_id: int, bld_type: int) -> Vector2:
 				if not _is_building_spot_valid(cand, bld_type, f_id):
 					continue
 			var sc: float = _score_building_spot(cand, center, zidx, zx, zy, owner == city_id, bld_type)
-			if sc > best_score:
+			if sc <= best_score and sc <= fb_score:
+				continue
+			if sc > best_score and _has_clear_walk_line(center, cand, f_id):
 				best_score = sc
 				best_pos = cand
+			elif sc > fb_score:
+				fb_score = sc
+				fb_pos = cand
 	if best_pos.x >= 0.0:
 		return best_pos
-	return _find_ring_building_spot(center, bld_type, f_id)
+	var ring_clear: Vector2 = _find_ring_building_spot(center, bld_type, f_id, true)
+	if ring_clear.x >= 0.0:
+		return ring_clear
+	if fb_pos.x >= 0.0:
+		return fb_pos
+	var ring_pos: Vector2 = _find_ring_building_spot(center, bld_type, f_id, false)
+	if ring_pos.x >= 0.0 or bld_type != BuildingType.SHIELD_PYLON:
+		return ring_pos
+	return _find_fallback_test_spot(center, bld_type, f_id)
+
+
+func _has_water_near(px: int, py: int, max_r: int) -> bool:
+	if _world == null:
+		return false
+	var mw: int = _map_w
+	var mh: int = _map_h
+	var w_tiers: PackedByteArray = _territory._w_tiers_cache
+	var has_cache: bool = w_tiers.size() == mw * mh
+	for dist in [10, 16, max_r]:
+		for k in range(8):
+			var ang: float = float(k) * (TAU / 8.0)
+			var wx: int = px + int(round(cos(ang) * float(dist)))
+			var wy: int = py + int(round(sin(ang) * float(dist)))
+			if wx < 2 or wx >= mw - 2 or wy < 2 or wy >= mh - 2:
+				continue
+			var t: int = int(w_tiers[wy * mw + wx]) if has_cache else int(_world.get_tier(wx, wy))
+			if t <= TIER_SHALLOW:
+				return true
+	return false
 
 
 func _score_building_spot(cand: Vector2, center: Vector2, zidx: int, zx: int, zy: int, owned: bool, bld_type: int) -> float:
 	var d: float = cand.distance_to(center)
 	var score: float = 100.0 - d * 1.15 + (48.0 if owned else 0.0)
+	var coastal: bool = _territory.is_zone_coastal(self, zx, zy)
 	if bld_type == BuildingType.DRILL:
 		score += float(_zone_ore[zidx]) * 3.2
 	elif bld_type == BuildingType.BIODOME:
 		score += _zone_fertility[zidx] * 20.0
-	elif bld_type == BuildingType.LAUNCHPAD and _territory.is_zone_coastal(self, zx, zy):
+	elif bld_type == BuildingType.LAUNCHPAD and coastal:
 		score += 36.0
+	elif bld_type == BuildingType.DOCK:
+		score += 56.0 if coastal else -40.0
+	elif bld_type == BuildingType.BARRACKS and d >= 14.0 and d <= 38.0:
+		score += 24.0
+	elif bld_type == BuildingType.DEFENSE_TURRET and d >= 22.0:
+		score += 30.0
+	elif bld_type == BuildingType.TRADE_HUB:
+		score += (30.0 if coastal else 16.0) + (12.0 if d <= 26.0 else 0.0)
+	elif bld_type == BuildingType.ARCHIVE and d <= 26.0:
+		score += 26.0
+	elif bld_type == BuildingType.MONOLITH:
+		score += 32.0 if d <= 30.0 else 10.0
 	elif bld_type == BuildingType.SHIELD_PYLON and d <= 28.0:
 		score += 32.0
 	elif bld_type == BuildingType.QUANTUM_GATE and d >= 18.0 and d <= 48.0:
-		score += 28.0 + (18.0 if _territory.is_zone_coastal(self, zx, zy) else 0.0)
+		score += 28.0 + (18.0 if coastal else 0.0)
+	var ocid: int = _zone_city_id[zidx]
+	if _meta != null and ocid >= 0:
+		var plan: int = _meta.get_city_town_plan(ocid)
+		var delta: Vector2 = cand - center
+		if plan == 1 and absf(d - 28.0) < 9.0:
+			score += 12.0
+		elif plan == 3 and (absf(delta.x) < 10.0 or absf(delta.y) < 10.0):
+			score += 12.0
+		elif plan == 5 and d < 24.0:
+			score += 10.0
 	return score
 
 
-func _find_ring_building_spot(center: Vector2, bld_type: int, f_id: int) -> Vector2:
-	for ring in range(1, 6):
+func _find_ring_building_spot(center: Vector2, bld_type: int, f_id: int, require_clear: bool = false) -> Vector2:
+	var fallback := Vector2(-1.0, -1.0)
+	for ring in range(1, 9):
 		var rad: float = 10.0 + float(ring) * 6.5
 		for k in range(12):
 			var ang: float = float(k) * (TAU / 12.0) + float(ring) * 0.35
 			var cand: Vector2 = center + Vector2(cos(ang), sin(ang)) * rad
-			if _is_building_spot_valid(cand, bld_type, f_id):
+			if not _is_building_spot_valid(cand, bld_type, f_id):
+				continue
+			if _has_clear_walk_line(center, cand, f_id):
 				return cand
-	return Vector2(-1.0, -1.0)
+			if not require_clear and fallback.x < 0.0:
+				fallback = cand
+	return fallback
+
+
+func _get_tier_science_cap(tier: int) -> float:
+	return TIER_SCIENCE_CAPS[clampi(tier, 0, TIER_SCIENCE_CAPS.size() - 1)]
+
+
+func _clamp_city_science(cid: int) -> void:
+	if cid < 0 or cid >= _max_cities:
+		return
+	var cap_s: float = _get_tier_science_cap(int(_city_tech_tier[cid]))
+	if _city_science[cid] > cap_s:
+		_city_science[cid] = cap_s
+
+
+func _add_city_science(cid: int, delta: float) -> void:
+	if cid < 0 or cid >= _max_cities or delta <= 0.0:
+		return
+	var cap_s: float = _get_tier_science_cap(int(_city_tech_tier[cid]))
+	_city_science[cid] = minf(cap_s, _city_science[cid] + delta)
 
 
 func _recompute_city_tech(city_id: int) -> void:
@@ -1691,14 +1929,51 @@ func _recompute_city_tech(city_id: int) -> void:
 	_city_tech_score[city_id] = score
 	var tier: int = _eval_city_tier_unlocked(city_id, base_b, score)
 	var prev_tier: int = int(_city_tech_tier[city_id])
+	if _city_zones_count[city_id] > 0 and _city_bld_counts[base_b + BuildingType.CAMPFIRE] > 0:
+		tier = maxi(tier, prev_tier)
 	_city_tech_dirty[city_id] = 0
 	if tier != prev_tier:
 		_city_tech_tier[city_id] = tier
 		_light_goals_dirty = true
+		if tier > prev_tier:
+			_city_proj_retry[city_id] = 0.0
 		if tier >= 2 and prev_tier < 2:
 			_territory.upgrade_city_roads_to_conduits(self, city_id)
 			_road_mask_dirty = true
-		_diplomacy.push_chronicle("%s достиг эпохи Т%d" % [_city_name[city_id], tier], _city_center[city_id], _get_city_border_color(city_id))
+		if tier >= 5 and _city_tier5_done[city_id] == 0:
+			_on_city_tier5_victory(city_id)
+		else:
+			_diplomacy.push_chronicle("%s достиг эпохи Т%d" % [_city_name[city_id], tier], _city_center[city_id], _get_city_border_color(city_id))
+	_clamp_city_science(city_id)
+	if tier >= 3 and prev_tier < 3 and _city_bld_counts[base_b + BuildingType.SHIELD_PYLON] == 0:
+		var pt: int = _city_proj_type[city_id]
+		var keep_first_dome: bool = (
+			pt == BuildingType.BIODOME
+			and int(_city_faction[city_id]) != Faction.ROBOT
+			and _city_bld_counts[base_b + BuildingType.BIODOME] == 0
+		)
+		if pt >= 0 and pt != BuildingType.SHIELD_PYLON and not keep_first_dome:
+			var saved_w: float = _city_proj_work[city_id]
+			_city_proj_type[city_id] = -1
+			_city_proj_prog[city_id] = 0.0
+			_start_next_project(city_id)
+			if _city_proj_type[city_id] >= 0:
+				_city_proj_work[city_id] = saved_w
+	if tier > prev_tier and _city_proj_type[city_id] < 0:
+		_start_next_project(city_id)
+
+
+func _on_city_tier5_victory(cid: int) -> void:
+	_city_tier5_done[cid] = 1
+	_tier5_victories += 1
+	_buildings_dirty = true
+	var fid: int = int(_city_faction[cid])
+	var msg: String = "Триумф Т5: %s возводит Шпиль Ковчега!" % _city_name[cid]
+	if fid == Faction.ROBOT:
+		msg = "Триумф Т5: %s разворачивает Солнечный Коллектор!" % _city_name[cid]
+	elif fid == Faction.SPORE:
+		msg = "Триумф Т5: %s пробуждает Великое Цветение!" % _city_name[cid]
+	_diplomacy.push_chronicle(msg, _city_center[cid], Color("#FFD84A"))
 
 
 func _eval_city_tier_unlocked(cid: int, base_b: int, score: float) -> int:
@@ -1713,6 +1988,7 @@ func _eval_city_tier_unlocked(cid: int, base_b: int, score: float) -> int:
 	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
 	var reactors: int = _city_bld_counts[base_b + BuildingType.FUSION_REACTOR]
 	var pads: int = _city_bld_counts[base_b + BuildingType.LAUNCHPAD]
+	var gates: int = _city_bld_counts[base_b + BuildingType.QUANTUM_GATE]
 
 	var tier: int = 0
 	if age >= _k_tier1_age and sci >= 28.0 and pop >= 6 and (tents >= 2 or domes >= 1):
@@ -1724,7 +2000,10 @@ func _eval_city_tier_unlocked(cid: int, base_b: int, score: float) -> int:
 		tier = 3
 	if tier >= 3 and age >= _k_tier4_age and sci >= _k_tier4_sci and reactors >= 1 and pads >= 1 and score >= _k_tier4_score:
 		tier = 4
-	return maxi(tier, clampi(int(_city_tech_floor[cid]), 0, 4))
+	var t5_asym_ok: bool = (domes >= 2 or gates >= 1) if fid == Faction.HUMAN else ((drills >= 2 or gates >= 1) if fid == Faction.ROBOT else (_city_zones_count[cid] >= 20 or gates >= 1))
+	if tier >= 4 and age >= 1650.0 and sci >= 1100.0 and gates >= 1 and score >= 22.0 and t5_asym_ok:
+		tier = 5
+	return maxi(tier, clampi(int(_city_tech_floor[cid]), 0, 5))
 
 
 func _pick_next_building_type(city_id: int) -> int:
@@ -1735,15 +2014,12 @@ func _pick_next_building_type(city_id: int) -> int:
 	var tents: int = _city_bld_counts[base_b + BuildingType.TENT]
 	var drills: int = _city_bld_counts[base_b + BuildingType.DRILL]
 	var depots: int = _city_bld_counts[base_b + BuildingType.DEPOT]
-	var solars: int = _city_bld_counts[base_b + BuildingType.SOLAR_ARRAY]
-	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
-	var reactors: int = _city_bld_counts[base_b + BuildingType.FUSION_REACTOR]
-	var pads: int = _city_bld_counts[base_b + BuildingType.LAUNCHPAD]
-	var pylons: int = _city_bld_counts[base_b + BuildingType.SHIELD_PYLON]
-	var gates: int = _city_bld_counts[base_b + BuildingType.QUANTUM_GATE]
+	var docks: int = _city_bld_counts[base_b + BuildingType.DOCK]
 
-	var city_total: int = campfires + tents + depots + drills + solars + domes + reactors + pads + pylons + gates
-	var max_blds: int = clampi(12 + _city_zones_count[city_id] / 2 + tier * 4, 12, _k_max_city_blds)
+	var city_total: int = 0
+	for bt in range(BLD_TYPE_COUNT):
+		city_total += _city_bld_counts[base_b + bt]
+	var max_blds: int = clampi(12 + _city_zones_count[city_id] / 2 + tier * 4, 12, _k_max_city_blds + (12 if tier >= 5 else 0))
 	if campfires < 1:
 		return BuildingType.CAMPFIRE
 	if city_total >= max_blds:
@@ -1751,13 +2027,13 @@ func _pick_next_building_type(city_id: int) -> int:
 	if tier == 0:
 		return BuildingType.TENT if tents < 4 else -1
 	if tier == 1:
-		return _pick_tier1_building(tents, drills, depots)
+		return _pick_tier1_building(city_id, tents, drills, depots, docks)
 	if tier == 2:
-		return _pick_tier2_building(f_id, tents, drills, depots, solars, domes)
-	return _pick_tier34_building(city_id, f_id, tier, tents, drills, depots, solars, domes, reactors, pads, pylons, gates, city_total)
+		return _pick_tier2_building(city_id, f_id)
+	return _pick_tier34_building(city_id, f_id, tier, city_total)
 
 
-func _pick_tier1_building(tents: int, drills: int, depots: int) -> int:
+func _pick_tier1_building(city_id: int, tents: int, drills: int, depots: int, docks: int) -> int:
 	if tents < 2:
 		return BuildingType.TENT
 	if drills < 1:
@@ -1768,32 +2044,63 @@ func _pick_tier1_building(tents: int, drills: int, depots: int) -> int:
 		return BuildingType.TENT
 	if drills < 2:
 		return BuildingType.DRILL
+	if docks < 1 and _is_city_coastal(city_id):
+		return BuildingType.DOCK
 	return -1
 
 
-func _pick_tier2_building(f_id: int, tents: int, drills: int, depots: int, solars: int, domes: int) -> int:
+func _pick_tier2_building(city_id: int, f_id: int) -> int:
 	# Note: LAUNCHPAD is strictly banned on Tier 2!
+	var base_b: int = city_id * BLD_TYPE_COUNT
+	var tents: int = _city_bld_counts[base_b + BuildingType.TENT]
+	var drills: int = _city_bld_counts[base_b + BuildingType.DRILL]
+	var depots: int = _city_bld_counts[base_b + BuildingType.DEPOT]
+	var solars: int = _city_bld_counts[base_b + BuildingType.SOLAR_ARRAY]
+	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
 	if solars < 1:
 		return BuildingType.SOLAR_ARRAY
-	if f_id != Faction.ROBOT and tents > 0 and domes < 3:
-		return -2 # Sentinel: upgrade existing TENT -> BIODOME in place!
+	if f_id == Faction.ROBOT and drills < 2:
+		return BuildingType.DRILL
+	if f_id != Faction.ROBOT and domes == 0:
+		return -2 if tents > 0 else BuildingType.BIODOME
+	var t3_ready: bool = solars >= 1 and ((domes >= 1) if f_id != Faction.ROBOT else (drills >= 2))
+	if t3_ready and _city_age_sec[city_id] >= _k_tier3_age - 80.0:
+		return -1
 	if f_id != Faction.ROBOT and domes < 2:
-		return BuildingType.BIODOME
+		return -2 if tents > 0 else BuildingType.BIODOME
 	if solars < 2:
 		return BuildingType.SOLAR_ARRAY
 	if drills < 3:
 		return BuildingType.DRILL
 	if depots < 2:
 		return BuildingType.DEPOT
+	if _city_bld_counts[base_b + BuildingType.DOCK] < 1 and _is_city_coastal(city_id):
+		return BuildingType.DOCK
+	if _city_bld_counts[base_b + BuildingType.BARRACKS] < 1:
+		return BuildingType.BARRACKS
+	if _city_bld_counts[base_b + BuildingType.TRADE_HUB] < 1:
+		return BuildingType.TRADE_HUB
+	if _city_bld_counts[base_b + BuildingType.ARCHIVE] < 1:
+		return BuildingType.ARCHIVE
+	if _city_bld_counts[base_b + BuildingType.DEFENSE_TURRET] < 1:
+		return BuildingType.DEFENSE_TURRET
 	if f_id == Faction.ROBOT and tents < 4:
 		return BuildingType.TENT
 	return -1
 
 
-func _pick_tier34_building(cid: int, f_id: int, tier: int, tents: int, drills: int, depots: int, solars: int, domes: int, reactors: int, pads: int, pylons: int, gates: int, city_total: int) -> int:
+func _pick_tier34_building(cid: int, f_id: int, tier: int, city_total: int) -> int:
+	var base_b: int = cid * BLD_TYPE_COUNT
+	var tents: int = _city_bld_counts[base_b + BuildingType.TENT]
+	var drills: int = _city_bld_counts[base_b + BuildingType.DRILL]
+	var depots: int = _city_bld_counts[base_b + BuildingType.DEPOT]
+	var solars: int = _city_bld_counts[base_b + BuildingType.SOLAR_ARRAY]
+	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
+	var reactors: int = _city_bld_counts[base_b + BuildingType.FUSION_REACTOR]
+	var pads: int = _city_bld_counts[base_b + BuildingType.LAUNCHPAD]
+	var pylons: int = _city_bld_counts[base_b + BuildingType.SHIELD_PYLON]
+	var gates: int = _city_bld_counts[base_b + BuildingType.QUANTUM_GATE]
 	var pylon_cap: int = 2 if (_city_zones_count[cid] >= 16 or tier >= 3) else 1
-	var gate_cap: int = _k_gate_max
-	var gate_e_min: float = _k_gate_e_min
 
 	if pylons < 1:
 		return BuildingType.SHIELD_PYLON
@@ -1801,7 +2108,7 @@ func _pick_tier34_building(cid: int, f_id: int, tier: int, tents: int, drills: i
 		return BuildingType.LAUNCHPAD
 	if reactors < 1:
 		return BuildingType.FUSION_REACTOR
-	if tier >= 4 and gates < 1 and _city_energy[cid] >= gate_e_min:
+	if tier >= 4 and gates < 1 and _city_energy[cid] >= _k_gate_e_min:
 		return BuildingType.QUANTUM_GATE
 	if f_id != Faction.ROBOT and tents > 0 and domes < 4:
 		return -2
@@ -1813,11 +2120,14 @@ func _pick_tier34_building(cid: int, f_id: int, tier: int, tents: int, drills: i
 		return BuildingType.DRILL
 	if depots < 3:
 		return BuildingType.DEPOT
+	var meta_b: int = _pick_tier34_meta_building(cid, tier, base_b)
+	if meta_b >= 0:
+		return meta_b
 	if reactors < 2:
 		return BuildingType.FUSION_REACTOR
 	if pads < 2 and _is_city_coastal(cid):
 		return BuildingType.LAUNCHPAD
-	if tier >= 4 and gates < gate_cap and _city_zones_count[cid] >= 12 and _city_energy[cid] >= gate_e_min * 1.35:
+	if tier >= 4 and gates < _k_gate_max and _city_zones_count[cid] >= 12 and _city_energy[cid] >= _k_gate_e_min * 1.35:
 		return BuildingType.QUANTUM_GATE
 	var cycle: int = city_total % 4
 	if cycle == 0 and drills < 6:
@@ -1827,6 +2137,22 @@ func _pick_tier34_building(cid: int, f_id: int, tier: int, tents: int, drills: i
 	if cycle == 2 and f_id != Faction.ROBOT and domes < 5:
 		return BuildingType.BIODOME
 	return BuildingType.DEPOT if depots < 4 else -1
+
+
+func _pick_tier34_meta_building(cid: int, tier: int, base_b: int) -> int:
+	if _city_bld_counts[base_b + BuildingType.DOCK] < 1 and _is_city_coastal(cid):
+		return BuildingType.DOCK
+	if _city_bld_counts[base_b + BuildingType.BARRACKS] < 1:
+		return BuildingType.BARRACKS
+	if _city_bld_counts[base_b + BuildingType.DEFENSE_TURRET] < 2:
+		return BuildingType.DEFENSE_TURRET
+	if _city_bld_counts[base_b + BuildingType.TRADE_HUB] < 1:
+		return BuildingType.TRADE_HUB
+	if _city_bld_counts[base_b + BuildingType.ARCHIVE] < 1:
+		return BuildingType.ARCHIVE
+	if tier >= 4 and _city_bld_counts[base_b + BuildingType.MONOLITH] < 1 and _city_zones_count[cid] >= 12:
+		return BuildingType.MONOLITH
+	return -1
 
 
 func _try_start_tent_upgrade(city_id: int) -> bool:
@@ -1864,6 +2190,9 @@ func _start_next_project(city_id: int) -> void:
 		_clear_project_to_fallback(city_id, prev_pos, fallback_pos)
 		return
 	var spot: Vector2 = _find_building_spot(city_id, next_t)
+	if spot.x < 0.0 and next_t == BuildingType.DOCK:
+		next_t = BuildingType.BARRACKS
+		spot = _find_building_spot(city_id, next_t)
 	if spot.x < 0.0:
 		_clear_project_to_fallback(city_id, prev_pos, fallback_pos)
 		return
@@ -1883,8 +2212,22 @@ func _clear_project_to_fallback(city_id: int, prev_pos: Vector2, fallback_pos: V
 		_light_goals_dirty = true
 
 
-func _building_max_hp(bld_type: int, faction_id: int) -> float:
-	var base_hp: float = 180.0 if bld_type == BuildingType.QUANTUM_GATE else (140.0 if bld_type == BuildingType.SHIELD_PYLON else (120.0 if bld_type >= BuildingType.BIODOME else 100.0))
+func _building_max_hp(bld_type: int, faction_id: int, level: int = 0) -> float:
+	var base_hp: float = 100.0
+	if bld_type == BuildingType.MONOLITH:
+		base_hp = 210.0
+	elif bld_type == BuildingType.QUANTUM_GATE:
+		base_hp = 180.0
+	elif bld_type == BuildingType.DEFENSE_TURRET:
+		base_hp = 155.0
+	elif bld_type == BuildingType.SHIELD_PYLON:
+		base_hp = 140.0
+	elif bld_type == BuildingType.ARCHIVE or bld_type == BuildingType.TRADE_HUB or bld_type == BuildingType.BARRACKS or bld_type == BuildingType.DOCK:
+		base_hp = 130.0
+	elif bld_type >= BuildingType.BIODOME:
+		base_hp = 120.0
+	if level > 0:
+		base_hp *= (1.0 + 0.35 * float(level))
 	if faction_id == Faction.ROBOT:
 		return base_hp * 1.15
 	if faction_id == Faction.SPORE:
@@ -1897,7 +2240,8 @@ func _city_housing_cap(city_id: int) -> int:
 	var tents: int = _city_bld_counts[base_b + BuildingType.TENT]
 	var depots: int = _city_bld_counts[base_b + BuildingType.DEPOT]
 	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
-	var cap: int = 8 + tents * 4 + domes * 8
+	var extra: int = _city_bld_counts[base_b + BuildingType.BARRACKS] * 2 + _city_bld_counts[base_b + BuildingType.DOCK] * 2
+	var cap: int = 8 + tents * 4 + domes * 8 + extra
 	if int(_city_faction[city_id]) == Faction.ROBOT:
 		cap += depots * 4
 	return cap
@@ -1908,10 +2252,16 @@ func step_civ(dt: float) -> void:
 	var safe_dt: float = clampf(dt, 0.0, 0.25)
 	if safe_dt <= 0.0:
 		return
+	if _world != null and _territory._w_cache_owner != _world:
+		_territory._refresh_world_byte_caches(self)
 	var pace_dt: float = safe_dt * _sim_pace_mult
 	_sim_time += safe_dt
 	_sim_tick_idx += 1
 	_border_flush_cd = maxf(0.0, _border_flush_cd - safe_dt)
+	_drill_pace_acc += pace_dt
+	if _drill_cache_dirty or (_sim_tick_idx & 3) == 0:
+		_step_drill_depletion_pass(_drill_pace_acc)
+		_drill_pace_acc = 0.0
 
 	for cid in range(_max_cities):
 		if _city_active[cid] != 0:
@@ -1920,26 +2270,38 @@ func step_civ(dt: float) -> void:
 	_step_world_timers(safe_dt, pace_dt)
 	_step_shuttles(pace_dt)
 	_diplomacy.step_expeditions(self, pace_dt)
+	if _meta != null:
+		_meta.step_meta_and_fleet(self, safe_dt, pace_dt)
 	_step_shield_pylons(pace_dt)
 	var springs_moved: bool = _step_building_springs(safe_dt) if _has_bld_springs else false
-	_territory.flush_dirty_borders(self, false)
+	if _border_dirty:
+		_territory.flush_dirty_borders(self, false)
 
-	var anim_hz: float = 4.0 if _sim_pace_mult >= 10.0 else 8.0
+	var anim_hz: float = 2.0 if _sim_pace_mult >= 10.0 else 8.0
 	var anim_step: int = int(floor(_sim_time * anim_hz))
-	var has_dyn: bool = (_bld_count > 0 or _ruin_count > 0 or _shuttle_count > 0)
-	if _buildings_dirty or springs_moved or (has_dyn and anim_step != _bld_anim_step):
+	var ships_n: int = _meta.get_ship_count() if _meta != null else 0
+	var has_dyn: bool = (_bld_count > 0 or _ruin_count > 0 or _shuttle_count > 0 or ships_n > 0)
+	if _buildings_dirty or (has_dyn and anim_step != _bld_anim_step):
 		_sync_buildings_multimesh(_buildings_dirty)
 		_buildings_dirty = false
 		_bld_anim_step = anim_step
-	_push_goal_buffers()
+	elif springs_moved:
+		_sync_spring_buildings_only()
+		if ships_n > 0 and _sim_pace_mult < 10.0 and _shuttle_count == 0:
+			_sync_ships_tail_mm()
+	elif ships_n > 0 and _sim_pace_mult < 10.0 and _shuttle_count == 0:
+		_sync_ships_tail_mm()
+	if _goals_dirty or _light_goals_dirty or _goal_buffers.is_empty():
+		_push_goal_buffers()
 
 
 func _step_world_timers(safe_dt: float, pace_dt: float) -> void:
 	var raw_hi: bool = _sim_pace_mult >= 10.0
 	_env_check_timer -= safe_dt
 	if _env_check_timer <= 0.0:
-		_env_check_timer = 0.50
-		_step_buildings_environment(0.50)
+		var env_dt: float = 0.65 if raw_hi else 0.50
+		_env_check_timer = env_dt
+		_step_buildings_environment(env_dt)
 
 	_clash_raw_cd = maxf(0.0, _clash_raw_cd - safe_dt)
 	_clash_pace_acc += pace_dt
@@ -2052,13 +2414,54 @@ func _step_single_city(cid: int, pace_dt: float) -> void:
 	_step_city_construction(cid, pace_dt)
 	_step_city_tech_check(cid, pace_dt)
 	_step_city_expansion(cid, pace_dt)
-	_diplomacy.step_city_loyalty(self, cid, pace_dt)
+	_step_spore_creep(cid, pace_dt)
+	if ((_sim_tick_idx + cid) & 1) == 0:
+		_diplomacy.step_city_loyalty(self, cid, pace_dt * 2.0)
 	_step_city_pop_growth(cid, pace_dt)
 
 	var e_spent_step: float = _city_energy_spend_acc[cid]
 	_city_energy_spend_acc[cid] = 0.0
 	var inst_e_net: float = (e_gain - e_spent_step) / maxf(0.001, pace_dt)
 	_city_energy_net[cid] = lerpf(_city_energy_net[cid], inst_e_net, minf(1.0, pace_dt * 0.5))
+
+
+func _step_drill_depletion_pass(pace_dt: float) -> void:
+	if _drill_cache_dirty:
+		_drill_cache_dirty = false
+		_drill_indices.clear()
+		for bi in range(_bld_count):
+			if int(_bld_type[bi]) == BuildingType.DRILL:
+				_drill_indices.append(bi)
+	if _drill_indices.is_empty():
+		if _drill_active_cnt != 0:
+			_city_drill_dep_mul.fill(1.0)
+			_drill_active_cnt = 0
+		return
+	_drill_active_cnt = _drill_indices.size()
+	_tmp_city_drill_cnt.fill(0)
+	_tmp_city_drill_sum.fill(0.0)
+	var dep_step: float = 0.035 * pace_dt
+	for di in range(_drill_indices.size()):
+		var bi: int = _drill_indices[di]
+		var cid: int = _bld_city_id[bi]
+		if cid < 0 or cid >= _max_cities:
+			continue
+		var zx: int = clampi(int(floor(_bld_pos[bi].x / float(_zone_px))), 0, _zone_w - 1)
+		var zy: int = clampi(int(floor(_bld_pos[bi].y / float(_zone_px))), 0, _zone_h - 1)
+		var zidx: int = zy * _zone_w + zx
+		var ore_v: int = _zone_ore[zidx]
+		if ore_v > 0:
+			_zone_ore_frac[zidx] += dep_step
+			if _zone_ore_frac[zidx] >= 1.0:
+				var drop: int = mini(ore_v, int(floor(_zone_ore_frac[zidx])))
+				_zone_ore[zidx] -= drop
+				_zone_ore_frac[zidx] -= float(drop)
+		_tmp_city_drill_cnt[cid] += 1
+		var vein_mul: float = clampf(0.55 + float(_zone_ore[zidx]) * 0.13, 0.55, 1.0) if _zone_ore[zidx] > 0 else 0.55
+		_tmp_city_drill_sum[cid] += vein_mul
+	for cid in range(_max_cities):
+		if _city_active[cid] != 0:
+			_city_drill_dep_mul[cid] = (_tmp_city_drill_sum[cid] / float(_tmp_city_drill_cnt[cid])) if _tmp_city_drill_cnt[cid] > 0 else 1.0
 
 
 func _step_city_economy(cid: int, pace_dt: float) -> float:
@@ -2072,6 +2475,9 @@ func _step_city_economy(cid: int, pace_dt: float) -> float:
 	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
 	var reactors: int = _city_bld_counts[base_b + BuildingType.FUSION_REACTOR]
 	var tents: int = _city_bld_counts[base_b + BuildingType.TENT]
+	var hubs: int = _city_bld_counts[base_b + BuildingType.TRADE_HUB]
+	var archives: int = _city_bld_counts[base_b + BuildingType.ARCHIVE]
+	var monoliths: int = _city_bld_counts[base_b + BuildingType.MONOLITH]
 
 	var ore_mult: float = 1.0
 	var rad_e: float = 0.0
@@ -2085,6 +2491,28 @@ func _step_city_economy(cid: int, pace_dt: float) -> float:
 			ore_mult = 1.28
 		rad_e = maxf(0.0, center_rad) * _k_robot_rad_gain * (1.0 + float(solars) * 0.35)
 
+	var depleted_mul: float = _city_drill_dep_mul[cid] if drills > 0 else 1.0
+	var ore_gain: float = (float(drills) * 0.75 + (0.10 if drills == 0 else 0.0)) * depleted_mul * ore_mult * pace_dt
+	var ore_pool: float = _city_ore[cid] + ore_gain
+	var reactor_ore_need: float = float(reactors) * 0.22 * pace_dt
+	var reactor_ore_used: float = minf(ore_pool, reactor_ore_need)
+	var reactor_e: float = 0.0
+	if reactors > 0:
+		var r_frac: float = clampf(reactor_ore_used / maxf(reactor_ore_need, 0.0001), 0.0, 1.0)
+		reactor_e = float(reactors) * lerpf(2.5, 12.0, r_frac) * pace_dt
+
+	var wood_burn: float = minf(_city_wood[cid], float(campfires) * 0.10 * pace_dt) if (f_id != Faction.ROBOT and campfires > 0) else 0.0
+	_city_wood[cid] = maxf(0.0, _city_wood[cid] - wood_burn)
+	var cf_rate: float = 0.85 if f_id == Faction.ROBOT else (0.50 if wood_burn > 0.0 else 0.25)
+	var solar_boost: float = _solar_mul * (1.18 if (f_id == Faction.ROBOT and int(_city_tech_tier[cid]) >= 5) else 1.0)
+	var energy_gain: float = (float(campfires) * cf_rate + float(solars) * 2.5 * solar_boost + rad_e) * pace_dt + reactor_e
+	var e_avail: float = _city_energy[cid] + energy_gain
+	var dome_need: float = float(domes) * 0.65 * pace_dt
+	var dome_e_spent: float = minf(e_avail, dome_need)
+	_city_energy_spend_acc[cid] += dome_e_spent
+	var dome_eff: float = (dome_e_spent / dome_need) if dome_need > 0.0001 else 1.0
+	_city_dome_powered[cid] = 1 if (domes <= 0 or dome_eff >= 0.45) else 0
+
 	var farm_food: float = 0.0
 	if int(_city_tech_tier[cid]) >= 1 and f_id != Faction.ROBOT:
 		if _city_farm_scan_cd[cid] > 0.0:
@@ -2093,17 +2521,16 @@ func _step_city_economy(cid: int, pace_dt: float) -> float:
 		else:
 			farm_food = _territory.step_city_farms(self, cid, Vector2(pace_dt, _crop_mul))
 	var forage_food: float = 0.25 * pace_dt if (f_id != Faction.ROBOT and campfires > 0) else 0.0
-	var food_gain: float = (float(domes) * 1.45 * _crop_mul * pace_dt + farm_food + forage_food) if f_id != Faction.ROBOT else 0.0
+	var food_gain: float = (float(domes) * 1.45 * dome_eff * _crop_mul * pace_dt + farm_food + forage_food) if f_id != Faction.ROBOT else 0.0
 	var food_upkeep: float = (float(pop - 6) * (0.04 if f_id == Faction.HUMAN else 0.028) * pace_dt) if (f_id != Faction.ROBOT and pop > 6) else 0.0
+	var sci_gain: float = (0.10 + float(pop) * 0.022 + float(tents) * 0.04 + float(domes) * 0.22 + float(reactors) * 0.55 + float(archives) * 0.30 + float(monoliths) * 0.45) * pace_dt
+	var credit_gain: float = (float(hubs) * 0.85 + float(pop) * 0.015 + float(int(_city_tech_tier[cid])) * 0.08) * pace_dt
 
-	var ore_gain: float = (float(drills) * 1.65 + (0.28 if drills == 0 else 0.0)) * ore_mult * pace_dt
-	var energy_gain: float = (float(campfires) * (0.85 if f_id == Faction.ROBOT else 0.50) + float(solars) * 2.5 * _solar_mul + float(reactors) * 10.0 + rad_e) * pace_dt
-	var sci_gain: float = (0.35 + float(pop) * 0.06 + float(tents) * 0.12 + float(domes) * 0.45 + float(reactors) * 0.90) * pace_dt
-
-	_city_ore[cid] = minf(cap, _city_ore[cid] + ore_gain)
+	_city_ore[cid] = minf(cap, maxf(0.0, ore_pool - reactor_ore_used))
 	_city_food[cid] = clampf(_city_food[cid] + food_gain - food_upkeep, 0.0, cap)
-	_city_energy[cid] = minf(cap, _city_energy[cid] + energy_gain)
-	_city_science[cid] = minf(maxf(cap * 5.0, 2500.0), _city_science[cid] + sci_gain)
+	_city_energy[cid] = minf(cap, maxf(0.0, e_avail - dome_e_spent))
+	_city_credits[cid] = minf(cap * 2.0, _city_credits[cid] + credit_gain)
+	_add_city_science(cid, sci_gain)
 	return energy_gain
 
 
@@ -2111,7 +2538,9 @@ func _step_city_expansion(cid: int, pace_dt: float) -> void:
 	_city_expand_timer[cid] -= pace_dt
 	if _city_expand_timer[cid] > 0.0:
 		return
-	if _city_zones_count[cid] >= 36:
+	var tier: int = int(_city_tech_tier[cid])
+	var zone_cap: int = 36 + maxi(0, tier - 2) * 12
+	if _city_zones_count[cid] >= zone_cap:
 		_city_expand_timer[cid] = maxf(20.0, pace_dt * 10.0)
 		return
 	var f_id: int = int(_city_faction[cid])
@@ -2134,6 +2563,21 @@ func _step_city_expansion(cid: int, pace_dt: float) -> void:
 			_city_expand_timer[cid] = maxf(6.0, pace_dt * 6.0)
 	else:
 		_city_expand_timer[cid] = maxf(6.0, pace_dt * 6.0)
+
+
+func _step_spore_creep(cid: int, pace_dt: float) -> void:
+	if int(_city_faction[cid]) != Faction.SPORE or int(_city_tech_tier[cid]) < 2:
+		return
+	_city_spore_creep_cd[cid] -= pace_dt
+	if _city_spore_creep_cd[cid] > 0.0:
+		return
+	var mult: float = 0.72 if int(_city_tech_tier[cid]) >= 5 else 1.0
+	_city_spore_creep_cd[cid] = maxf(_k_spore_creep_int * mult, pace_dt * 4.0)
+	if _city_zones_count[cid] >= 36 + maxi(0, int(_city_tech_tier[cid]) - 2) * 14:
+		return
+	if _territory.try_spore_creep_zone(self, cid):
+		_ecology_events_sent_total += 1
+		_refresh_city_targets(cid)
 
 
 func _step_city_construction(cid: int, pace_dt: float) -> void:
@@ -2163,8 +2607,8 @@ func _step_city_construction(cid: int, pace_dt: float) -> void:
 	if (req_energy > 0.0 and _city_energy[cid] < minf(req_energy * 0.2, 0.4)) or (mat_avail < req_ore * 0.2 and _city_proj_prog[cid] <= 0.15 and not (ptype == BuildingType.DRILL and drills == 0)):
 		return
 
-	# Drain buffered builder work at a capped physical rate so buildings take 12-22s at 1x and NEVER complete without builders.
-	var drain_mul: float = 2.6 if _sim_pace_mult >= 10.0 else 1.35
+	# Drain buffered builder work at a capped physical rate so buildings take 8.5-22s at 1x and NEVER complete without builders.
+	var drain_mul: float = 3.5 if _sim_pace_mult >= 10.0 else 1.65
 	var drain: float = minf(_city_proj_work[cid], pace_dt * drain_mul)
 	_city_proj_work[cid] -= drain
 	var prog_step: float = drain / maxf(build_dur, 1.0)
@@ -2193,7 +2637,7 @@ func _complete_city_project(cid: int, ptype: int, req_ore: float, req_energy: fl
 		_city_energy[cid] -= e_done
 		_city_energy_spend_acc[cid] += e_done
 		_place_building(cid, ptype, bspot, false)
-		_city_science[cid] += 12.0
+		_add_city_science(cid, 12.0)
 		_recompute_city_tech(cid)
 
 	_city_proj_type[cid] = -1
@@ -2220,7 +2664,8 @@ func _step_city_tech_check(cid: int, pace_dt: float) -> void:
 	if (tier == 0 and age >= _k_tier1_age) \
 		or (tier == 1 and age >= _k_tier2_age) \
 		or (tier == 2 and age >= _k_tier3_age) \
-		or (tier == 3 and age >= _k_tier4_age):
+		or (tier == 3 and age >= _k_tier4_age) \
+		or (tier == 4 and age >= 1650.0):
 		_recompute_city_tech(cid)
 
 
@@ -2238,7 +2683,8 @@ func _step_city_pop_growth(cid: int, pace_dt: float) -> void:
 
 	var can_grow: bool = false
 	if f_id == Faction.ROBOT:
-		if _city_ore[cid] >= 7.0 and _city_energy[cid] >= 6.0:
+		var hold_for_pylon: bool = _city_proj_type[cid] == BuildingType.SHIELD_PYLON and (_city_ore[cid] < 20.0 or _city_energy[cid] < 10.0)
+		if not hold_for_pylon and _city_ore[cid] >= 7.0 and _city_energy[cid] >= 6.0:
 			_city_ore[cid] -= 5.0
 			_city_energy[cid] -= 5.0
 			_city_energy_spend_acc[cid] += 5.0
@@ -2292,6 +2738,13 @@ func _step_buildings_environment(dt: float) -> void:
 	var has_fire_api: bool = _world_has_get_fire
 	var has_moist_api: bool = _world_has_get_moisture
 	var spore_fire_mul: float = _k_spore_fire_mul
+	var mw: int = _map_w
+	var mh: int = _map_h
+	var biomes_c: PackedByteArray = _territory._w_biomes_cache
+	var has_biomes_c: bool = (_territory._w_cache_owner == _world and biomes_c.size() == mw * mh)
+	var dome_r2: float = _k_dome_prot_r * _k_dome_prot_r
+	var domes_ready: bool = false
+	var dome_spots: PackedVector2Array
 	var meltdowns: Array[Vector2] = []
 	var melt_cids: Array[int] = []
 	var touched_cities: Dictionary = {}
@@ -2299,17 +2752,27 @@ func _step_buildings_environment(dt: float) -> void:
 	var bi: int = _bld_count - 1
 	while bi >= 0:
 		var bpos: Vector2 = _bld_pos[bi]
-		var bpx: int = clampi(int(floor(bpos.x)), 0, _map_w - 1)
-		var bpy: int = clampi(int(floor(bpos.y)), 0, _map_h - 1)
+		var bpx: int = clampi(int(floor(bpos.x)), 0, mw - 1)
+		var bpy: int = clampi(int(floor(bpos.y)), 0, mh - 1)
 		var cid: int = _bld_city_id[bi]
 		var fid: int = int(_city_faction[clampi(cid, 0, _max_cities - 1)])
-		var fire_val: float = float(_world.call("get_fire", bpx, bpy)) if has_fire_api else 0.0
-		var biome: int = _world.get_biome(bpx, bpy)
+		var fire_val: float = _world.get_fire(bpx, bpy) if has_fire_api else 0.0
+		var biome: int = int(biomes_c[bpy * mw + bpx]) if has_biomes_c else _world.get_biome(bpx, bpy)
 		var temp_c: float = _world.get_temp(bpx, bpy)
 		var env_dmg: float = _calc_bld_env_dmg(biome, fire_val, temp_c, fid, spore_fire_mul, dt)
 		if env_dmg > 0.0:
-			if _has_active_dome_near(bpos) and biome != BIOME_LAVA:
-				env_dmg *= 0.60
+			if biome != BIOME_LAVA:
+				if not domes_ready:
+					domes_ready = true
+					for di in range(_bld_count):
+						if int(_bld_type[di]) == BuildingType.BIODOME:
+							var dcid: int = _bld_city_id[di]
+							if dcid < 0 or dcid >= _max_cities or _city_dome_powered[dcid] != 0:
+								dome_spots.append(_bld_pos[di])
+				for dp in dome_spots:
+					if dp.distance_squared_to(bpos) <= dome_r2:
+						env_dmg *= 0.60
+						break
 			_bld_hp[bi] -= env_dmg
 			if cid >= 0 and cid < _max_cities:
 				_city_damaged_blds[cid] = 1
@@ -2324,7 +2787,7 @@ func _step_buildings_environment(dt: float) -> void:
 					melt_cids.append(cid)
 				_remove_building(bi)
 		elif fid == Faction.SPORE:
-			var moist: float = float(_world.call("get_moisture", bpx, bpy)) if has_moist_api else 0.3
+			var moist: float = _world.get_moisture(bpx, bpy) if has_moist_api else 0.3
 			if biome == BIOME_LUSH or moist >= 0.45:
 				var max_hp: float = _building_max_hp(int(_bld_type[bi]), fid)
 				if _bld_hp[bi] < max_hp:
@@ -2483,7 +2946,7 @@ func _step_ruins_salvage() -> void:
 			_ruin_ore[ri] -= ore_c
 			_ruin_sci[ri] -= sci_c
 			_city_ore[claimer] = minf(_city_storage_cap[claimer], _city_ore[claimer] + ore_c)
-			_city_science[claimer] = minf(_city_storage_cap[claimer] * 4.0, _city_science[claimer] + sci_c)
+			_add_city_science(claimer, sci_c)
 			_total_harvested += ore_c + sci_c
 			_city_tech_dirty[claimer] = 1
 			if _ruin_ore[ri] <= 0.25 and _ruin_sci[ri] <= 0.25:
@@ -2517,7 +2980,7 @@ func salvage_ruins_near(world_pos: Vector2, radius: float = 28.0) -> Dictionary:
 		ri -= 1
 	if best_cid >= 0 and count_salvaged > 0:
 		_city_ore[best_cid] = minf(_city_storage_cap[best_cid], _city_ore[best_cid] + total_ore)
-		_city_science[best_cid] = minf(_city_storage_cap[best_cid] * 4.0, _city_science[best_cid] + total_sci)
+		_add_city_science(best_cid, total_sci)
 		_total_harvested += total_ore + total_sci
 		_city_tech_dirty[best_cid] = 1
 	return {"salvaged": count_salvaged, "ore": total_ore, "science": total_sci, "city_id": best_cid}
@@ -2583,11 +3046,14 @@ func _launch_supply_shuttle(src: int, dst: int, speed_px: float) -> void:
 		if _bld_city_id[bi] == src and _bld_type[bi] == BuildingType.LAUNCHPAD:
 			launch_pos = _bld_pos[bi]
 			break
-	if _city_food[src] > 40.0:
-		_city_food[src] = maxf(0.0, _city_food[src] - 15.0)
-	if _city_ore[src] > 40.0:
-		_city_ore[src] = maxf(0.0, _city_ore[src] - 15.0)
-	_city_energy[src] = maxf(0.0, _city_energy[src] - minf(6.0, _city_energy[src] * 0.25))
+	var load_food: float = clampf(_city_food[src] - 25.0, 0.0, _k_supply_food)
+	var load_ore: float = clampf(_city_ore[src] - 32.0, 0.0, _k_supply_ore)
+	var load_energy: float = clampf(_city_energy[src] - 16.0, 0.0, _k_supply_energy)
+	var launch_fuel: float = minf(4.0, maxf(0.0, _city_energy[src] - load_energy - 8.0) * 0.25)
+	_city_food[src] = maxf(0.0, _city_food[src] - load_food)
+	_city_ore[src] = maxf(0.0, _city_ore[src] - load_ore)
+	_city_energy[src] = maxf(0.0, _city_energy[src] - load_energy - launch_fuel)
+	_city_energy_spend_acc[src] += launch_fuel
 	_city_shuttle_cd[src] = 10.0
 	_city_shuttles_launched[src] += 1
 	_total_shuttles_launched += 1
@@ -2605,6 +3071,9 @@ func _launch_supply_shuttle(src: int, dst: int, speed_px: float) -> void:
 	_shuttle_trail_t[sidx] = 0.0
 	_shuttle_kind[sidx] = SHUTTLE_KIND_SUPPLY
 	_shuttle_target_city[sidx] = dst
+	_shuttle_cargo_food[sidx] = load_food
+	_shuttle_cargo_ore[sidx] = load_ore
+	_shuttle_cargo_energy[sidx] = load_energy
 	_buildings_dirty = true
 
 
@@ -2642,9 +3111,9 @@ func _on_shuttle_landed(si: int) -> void:
 		var tcid: int = _shuttle_target_city[si]
 		if tcid >= 0 and tcid < _max_cities and _city_active[tcid] != 0:
 			var cap: float = _city_storage_cap[tcid]
-			_city_food[tcid] = minf(cap, _city_food[tcid] + _k_supply_food)
-			_city_ore[tcid] = minf(cap, _city_ore[tcid] + _k_supply_ore)
-			_city_energy[tcid] = minf(cap, _city_energy[tcid] + _k_supply_energy)
+			_city_food[tcid] = minf(cap, _city_food[tcid] + _shuttle_cargo_food[si])
+			_city_ore[tcid] = minf(cap, _city_ore[tcid] + _shuttle_cargo_ore[si])
+			_city_energy[tcid] = minf(cap, _city_energy[tcid] + _shuttle_cargo_energy[si])
 			_supply_deliveries += 1
 	else:
 		var src_cid: int = _shuttle_src_city[si]
@@ -2665,6 +3134,9 @@ func _remove_shuttle(si: int) -> void:
 		_shuttle_trail_t[si] = _shuttle_trail_t[last]
 		_shuttle_kind[si] = _shuttle_kind[last]
 		_shuttle_target_city[si] = _shuttle_target_city[last]
+		_shuttle_cargo_food[si] = _shuttle_cargo_food[last]
+		_shuttle_cargo_ore[si] = _shuttle_cargo_ore[last]
+		_shuttle_cargo_energy[si] = _shuttle_cargo_energy[last]
 	_shuttle_count = last
 
 
@@ -2689,11 +3161,15 @@ func _step_shield_pylons(pace_dt: float) -> void:
 		var ch: float = _bld_shield_charge[i]
 		if ch < 1.0:
 			var cid: int = clampi(_bld_city_id[i], 0, _max_cities - 1)
-			var e_mul: float = clampf(0.5 + _city_energy[cid] * 0.04, 0.5, 2.0)
-			var new_ch: float = minf(1.0, ch + base_rate * solar_boost * e_mul * pace_dt)
-			_bld_shield_charge[i] = new_ch
-			if ch < 0.25 and new_ch >= 0.25:
-				_buildings_dirty = true
+			var full_e: float = 0.45 * pace_dt
+			var take_e: float = minf(full_e, _city_energy[cid])
+			if take_e > 0.001 and consume_city_energy(cid, take_e):
+				var e_mul: float = clampf(0.5 + _city_energy[cid] * 0.04, 0.5, 2.0)
+				var ratio: float = clampf(take_e / maxf(full_e, 0.0001), 0.0, 1.0)
+				var new_ch: float = minf(1.0, ch + base_rate * solar_boost * e_mul * pace_dt * ratio)
+				_bld_shield_charge[i] = new_ch
+				if ch < 0.25 and new_ch >= 0.25:
+					_buildings_dirty = true
 
 
 func _step_building_springs(dt: float) -> bool:
@@ -2703,6 +3179,7 @@ func _step_building_springs(dt: float) -> bool:
 		for bi in range(_bld_count):
 			if _bld_shake[bi] > 0.0 or absf(_bld_spring[bi] - 1.0) > 0.002 or absf(_bld_spring_vel[bi]) > 0.002:
 				_spring_indices.append(bi)
+	_spring_dirty_ids.clear()
 	if _spring_indices.is_empty():
 		_has_bld_springs = false
 		return false
@@ -2720,11 +3197,13 @@ func _step_building_springs(dt: float) -> bool:
 			si -= 1
 			continue
 		var active_b: bool = false
+		var b_moved: bool = false
 		var sh: float = _bld_shake[i]
 		if sh > 0.0:
 			var next_sh: float = maxf(0.0, sh - dt * 2.5)
 			_bld_shake[i] = next_sh
 			moved = true
+			b_moved = true
 			if next_sh > 0.0:
 				active_b = true
 		var sp: float = _bld_spring[i]
@@ -2740,6 +3219,9 @@ func _step_building_springs(dt: float) -> bool:
 			_bld_spring[i] = clampf(sp, 0.08, 1.35)
 			_bld_spring_vel[i] = sv
 			moved = true
+			b_moved = true
+		if b_moved:
+			_spring_dirty_ids.append(i)
 		if not active_b:
 			var last_idx: int = _spring_indices.size() - 1
 			if si != last_idx:
@@ -2751,6 +3233,24 @@ func _step_building_springs(dt: float) -> bool:
 	return moved
 
 
+func _is_bld_anim_frame_active(btype: int, ph: float) -> bool:
+	match btype:
+		BuildingType.CAMPFIRE:
+			return (int(floor(_sim_time * 8.0 + ph)) & 1) == 1
+		BuildingType.DRILL:
+			return (int(floor(_sim_time * 4.5 + ph)) & 1) == 1
+		BuildingType.DEPOT:
+			return (int(floor(_sim_time * 1.6 + ph)) & 1) == 1
+		BuildingType.SOLAR_ARRAY:
+			return fmod(_sim_time + ph, 4.0) > 3.2
+		BuildingType.FUSION_REACTOR:
+			return (int(floor(_sim_time * 3.0 + ph)) & 1) == 1
+		BuildingType.BIODOME, BuildingType.TENT:
+			return (int(floor(_sim_time * 2.2 + ph)) & 1) == 1
+		_:
+			return false
+
+
 func _building_anim_col(i: int, btype: int) -> int:
 	var ph: float = _bld_phase[i]
 	var hp: float = _bld_hp[i]
@@ -2758,88 +3258,124 @@ func _building_anim_col(i: int, btype: int) -> int:
 	var f_id: int = int(_city_faction[cid])
 	var m_hp: float = _building_max_hp(btype, f_id)
 	var damaged: bool = hp < m_hp * 0.62
+	var max_col: int = maxi(0, _bld_atlas_cols - 1)
 
+	if btype == BuildingType.CAMPFIRE and _bld_level[i] >= 1:
+		var hq_col: int = BLD_COL_HQ_L2_HUMAN + clampi(f_id, 0, 2)
+		if hq_col <= max_col:
+			return hq_col
 	if btype == BuildingType.SHIELD_PYLON:
-		return BLD_COL_SHIELD_ACTIVE if (_bld_shield_flash[i] > 0.05 or (_bld_shield_charge[i] >= _k_shield_min_ch and fmod(_sim_time * 1.4 + ph, 2.0) > 1.0)) else BLD_COL_SHIELD
+		var sh_c: int = BLD_COL_SHIELD_ACTIVE if (_bld_shield_flash[i] > 0.05 or (_bld_shield_charge[i] >= _k_shield_min_ch and fmod(_sim_time * 1.4 + ph, 2.0) > 1.0)) else BLD_COL_SHIELD
+		return clampi(sh_c, 0, max_col)
 	if btype == BuildingType.QUANTUM_GATE:
-		return BLD_COL_QUANTUM_GATE if (_city_emp_timer[cid] > 0.0 or _city_energy[cid] < 2.0) else BLD_COL_QUANTUM_GATE_ACTIVE
+		var q_c: int = BLD_COL_QUANTUM_GATE if (_city_emp_timer[cid] > 0.0 or _city_energy[cid] < 2.0) else BLD_COL_QUANTUM_GATE_ACTIVE
+		return clampi(q_c, 0, max_col)
 	if btype == BuildingType.BIODOME and damaged and f_id != Faction.SPORE:
-		return BLD_COL_BIODOME_DAMAGED
+		return clampi(BLD_COL_BIODOME_DAMAGED, 0, max_col)
 	if btype == BuildingType.LAUNCHPAD and damaged:
-		return BLD_COL_LAUNCHPAD_SCORCHED
+		return clampi(BLD_COL_LAUNCHPAD_SCORCHED, 0, max_col)
+	if btype == BuildingType.LAUNCHPAD and int(_city_tech_tier[cid]) >= 5:
+		var t5_col: int = BLD_COL_HUMAN_ARK_SPIRE if f_id == Faction.HUMAN else (BLD_COL_ROBOT_MIRROR_NODE if f_id == Faction.ROBOT else BLD_COL_SPORE_LEVIATHAN_HEART)
+		return clampi(t5_col, 0, max_col)
 	if btype == BuildingType.LAUNCHPAD and _city_has_active_shuttle(cid) and f_id == Faction.HUMAN:
-		return BLD_COL_LAUNCHPAD_EMPTY
+		return clampi(BLD_COL_LAUNCHPAD_EMPTY, 0, max_col)
+
+	if f_id == Faction.HUMAN:
+		var anim_on: bool = _is_bld_anim_frame_active(btype, ph)
+		if anim_on:
+			match btype:
+				BuildingType.CAMPFIRE:
+					return clampi(8, 0, max_col)
+				BuildingType.DRILL:
+					return clampi(10, 0, max_col)
+				BuildingType.DEPOT:
+					return clampi(11, 0, max_col)
+				BuildingType.SOLAR_ARRAY:
+					return clampi(12, 0, max_col)
+				BuildingType.FUSION_REACTOR:
+					return clampi(14, 0, max_col)
+		return clampi(int(BLD_COLS_HUMAN[clampi(btype, 0, BLD_TYPE_COUNT - 1)]), 0, max_col)
 	if f_id == Faction.ROBOT:
-		return int(BLD_COLS_ROBOT[clampi(btype, 0, BLD_TYPE_COUNT - 1)])
-	if f_id == Faction.SPORE:
-		return int(BLD_COLS_SPORE[clampi(btype, 0, BLD_TYPE_COUNT - 1)])
-
-	match btype:
-		BuildingType.CAMPFIRE:
-			return 8 if (int(floor(_sim_time * 8.0 + ph)) & 1) == 1 else 0
-		BuildingType.DRILL:
-			return 10 if (int(floor(_sim_time * 4.5 + ph)) & 1) == 1 else 2
-		BuildingType.DEPOT:
-			return 11 if (int(floor(_sim_time * 1.6 + ph)) & 1) == 1 else 3
-		BuildingType.SOLAR_ARRAY:
-			return 12 if fmod(_sim_time + ph, 4.0) > 3.2 else 4
-		BuildingType.FUSION_REACTOR:
-			return 14 if (int(floor(_sim_time * 3.0 + ph)) & 1) == 1 else 6
-		_:
-			return int(BLD_COLS_HUMAN[clampi(btype, 0, BLD_TYPE_COUNT - 1)])
+		return clampi(int(BLD_COLS_ROBOT[clampi(btype, 0, BLD_TYPE_COUNT - 1)]), 0, max_col)
+	return clampi(int(BLD_COLS_SPORE[clampi(btype, 0, BLD_TYPE_COUNT - 1)]), 0, max_col)
 
 
-func _sync_buildings_multimesh(_full_sync: bool = true) -> void:
+func _sync_buildings_multimesh(full_sync: bool = true) -> void:
 	if _mm_buildings == null or _mm_buildings.multimesh == null:
 		return
 	var mm: MultiMesh = _mm_buildings.multimesh
 	var cap_inst: int = mm.instance_count
-	var smm: MultiMesh = _mm_bld_shadows.multimesh if _mm_bld_shadows != null else null
-	var sh_cap: int = smm.instance_count if smm != null else 0
 	var anchor_off := Vector2(0.0, -BUILDING_CELL_PX * 0.5)
-	var counts := Vector2i(0, 0) # (slot_i, sh_i)
-
-	counts = _write_buildings_mm(mm, smm, cap_inst, sh_cap, anchor_off, counts)
-	counts = _write_scaffolds_mm(mm, smm, cap_inst, sh_cap, anchor_off, counts)
-	counts = _write_ruins_mm(mm, smm, cap_inst, sh_cap, anchor_off, counts)
-	counts = _write_shuttles_mm(mm, smm, cap_inst, sh_cap, counts)
-	mm.visible_instance_count = counts.x
-	if smm != null:
-		smm.visible_instance_count = counts.y
-
-
-func _write_buildings_mm(mm: MultiMesh, smm: MultiMesh, cap_inst: int, sh_cap: int, anchor_off: Vector2, counts: Vector2i) -> Vector2i:
-	var slot_i: int = counts.x
-	var sh_i: int = counts.y
-	for i in range(_bld_count):
-		if slot_i >= cap_inst:
-			break
-		var btype: int = int(_bld_type[i])
-		var col_idx: int = _building_anim_col(i, btype)
-		var shake_val: float = _bld_shake[i]
-		if btype == BuildingType.DRILL and (col_idx == 10 or col_idx == 20):
-			shake_val = maxf(shake_val, 0.14)
-		var b_col: Color = _bld_color[i]
-		if btype == BuildingType.SHIELD_PYLON and _bld_shield_flash[i] > 0.05:
-			var fl: float = clampf(_bld_shield_flash[i], 0.0, 1.0)
-			shake_val = maxf(shake_val, fl * 0.45)
-			b_col = b_col.lerp(Color(0.55, 0.96, 1.0, 1.0), fl * 0.65)
-		elif btype == BuildingType.QUANTUM_GATE and _city_emp_timer[clampi(_bld_city_id[i], 0, _max_cities - 1)] > 0.0:
-			b_col = b_col.lerp(Color(0.32, 0.42, 0.54, 1.0), 0.55)
-		mm.set_instance_transform_2d(slot_i, Transform2D(0.0, _bld_pos[i] + anchor_off))
-		mm.set_instance_color(slot_i, b_col)
-		mm.set_instance_custom_data(slot_i, Color(_bld_phase[i], shake_val, _bld_spring[i], float(col_idx)))
-		slot_i += 1
-		if smm != null and sh_i < sh_cap:
-			var sw: float = BLD_FOOTPRINTS[clampi(btype, 0, BLD_TYPE_COUNT - 1)] * 1.12
-			smm.set_instance_transform_2d(sh_i, Transform2D(Vector2(sw, 0.0), Vector2(0.0, sw * 0.44), _bld_pos[i] + Vector2(0.0, 1.0)))
-			sh_i += 1
-	return Vector2i(slot_i, sh_i)
+	var slot_i: int = 0
+	slot_i = _write_buildings_mm(mm, cap_inst, anchor_off, slot_i, full_sync)
+	slot_i = _write_scaffolds_mm(mm, cap_inst, anchor_off, slot_i)
+	slot_i = _write_ruins_mm(mm, cap_inst, anchor_off, slot_i)
+	slot_i = _write_shuttles_mm(mm, cap_inst, slot_i)
+	_ships_mm_slot_base = slot_i
+	if _meta != null:
+		slot_i = _meta.write_ships_mm(self, mm, Vector2i(slot_i, cap_inst))
+	mm.visible_instance_count = slot_i
 
 
-func _write_scaffolds_mm(mm: MultiMesh, smm: MultiMesh, cap_inst: int, sh_cap: int, anchor_off: Vector2, counts: Vector2i) -> Vector2i:
-	var slot_i: int = counts.x
-	var sh_i: int = counts.y
+func _sync_ships_tail_mm() -> void:
+	if _meta == null or _mm_buildings == null or _mm_buildings.multimesh == null:
+		return
+	var mm: MultiMesh = _mm_buildings.multimesh
+	var cap_inst: int = mm.instance_count
+	if _ships_mm_slot_base < 0 or _ships_mm_slot_base > cap_inst:
+		return
+	var end_slot: int = _meta.write_ships_mm(self, mm, Vector2i(_ships_mm_slot_base, cap_inst))
+	mm.visible_instance_count = end_slot
+
+
+func _write_single_building_mm(mm: MultiMesh, i: int, anchor_off: Vector2, full_sync: bool = true) -> void:
+	var btype: int = int(_bld_type[i])
+	var cid: int = clampi(_bld_city_id[i], 0, _max_cities - 1)
+	var f_id: int = int(_city_faction[cid])
+	var col_idx: int = _building_anim_col(i, btype)
+	var anim_on: bool = _is_bld_anim_frame_active(btype, _bld_phase[i])
+	var shake_val: float = _bld_shake[i]
+	if btype == BuildingType.DRILL and anim_on:
+		shake_val = maxf(shake_val, 0.16)
+	var b_col: Color = _bld_color[i]
+	var spring_b: float = _bld_spring[i]
+	if f_id != Faction.HUMAN and anim_on:
+		if absf(spring_b - 1.0) <= 0.01:
+			spring_b = 0.94 if f_id == Faction.SPORE else 0.96
+		if btype == BuildingType.CAMPFIRE or btype == BuildingType.FUSION_REACTOR or btype == BuildingType.SOLAR_ARRAY:
+			spring_b = -spring_b
+		b_col = b_col.lightened(0.14)
+	if btype == BuildingType.SHIELD_PYLON and _bld_shield_flash[i] > 0.05:
+		var fl: float = clampf(_bld_shield_flash[i], 0.0, 1.0)
+		shake_val = maxf(shake_val, fl * 0.45)
+		b_col = b_col.lerp(Color(0.55, 0.96, 1.0, 1.0), fl * 0.65)
+	elif btype == BuildingType.QUANTUM_GATE and _city_emp_timer[cid] > 0.0:
+		b_col = b_col.lerp(Color(0.32, 0.42, 0.54, 1.0), 0.55)
+	if full_sync:
+		mm.set_instance_transform_2d(i, Transform2D(0.0, _bld_pos[i] + anchor_off))
+	mm.set_instance_color(i, b_col)
+	mm.set_instance_custom_data(i, Color(_bld_phase[i], shake_val, spring_b, float(col_idx)))
+
+
+func _sync_spring_buildings_only() -> void:
+	if _mm_buildings == null or _mm_buildings.multimesh == null:
+		return
+	var mm: MultiMesh = _mm_buildings.multimesh
+	var lim: int = mini(_bld_count, mm.instance_count)
+	var anchor_off := Vector2(0.0, -BUILDING_CELL_PX * 0.5)
+	for i in _spring_dirty_ids:
+		if i >= 0 and i < lim:
+			_write_single_building_mm(mm, i, anchor_off, false)
+
+
+func _write_buildings_mm(mm: MultiMesh, cap_inst: int, anchor_off: Vector2, slot_i: int, full_sync: bool = true) -> int:
+	var b_lim: int = mini(_bld_count, cap_inst)
+	for i in range(b_lim):
+		_write_single_building_mm(mm, i, anchor_off, full_sync)
+	return maxi(slot_i, b_lim)
+
+
+func _write_scaffolds_mm(mm: MultiMesh, cap_inst: int, anchor_off: Vector2, slot_i: int) -> int:
 	for cid in range(_max_cities):
 		if slot_i >= cap_inst:
 			break
@@ -2847,44 +3383,35 @@ func _write_scaffolds_mm(mm: MultiMesh, smm: MultiMesh, cap_inst: int, sh_cap: i
 			continue
 		var ptype: int = _city_proj_type[cid]
 		var prog_cl: float = clampf(_city_proj_prog[cid], 0.0, 1.0)
-		var sc_col: int = BLD_COL_SCAFFOLD_LG if ptype >= BuildingType.BIODOME else BLD_COL_SCAFFOLD
+		var sc_col: int = clampi(BLD_COL_SCAFFOLD_LG if ptype >= BuildingType.BIODOME else BLD_COL_SCAFFOLD, 0, maxi(0, _bld_atlas_cols - 1))
 		mm.set_instance_transform_2d(slot_i, Transform2D(0.0, _city_build_pos[cid] + anchor_off))
 		mm.set_instance_color(slot_i, _city_color[cid])
 		mm.set_instance_custom_data(slot_i, Color(float(cid) * 0.7, -0.5, lerpf(0.62, 0.96, prog_cl), float(sc_col)))
 		slot_i += 1
-		if smm != null and sh_i < sh_cap:
-			var sw_sc: float = BLD_FOOTPRINTS[clampi(ptype, 0, BLD_TYPE_COUNT - 1)] * lerpf(0.65, 1.0, prog_cl)
-			smm.set_instance_transform_2d(sh_i, Transform2D(Vector2(sw_sc, 0.0), Vector2(0.0, sw_sc * 0.44), _city_build_pos[cid] + Vector2(0.0, 1.0)))
-			sh_i += 1
-	return Vector2i(slot_i, sh_i)
+	return slot_i
 
 
-func _write_ruins_mm(mm: MultiMesh, smm: MultiMesh, cap_inst: int, sh_cap: int, anchor_off: Vector2, counts: Vector2i) -> Vector2i:
-	var slot_i: int = counts.x
-	var sh_i: int = counts.y
+func _write_ruins_mm(mm: MultiMesh, cap_inst: int, anchor_off: Vector2, slot_i: int) -> int:
+	var r_col_idx: int = clampi(BLD_COL_RUINS, 0, maxi(0, _bld_atlas_cols - 1))
 	for ri in range(_ruin_count):
 		if slot_i >= cap_inst:
 			break
 		var rf_col: Color = FACTION_TINT_COLORS[clampi(int(_ruin_faction[ri]), 0, FACTION_TINT_COLORS.size() - 1)].lerp(Color(0.65, 0.68, 0.72), 0.55)
 		mm.set_instance_transform_2d(slot_i, Transform2D(0.0, _ruin_pos[ri] + anchor_off))
 		mm.set_instance_color(slot_i, rf_col)
-		mm.set_instance_custom_data(slot_i, Color(_ruin_phase[ri], 0.0, 0.92, float(BLD_COL_RUINS)))
+		mm.set_instance_custom_data(slot_i, Color(_ruin_phase[ri], 0.0, 0.92, float(r_col_idx)))
 		slot_i += 1
-		if smm != null and sh_i < sh_cap:
-			smm.set_instance_transform_2d(sh_i, Transform2D(Vector2(13.0, 0.0), Vector2(0.0, 5.8), _ruin_pos[ri] + Vector2(0.0, 1.0)))
-			sh_i += 1
-	return Vector2i(slot_i, sh_i)
+	return slot_i
 
 
-func _write_shuttles_mm(mm: MultiMesh, smm: MultiMesh, cap_inst: int, sh_cap: int, counts: Vector2i) -> Vector2i:
-	var slot_i: int = counts.x
-	var sh_i: int = counts.y
+func _write_shuttles_mm(mm: MultiMesh, cap_inst: int, slot_i: int) -> int:
+	var max_col: int = maxi(0, _bld_atlas_cols - 1)
 	for si in range(_shuttle_count):
 		if slot_i >= cap_inst:
 			break
 		var fid: int = clampi(int(_shuttle_faction[si]), 0, FACTION_TINT_COLORS.size() - 1)
 		var facing: float = -1.0 if _shuttle_target[si].x < _shuttle_start[si].x else 1.0
-		var sh_col: int = BLD_COL_SHUTTLE_BOOST if _shuttle_t[si] < 0.75 else BLD_COL_SHUTTLE
+		var sh_col: int = clampi(BLD_COL_SHUTTLE_BOOST if _shuttle_t[si] < 0.75 else BLD_COL_SHUTTLE, 0, max_col)
 		var s_tint: Color = FACTION_BORDER_COLORS[fid]
 		if int(_shuttle_kind[si]) == SHUTTLE_KIND_SUPPLY:
 			s_tint = s_tint.lerp(Color(0.35, 0.98, 0.62, 1.0), 0.55)
@@ -2894,14 +3421,7 @@ func _write_shuttles_mm(mm: MultiMesh, smm: MultiMesh, cap_inst: int, sh_cap: in
 		mm.set_instance_color(slot_i, s_tint)
 		mm.set_instance_custom_data(slot_i, Color(float(si), 0.0, facing, float(sh_col)))
 		slot_i += 1
-		if smm != null and sh_i < sh_cap:
-			var t_s: float = clampf(_shuttle_t[si], 0.0, 1.0)
-			var sm_t: float = t_s * t_s * (3.0 - 2.0 * t_s)
-			var ground_p: Vector2 = _shuttle_start[si].lerp(_shuttle_target[si], sm_t) + Vector2(0.0, 1.5)
-			var alt_sc: float = lerpf(1.0, 0.58, sin(t_s * PI))
-			smm.set_instance_transform_2d(sh_i, Transform2D(Vector2(14.0 * alt_sc, 0.0), Vector2(0.0, 6.2 * alt_sc), ground_p))
-			sh_i += 1
-	return Vector2i(slot_i, sh_i)
+	return slot_i
 
 
 func deposit_resource(city_id: int, res_type: int, amount: float) -> void:
@@ -2915,30 +3435,33 @@ func deposit_resource(city_id: int, res_type: int, amount: float) -> void:
 			if f_id != Faction.ROBOT:
 				var f_amt: float = amount * (1.20 if f_id == Faction.SPORE else 1.0) * _crop_mul
 				_city_food[city_id] = minf(cap, _city_food[city_id] + f_amt)
-				_city_science[city_id] += f_amt * 0.55
+				_add_city_science(city_id, f_amt * 0.55)
 				_total_harvested += f_amt
 		ResourceType.ORE:
 			var o_amt: float = amount * (1.18 if f_id == Faction.ROBOT else 1.0)
 			_city_ore[city_id] = minf(cap, _city_ore[city_id] + o_amt)
-			_city_science[city_id] += o_amt * 0.75
+			_add_city_science(city_id, o_amt * 0.75)
 			_total_harvested += o_amt
 		ResourceType.ENERGY:
 			_city_energy[city_id] = minf(cap, _city_energy[city_id] + amount)
 			_city_ore[city_id] = minf(cap, _city_ore[city_id] + amount * 0.35)
-			_city_science[city_id] += amount * 0.45
+			_add_city_science(city_id, amount * 0.45)
 			_total_harvested += amount
 		ResourceType.SCIENCE:
-			_city_science[city_id] += amount
+			_add_city_science(city_id, amount)
 			_total_harvested += amount
 		ResourceType.BUILD_WORK:
-			# At 1x scale=1.0 (real 12-22s build); at high sim pace scale unclamped with _sim_pace_mult.
+			# At 1x scale=1.15 (real 9-20s build); at high sim pace scale unclamped with _sim_pace_mult.
 			var pace_comp: float = maxf(1.0, _sim_pace_mult)
 			var work_cap: float = maxf(36.0, _sim_pace_mult * 2.5)
-			_city_proj_work[city_id] = minf(work_cap, _city_proj_work[city_id] + amount * 0.85 * pace_comp)
-			_city_science[city_id] += amount * 0.35
+			_city_proj_work[city_id] = minf(work_cap, _city_proj_work[city_id] + amount * 1.15 * pace_comp)
+			_add_city_science(city_id, amount * 0.35)
 		ResourceType.WOOD:
 			_city_wood[city_id] = minf(cap, _city_wood[city_id] + amount)
-			_city_science[city_id] += amount * 0.40
+			_add_city_science(city_id, amount * 0.40)
+			_total_harvested += amount
+		ResourceType.CREDITS:
+			_city_credits[city_id] = minf(cap * 2.0, _city_credits[city_id] + amount)
 			_total_harvested += amount
 
 
@@ -2947,7 +3470,9 @@ func _has_active_dome_near(pos: Vector2) -> bool:
 	dome_r2 *= dome_r2
 	for i in range(_bld_count):
 		if _bld_type[i] == BuildingType.BIODOME and _bld_pos[i].distance_squared_to(pos) <= dome_r2:
-			return true
+			var cid: int = _bld_city_id[i]
+			if cid < 0 or cid >= _max_cities or _city_dome_powered[cid] != 0:
+				return true
 	return false
 
 
@@ -3052,6 +3577,8 @@ func _unclaim_damaged_zones_in_radius(world_pos: Vector2, r_eff: float, touched_
 			elif (_zone_flags[zidx] & ZONE_FLAG_FARM) != 0:
 				_city_farm_scan_cd[owner] = 0.0
 			_territory.mark_zone_dirty(self, zx, zy)
+	for k in touched_cities.keys():
+		_territory.smooth_enclaves_for_city(self, int(k))
 
 
 func _collapse_city(cid: int) -> void:
@@ -3100,6 +3627,8 @@ func _clear_collapsed_city_state(cid: int) -> void:
 	_city_age_sec[cid] = 0.0
 	_city_energy_spend_acc[cid] = 0.0
 	_city_energy_net[cid] = 0.0
+	_city_credits[cid] = 0.0
+	_city_hq_level[cid] = 0
 	_diplo_dirty_seq += 1
 	_goals_dirty = true
 
@@ -3273,21 +3802,12 @@ func set_zoom_lod(zoom_val: float) -> void:
 	_zoom_val = zoom_val
 	if _territory != null:
 		var new_ta: int = _territory.compute_zoom_tint_alpha(zoom_val)
-		if abs(new_ta - _border_tint_alpha_cache) >= 2:
+		var new_thick: int = 1 if zoom_val <= 2.4 else 0
+		if abs(new_ta - _border_tint_alpha_cache) >= 2 or new_thick != _border_thick_cache:
 			_border_tint_alpha_cache = new_ta
+			_border_thick_cache = new_thick
 			_territory.mark_all_borders_dirty(self)
 			_territory.flush_dirty_borders(self)
-
-	if _shadow_group == null or not is_instance_valid(_shadow_group):
-		return
-	var fade_hi: float = _k_shadow_fade_hi
-	var fade_lo: float = _k_shadow_fade_lo
-	var hide_z: float = _k_shadow_hide_z
-	var alpha: float = _k_shadow_alpha * clampf((zoom_val - fade_lo) / maxf(0.05, fade_hi - fade_lo), 0.0, 1.0)
-	var col: Color = _shadow_group.self_modulate
-	col.a = alpha
-	_shadow_group.self_modulate = col
-	_shadow_group.visible = zoom_val >= hide_z
 
 
 func get_city_hunger_pressure(cid: int) -> float:
@@ -3312,9 +3832,17 @@ func push_lights_to_fx(fx: Node2D) -> void:
 		return
 	for i in range(_bld_count):
 		var pos: Vector2 = _bld_pos[i]
+		var b_cid: int = clampi(_bld_city_id[i], 0, _max_cities - 1)
+		var is_robot: bool = int(_city_faction[b_cid]) == Faction.ROBOT
 		match int(_bld_type[i]):
 			BuildingType.CAMPFIRE:
-				fx.push_light(pos + Vector2(0.0, -2.0), 22.0, Color(1.0, 0.58, 0.22, 1.0), 0.72)
+				fx.push_light(pos + Vector2(0.0, -2.0), 22.0, Color(0.45, 0.85, 1.0, 1.0) if is_robot else Color(1.0, 0.58, 0.22, 1.0), 0.72)
+			BuildingType.TENT:
+				fx.push_light(pos + Vector2(0.0, -2.0), 15.0, Color(0.48, 0.82, 1.0, 1.0) if is_robot else Color(1.0, 0.78, 0.40, 1.0), 0.45)
+			BuildingType.DRILL:
+				fx.push_light(pos + Vector2(0.0, -3.0), 18.0, Color(0.42, 0.86, 1.0, 1.0) if is_robot else Color(1.0, 0.64, 0.28, 1.0), 0.52)
+			BuildingType.DEPOT:
+				fx.push_light(pos + Vector2(0.0, -3.0), 17.0, Color(0.52, 0.90, 1.0, 1.0), 0.46)
 			BuildingType.BIODOME:
 				fx.push_light(pos + Vector2(0.0, -4.0), 28.0, Color(0.28, 0.95, 0.62, 1.0), 0.65)
 			BuildingType.FUSION_REACTOR:
@@ -3324,11 +3852,21 @@ func push_lights_to_fx(fx: Node2D) -> void:
 				var fl_l: float = _bld_shield_flash[i]
 				fx.push_light(pos + Vector2(0.0, -6.0), 38.0 + fl_l * 14.0, Color(0.30, 0.88, 1.0, 1.0), 0.55 + ch_l * 0.35 + fl_l * 0.45)
 			BuildingType.LAUNCHPAD:
-				fx.push_light(pos + Vector2(0.0, -3.0), 26.0, Color(1.0, 0.72, 0.32, 1.0), 0.68)
+				var t5_on: bool = int(_city_tech_tier[b_cid]) >= 5
+				fx.push_light(pos + Vector2(0.0, -3.0), 34.0 if t5_on else 26.0, Color(1.0, 0.72, 0.32, 1.0), 0.92 if t5_on else 0.68)
 			BuildingType.QUANTUM_GATE:
-				var qcid: int = clampi(_bld_city_id[i], 0, _max_cities - 1)
-				if _city_emp_timer[qcid] <= 0.0 and _city_energy[qcid] >= 2.0:
+				if _city_emp_timer[b_cid] <= 0.0 and _city_energy[b_cid] >= 2.0:
 					fx.push_light(pos + Vector2(0.0, -5.0), 42.0, Color(0.75, 0.45, 1.0, 1.0), 0.92)
+			BuildingType.DOCK:
+				fx.push_light(pos + Vector2(0.0, -4.0), 22.0, Color(0.35, 0.85, 1.0, 1.0), 0.52)
+			BuildingType.DEFENSE_TURRET:
+				fx.push_light(pos + Vector2(0.0, -4.0), 20.0, Color(1.0, 0.36, 0.28, 1.0), 0.58)
+			BuildingType.TRADE_HUB:
+				fx.push_light(pos + Vector2(0.0, -4.0), 24.0, Color(1.0, 0.82, 0.32, 1.0), 0.58)
+			BuildingType.ARCHIVE:
+				fx.push_light(pos + Vector2(0.0, -4.0), 26.0, Color(0.42, 0.82, 1.0, 1.0), 0.62)
+			BuildingType.MONOLITH:
+				fx.push_light(pos + Vector2(0.0, -6.0), 40.0, Color(0.84, 0.56, 1.0, 1.0), 0.90)
 	for ri in range(_ruin_count):
 		fx.push_light(_ruin_pos[ri] + Vector2(0.0, -2.0), 14.0, Color(1.0, 0.65, 0.25, 1.0), 0.42)
 	for si in range(_shuttle_count):
@@ -3354,6 +3892,46 @@ func get_army_orders() -> Dictionary:
 func pop_chronicle_events() -> Array[Dictionary]:
 	_ensure_initialized()
 	return _diplomacy.pop_chronicle_events()
+
+
+func are_all_cities_contiguous() -> bool:
+	_ensure_initialized()
+	return _territory.are_all_cities_contiguous(self)
+
+
+func start_test_plot(kind: int = 0) -> bool:
+	_ensure_initialized()
+	return _diplomacy.start_test_plot(self, kind)
+
+
+func get_active_plot_count() -> int:
+	_ensure_initialized()
+	return _diplomacy.get_active_plot_count()
+
+
+func on_unit_killed(victim_uid: int, killer_uid: int, pos: Vector2) -> void:
+	_ensure_initialized()
+	_diplomacy.on_unit_killed(self, Vector2i(victim_uid, killer_uid), pos)
+
+
+func try_avatar_gesture(uid: int, world_pos: Vector2) -> int:
+	_ensure_initialized()
+	return _diplomacy.try_avatar_gesture(self, uid, world_pos)
+
+
+func get_notables_summary() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _diplomacy.get_notables_summary()
+
+
+func pin_notable(uid: int, pinned: bool) -> bool:
+	_ensure_initialized()
+	return _diplomacy.pin_notable(uid, pinned)
+
+
+func get_notable_card(uid: int) -> Dictionary:
+	_ensure_initialized()
+	return _diplomacy.get_notable_card(uid)
 
 
 func inspect_city_at(world_pos: Vector2) -> Dictionary:
@@ -3423,6 +4001,8 @@ func _build_city_inspect_dict(cid: int) -> Dictionary:
 		"energy": snappedf(_city_energy[cid], 0.1),
 		"energy_net": snappedf(_city_energy_net[cid], 0.1),
 		"science": snappedf(_city_science[cid], 0.1),
+		"credits": snappedf(_city_credits[cid], 0.1),
+		"hq_level": int(_city_hq_level[cid]),
 		"storage_cap": _city_storage_cap[cid],
 		"buildings": total_b,
 		"buildings_by_type": b_counts,
@@ -3431,6 +4011,18 @@ func _build_city_inspect_dict(cid: int) -> Dictionary:
 		"shield_pylons": _city_bld_counts[base_b + BuildingType.SHIELD_PYLON],
 		"has_shield": _city_bld_counts[base_b + BuildingType.SHIELD_PYLON] > 0,
 		"quantum_gates": _city_bld_counts[base_b + BuildingType.QUANTUM_GATE],
+		"docks": _city_bld_counts[base_b + BuildingType.DOCK],
+		"barracks": _city_bld_counts[base_b + BuildingType.BARRACKS],
+		"turrets": _city_bld_counts[base_b + BuildingType.DEFENSE_TURRET],
+		"trade_hubs": _city_bld_counts[base_b + BuildingType.TRADE_HUB],
+		"archives": _city_bld_counts[base_b + BuildingType.ARCHIVE],
+		"monoliths": _city_bld_counts[base_b + BuildingType.MONOLITH],
+		"culture_id": _meta.get_city_culture_id(cid) if _meta != null else -1,
+		"culture_name": _meta.get_city_culture_name(cid) if _meta != null else "",
+		"creed_name": _meta.get_city_creed_name(cid) if _meta != null else "",
+		"ships": _meta.get_city_ship_count(cid) if _meta != null else 0,
+		"army": _meta.get_city_army_info(cid) if _meta != null else {},
+		"codices_count": _meta.get_city_book_count(cid) if _meta != null else 0,
 		"project": proj_name,
 		"project_progress": snappedf(_city_proj_prog[cid], 0.01),
 		"alerted": _city_alerted[cid] != 0,
@@ -3504,8 +4096,7 @@ func _city_state_string(cid: int, f_id: int, ptype: int) -> String:
 	return "Constructing" if ptype >= 0 else "Thriving"
 
 
-func get_civ_stats() -> Dictionary:
-	_ensure_initialized()
+func _accum_civ_stats_cities() -> Dictionary:
 	var active_cities: int = 0
 	var active_kingdoms: int = 0
 	var child_cities: int = 0
@@ -3516,6 +4107,7 @@ func get_civ_stats() -> Dictionary:
 	var total_ore: float = 0.0
 	var total_energy: float = 0.0
 	var total_science: float = 0.0
+	var total_credits: float = 0.0
 	var total_pop: int = 0
 	var total_tents: int = 0
 	var total_biodomes: int = 0
@@ -3560,6 +4152,7 @@ func get_civ_stats() -> Dictionary:
 		total_ore += _city_ore[cid]
 		total_energy += _city_energy[cid]
 		total_science += _city_science[cid]
+		total_credits += _city_credits[cid]
 		total_pop += _city_pop[cid]
 		var rank: float = float(_city_zones_count[cid]) * 10.0 + float(t) * 50.0 + float(_city_pop[cid])
 		if rank > primary_score:
@@ -3567,37 +4160,55 @@ func get_civ_stats() -> Dictionary:
 			primary_id = cid
 			primary_pos = _city_center[cid]
 
+	return {
+		"cities": active_cities, "kingdoms": active_kingdoms, "child_cities": child_cities,
+		"zones_owned": owned_zones, "max_tier": max_tier, "food": total_food, "wood": total_wood,
+		"ore": total_ore, "energy": total_energy, "science": total_science, "credits": total_credits, "pop": total_pop,
+		"tents": total_tents, "biodomes": total_biodomes, "scaffolds": active_scaffolds,
+		"alerted": alerted_cities, "pylons": shield_pylons_n, "gates": quantum_gates_n,
+		"rebels": rebellions_active_n, "emps": emp_cities_n, "primary_id": primary_id, "primary_pos": primary_pos,
+	}
+
+
+func get_civ_stats() -> Dictionary:
+	_ensure_initialized()
+	var cs: Dictionary = _accum_civ_stats_cities()
 	var dp_counts: Vector2i = _count_active_diplo_pairs()
 	var farms_n: int = 0
 	for z in range(_zone_count):
 		if (_zone_flags[z] & ZONE_FLAG_FARM) != 0:
 			farms_n += 1
-
+	var max_tier: int = int(cs["max_tier"])
+	var total_food: float = float(cs["food"])
+	var total_wood: float = float(cs["wood"])
+	var total_ore: float = float(cs["ore"])
+	var total_energy: float = float(cs["energy"])
+	var total_science: float = float(cs["science"])
 	return {
-		"cities": active_cities,
-		"kingdoms": active_kingdoms,
-		"child_cities": child_cities,
-		"zones_owned": owned_zones,
+		"cities": int(cs["cities"]),
+		"kingdoms": int(cs["kingdoms"]),
+		"child_cities": int(cs["child_cities"]),
+		"zones_owned": int(cs["zones_owned"]),
 		"farms": farms_n,
 		"buildings": _bld_count,
-		"tents": total_tents,
-		"biodomes": total_biodomes,
-		"scaffolds": active_scaffolds,
+		"tents": int(cs["tents"]),
+		"biodomes": int(cs["biodomes"]),
+		"scaffolds": int(cs["scaffolds"]),
 		"ruins": _ruin_count,
 		"shuttles": _shuttle_count,
 		"shuttles_launched": _total_shuttles_launched,
 		"shuttles_total": _total_shuttles_launched,
-		"shield_pylons": shield_pylons_n,
+		"shield_pylons": int(cs["pylons"]),
 		"shield_blocked": _shield_blocked_total,
-		"quantum_gates": quantum_gates_n,
+		"quantum_gates": int(cs["gates"]),
 		"supply_deliveries": _supply_deliveries,
 		"clashes": _border_clash_count,
-		"alerted_cities": alerted_cities,
+		"alerted_cities": int(cs["alerted"]),
 		"wars_active": dp_counts.x,
 		"pacts_active": dp_counts.y,
-		"rebellions_active": rebellions_active_n,
+		"rebellions_active": int(cs["rebels"]),
 		"rebellions_total": _rebellions_total,
-		"emp_cities": emp_cities_n,
+		"emp_cities": int(cs["emps"]),
 		"tech_tier": max_tier,
 		"max_tech_tier": max_tier,
 		"storage_total": total_food + total_wood + total_ore + total_energy + total_science,
@@ -3607,7 +4218,7 @@ func get_civ_stats() -> Dictionary:
 		"energy": total_energy,
 		"science": total_science,
 		"harvested_total": _total_harvested,
-		"population": total_pop,
+		"population": int(cs["pop"]),
 		"roads": _road_px_count,
 		"dirt_roads": _road_dirt_count,
 		"conduit_roads": _road_conduit_count,
@@ -3615,8 +4226,148 @@ func get_civ_stats() -> Dictionary:
 		"roads_conduit": _road_conduit_count,
 		"ecology_events_sent": _ecology_events_sent_total,
 		"active_plots": _diplomacy.get_active_plot_count(),
-		"primary_city_id": primary_id,
-		"primary_city_pos": primary_pos,
+		"notables_count": _diplomacy.get_notables_count(),
+		"relics_count": _diplomacy.get_relics_count(),
+		"feuds_count": _diplomacy.get_feuds_count(),
+		"tier5_victories": _tier5_victories,
+		"credits": float(cs["credits"]),
+		"ships": _meta.get_ship_count() if _meta != null else 0,
+		"wars_meta": _meta.get_active_war_count() if _meta != null else 0,
+		"alliances": _meta.get_active_alliance_count() if _meta != null else 0,
+		"cultures": _meta.get_active_culture_count() if _meta != null else 0,
+		"creeds": _meta.get_active_creed_count() if _meta != null else 0,
+		"clans": _meta.get_active_clan_count() if _meta != null else 0,
+		"books": _meta.get_active_book_count() if _meta != null else 0,
+		"deaths_total": _meta._world_deaths_total if _meta != null else 0,
+		"map_lens": _territory.get_map_lens() if _territory != null else 0,
+		"primary_city_id": int(cs["primary_id"]),
+		"primary_city_pos": cs["primary_pos"],
+	}
+
+
+func set_map_lens(lens_id: int) -> void:
+	_ensure_initialized()
+	if _territory != null:
+		_territory.set_map_lens(self, lens_id)
+
+
+func get_map_lens() -> int:
+	_ensure_initialized()
+	return _territory.get_map_lens() if _territory != null else 0
+
+
+func get_ship_count() -> int:
+	_ensure_initialized()
+	return _meta.get_ship_count() if _meta != null else 0
+
+
+func request_troop_ferry(city_id: int, dst_pos: Vector2) -> bool:
+	_ensure_initialized()
+	return _meta.request_troop_ferry(self, city_id, dst_pos) if _meta != null else false
+
+
+func get_wars_summary() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_wars_summary(self) if _meta != null else []
+
+
+func get_alliances_summary() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_alliances_summary(self) if _meta != null else []
+
+
+func get_cultures_summary() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_cultures_summary(self) if _meta != null else []
+
+
+func get_ships_summary() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_ships_summary() if _meta != null else []
+
+
+func get_clans_summary() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_clans_summary() if _meta != null else []
+
+
+func get_codices_summary(city_id: int = -1) -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_codices_summary(city_id) if _meta != null else []
+
+
+func get_history_series(scale_id: int, metric_key: String) -> PackedFloat32Array:
+	_ensure_initialized()
+	return _meta.get_history_series(scale_id, metric_key) if _meta != null else PackedFloat32Array()
+
+
+func get_kingdom_history_series(kingdom_id: int, scale_id: int, metric_key: String) -> PackedFloat32Array:
+	_ensure_initialized()
+	return _meta.get_kingdom_history_series(kingdom_id, scale_id, metric_key) if _meta != null else PackedFloat32Array()
+
+
+func force_diplomatic_plot(plot_type: int, src_cid: int, dst_cid: int) -> bool:
+	_ensure_initialized()
+	return _diplomacy.force_diplomatic_plot(self, plot_type, Vector2i(src_cid, dst_cid))
+
+
+func get_diplomacy_factors(city_a: int, city_b: int) -> Dictionary:
+	_ensure_initialized()
+	return _meta.calc_diplomacy_factors(self, city_a, city_b) if _meta != null else {"found": false}
+
+
+func get_city_roster() -> Array[Dictionary]:
+	_ensure_initialized()
+	var out: Array[Dictionary] = []
+	for cid in range(_max_cities):
+		if _city_active[cid] != 0:
+			out.append(_build_city_inspect_dict(cid))
+	return out
+
+
+func get_kingdom_roster() -> Array[Dictionary]:
+	_ensure_initialized()
+	var badges: Array[Dictionary] = _diplomacy.get_macro_badges(self)
+	for i in range(badges.size()):
+		var d: Dictionary = badges[i]
+		var kid: int = int(d.get("kingdom_id", -1))
+		if kid >= 0 and _meta != null:
+			var md: Dictionary = _meta.get_kingdom_meta_info(kid)
+			for mk in md:
+				d[mk] = md[mk]
+		var res: Dictionary = _accum_kingdom_resources(kid)
+		for rk in res:
+			d[rk] = res[rk]
+		badges[i] = d
+	return badges
+
+
+func _accum_kingdom_resources(kid: int) -> Dictionary:
+	var f_sum: float = 0.0
+	var w_sum: float = 0.0
+	var o_sum: float = 0.0
+	var e_sum: float = 0.0
+	var s_sum: float = 0.0
+	var c_sum: float = 0.0
+	var z_sum: int = 0
+	var ships_n: int = 0
+	var city_ids: Array[int] = []
+	for cid in range(_max_cities):
+		if _city_active[cid] != 0 and _city_kingdom_id[cid] == kid:
+			city_ids.append(cid)
+			f_sum += _city_food[cid]
+			w_sum += _city_wood[cid]
+			o_sum += _city_ore[cid]
+			e_sum += _city_energy[cid]
+			s_sum += _city_science[cid]
+			c_sum += _city_credits[cid]
+			z_sum += _city_zones_count[cid]
+			if _meta != null:
+				ships_n += _meta.get_city_ship_count(cid)
+	return {
+		"food": snappedf(f_sum, 0.1), "wood": snappedf(w_sum, 0.1), "ore": snappedf(o_sum, 0.1),
+		"energy": snappedf(e_sum, 0.1), "science": snappedf(s_sum, 0.1), "credits": snappedf(c_sum, 0.1),
+		"zones_owned": z_sum, "ships": ships_n, "city_ids": city_ids,
 	}
 
 
@@ -3875,16 +4626,16 @@ func grant_tech_tier_for_test(city_id: int, target_tier: int) -> void:
 	_ensure_initialized()
 	if city_id < 0 or city_id >= _max_cities or _city_active[city_id] == 0:
 		return
-	var t: int = clampi(target_tier, 0, 4)
+	var t: int = clampi(target_tier, 0, 5)
 	var prev_t: int = int(_city_tech_tier[city_id])
 	_city_tech_floor[city_id] = maxi(int(_city_tech_floor[city_id]), t)
 	_city_storage_cap[city_id] = maxf(_city_storage_cap[city_id], 120.0 if t >= 3 else 70.0)
 	_city_ore[city_id] = maxf(_city_ore[city_id], 35.0)
 	_city_energy[city_id] = maxf(_city_energy[city_id], 45.0 if t >= 4 else 24.0)
 	_city_pop[city_id] = maxi(_city_pop[city_id], 10 if t >= 1 else 0)
-	var min_ages: Array[float] = [0.0, _k_tier1_age, _k_tier2_age, _k_tier3_age, _k_tier4_age]
+	var min_ages: Array[float] = [0.0, _k_tier1_age, _k_tier2_age, _k_tier3_age, _k_tier4_age, 1650.0]
 	_city_age_sec[city_id] = maxf(_city_age_sec[city_id], min_ages[t] + 5.0)
-	var min_sci: Array[float] = [6.0, 36.0, 110.0, _k_tier3_sci + 20.0, _k_tier4_sci + 40.0]
+	var min_sci: Array[float] = [6.0, 36.0, 110.0, _k_tier3_sci + 20.0, _k_tier4_sci + 40.0, 1150.0]
 	_city_science[city_id] = maxf(_city_science[city_id], min_sci[t])
 
 	var base_b: int = city_id * BLD_TYPE_COUNT
@@ -3894,8 +4645,11 @@ func grant_tech_tier_for_test(city_id: int, target_tier: int) -> void:
 		spawn_building_for_test(city_id, BuildingType.FUSION_REACTOR)
 	if t >= 4 and _city_bld_counts[base_b + BuildingType.LAUNCHPAD] < 1:
 		spawn_building_for_test(city_id, BuildingType.LAUNCHPAD)
+	if t >= 5 and _city_bld_counts[base_b + BuildingType.QUANTUM_GATE] < 1:
+		spawn_building_for_test(city_id, BuildingType.QUANTUM_GATE)
 
 	_city_tech_tier[city_id] = maxi(prev_t, t)
+	_clamp_city_science(city_id)
 	_recompute_city_tech(city_id)
 	if t >= 2 and prev_t < 2:
 		_territory.upgrade_city_roads_to_conduits(self, city_id)
@@ -3925,6 +4679,7 @@ func pack_state() -> PackedByteArray:
 	_pack_cities(buf)
 	_pack_entities_and_diplo(buf)
 	_pack_v6_extensions(buf)
+	_pack_v7_extensions(buf)
 	return buf.data_array
 
 
@@ -4060,6 +4815,16 @@ func _pack_v6_extensions(buf: StreamPeerBuffer) -> void:
 			buf.put_float(_kingdom_color[c].g)
 			buf.put_float(_kingdom_color[c].b)
 			buf.put_float(_kingdom_color[c].a)
+	buf.put_u16(_shuttle_count)
+	for s in range(_shuttle_count):
+		buf.put_float(_shuttle_cargo_food[s])
+		buf.put_float(_shuttle_cargo_ore[s])
+		buf.put_float(_shuttle_cargo_energy[s])
+	buf.put_32(_tier5_victories)
+	buf.put_u16(_max_cities)
+	for c in range(_max_cities):
+		buf.put_u8(_city_tier5_done[c])
+	_diplomacy.pack_social_extensions(buf)
 
 
 func unpack_state(blob: PackedByteArray) -> bool:
@@ -4097,6 +4862,10 @@ func unpack_state(blob: PackedByteArray) -> bool:
 		_unpack_v6_extensions(buf)
 	else:
 		_rebuild_legacy_kingdoms()
+	if ver >= 7 and buf.get_available_bytes() > 0:
+		_unpack_v7_extensions(buf)
+	else:
+		_hydrate_meta_for_legacy_save()
 
 	_city_proj_retry.fill(0.0)
 	_city_tech_dirty.fill(1)
@@ -4110,6 +4879,8 @@ func unpack_state(blob: PackedByteArray) -> bool:
 	_buildings_dirty = false
 	_bld_anim_step = int(floor(_sim_time * 8.0))
 	_last_pushed_physics = null
+	_territory._w_cache_owner = null
+	_territory._refresh_world_byte_caches(self)
 	_territory.mark_all_borders_dirty(self)
 	_territory.flush_dirty_borders(self)
 	_sync_buildings_multimesh()
@@ -4171,7 +4942,7 @@ func _unpack_cities(buf: StreamPeerBuffer, ver: int) -> int:
 		_city_proj_type[c] = buf.get_32()
 		_city_proj_prog[c] = buf.get_float()
 		_city_proj_work[c] = buf.get_float()
-		var saved_bt_count: int = 8 if ver < 4 else (9 if ver == 4 else BLD_TYPE_COUNT)
+		var saved_bt_count: int = 8 if ver < 4 else (9 if ver == 4 else (10 if ver <= 6 else BLD_TYPE_COUNT))
 		var base_b: int = c * BLD_TYPE_COUNT
 		for bt in range(saved_bt_count):
 			var cnt: int = buf.get_32()
@@ -4186,6 +4957,7 @@ func _unpack_cities(buf: StreamPeerBuffer, ver: int) -> int:
 			_city_overlord[c] = buf.get_32()
 			_city_tech_floor[c] = buf.get_u8()
 			_city_color[c] = _get_city_tint_color(c)
+		_clamp_city_science(c)
 	return saved_cities
 
 
@@ -4273,6 +5045,8 @@ func _unpack_ruins_and_shuttles(buf: StreamPeerBuffer, ver: int) -> void:
 
 
 func _unpack_v6_extensions(buf: StreamPeerBuffer) -> void:
+	if buf.get_available_bytes() <= 0:
+		return
 	_sim_pace_mult = clampf(buf.get_float(), 0.05, 120.0)
 	_ecology_events_sent_total = buf.get_32()
 	for z in range(_zone_count):
@@ -4294,6 +5068,25 @@ func _unpack_v6_extensions(buf: StreamPeerBuffer) -> void:
 			_kingdom_city_count[c] = buf.get_32()
 			_kingdom_name[c] = buf.get_utf8_string()
 			_kingdom_color[c] = Color(buf.get_float(), buf.get_float(), buf.get_float(), buf.get_float())
+	if buf.get_available_bytes() > 0:
+		var sc_n: int = buf.get_u16()
+		for s in range(sc_n):
+			var cf: float = buf.get_float()
+			var co: float = buf.get_float()
+			var ce: float = buf.get_float()
+			if s < _max_shuttles:
+				_shuttle_cargo_food[s] = cf
+				_shuttle_cargo_ore[s] = co
+				_shuttle_cargo_energy[s] = ce
+	if buf.get_available_bytes() > 0:
+		_tier5_victories = buf.get_32()
+		var t5_n: int = buf.get_u16()
+		for c in range(t5_n):
+			var t5_v: int = buf.get_u8()
+			if c < _max_cities:
+				_city_tier5_done[c] = t5_v
+	if buf.get_available_bytes() > 0:
+		_diplomacy.unpack_social_extensions(buf)
 	for c in range(_max_cities):
 		if _city_active[c] != 0:
 			_city_color[c] = _get_city_tint_color(c)
@@ -4305,3 +5098,52 @@ func _rebuild_legacy_kingdoms() -> void:
 	for c in range(_max_cities):
 		if _city_active[c] != 0 and _city_kingdom_id[c] < 0:
 			_diplomacy.create_kingdom(self, c, _city_is_rebel[c] != 0)
+
+
+func _pack_v7_extensions(buf: StreamPeerBuffer) -> void:
+	buf.put_u16(_max_cities)
+	for c in range(_max_cities):
+		buf.put_float(_city_credits[c])
+		buf.put_u8(_city_hq_level[c])
+	buf.put_u16(_bld_count)
+	for b in range(_bld_count):
+		buf.put_u8(_bld_level[b])
+	buf.put_u8(_territory.get_map_lens() if _territory != null else 0)
+	if _meta != null:
+		_meta.pack_meta_state(buf)
+
+
+func _unpack_v7_extensions(buf: StreamPeerBuffer) -> void:
+	if buf.get_available_bytes() <= 0:
+		return
+	var mc: int = buf.get_u16()
+	for c in range(mc):
+		var cr: float = buf.get_float()
+		var hq: int = buf.get_u8()
+		if c < _max_cities:
+			_city_credits[c] = cr
+			_city_hq_level[c] = hq
+	var bc: int = buf.get_u16()
+	for b in range(bc):
+		var lv: int = buf.get_u8()
+		if b < _max_buildings:
+			_bld_level[b] = lv
+	if buf.get_available_bytes() > 0:
+		var lens_id: int = buf.get_u8()
+		if _territory != null:
+			_territory.set_map_lens(self, lens_id)
+	if buf.get_available_bytes() > 0 and _meta != null:
+		_meta.unpack_meta_state(buf)
+
+
+func _hydrate_meta_for_legacy_save() -> void:
+	if _meta == null:
+		return
+	for kid in range(_max_cities):
+		if _kingdom_active[kid] != 0:
+			var cap_cid: int = _kingdom_capital_cid[kid]
+			var is_reb: bool = cap_cid >= 0 and _city_is_rebel[cap_cid] != 0
+			_meta.on_kingdom_created(self, Vector2i(kid, cap_cid), is_reb)
+	for cid in range(_max_cities):
+		if _city_active[cid] != 0:
+			_meta.on_city_created(self, cid, _city_overlord[cid])

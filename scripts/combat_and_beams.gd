@@ -6,7 +6,7 @@ class_name CombatAndBeams
 
 const TELEPORT_ARC_SHADER_PATH := "res://shaders/teleport_arc.gdshader"
 const MAGIC_STATE: int = 0x4B434D42
-const SAVE_VERSION: int = 5
+const SAVE_VERSION: int = 6
 
 const TUNING_KNOBS := {
 	"MAX_BEAMS": 256,
@@ -49,6 +49,9 @@ const TUNING_KNOBS := {
 const MAX_BEAMS: int = 256
 const MAX_ARCS: int = 32
 const MAX_CITIES: int = 64
+const MAX_PROJECTILES: int = 192
+
+enum ProjKind { PLASMA = 0, BOLT = 1, GRENADE = 2, SHARD = 3 }
 
 const DIPLO_NEUTRAL: int = 0
 const DIPLO_PACT: int = 1
@@ -79,10 +82,13 @@ var _fx: Node2D
 var _initialized: bool = false
 var _mm_beams: MultiMeshInstance2D
 var _mm_teleport_arcs: MultiMeshInstance2D
+var _mm_projectiles: MultiMeshInstance2D
 var _beam_mesh: ArrayMesh
 var _arc_mesh: ArrayMesh
+var _proj_mesh: ArrayMesh
 var _beam_mat: CanvasItemMaterial
 var _arc_mat: ShaderMaterial
+var _proj_mat: CanvasItemMaterial
 
 # Preallocated beam pool (SoA, zero GC)
 var _beam_count: int = 0
@@ -93,6 +99,23 @@ var _beam_width: PackedFloat32Array
 var _beam_hdr: PackedFloat32Array
 var _beam_alpha: PackedFloat32Array
 var _beam_rate: PackedFloat32Array
+
+# Preallocated 3D ballistic projectile pool (SoA, zero GC)
+var _proj_count: int = 0
+var _proj_px: PackedFloat32Array
+var _proj_py: PackedFloat32Array
+var _proj_pz: PackedFloat32Array
+var _proj_vx: PackedFloat32Array
+var _proj_vy: PackedFloat32Array
+var _proj_vz: PackedFloat32Array
+var _proj_grav: PackedFloat32Array
+var _proj_kind: PackedByteArray
+var _proj_dmg: PackedFloat32Array
+var _proj_owner: PackedInt32Array
+var _proj_color: PackedColorArray
+var _projectiles_fired: int = 0
+var _proj_was_vis: bool = false
+var _proj_fx_cd: float = 0.0
 
 # Preallocated Bezier portal arc pool (SoA, zero GC)
 var _arc_count: int = 0
@@ -121,6 +144,13 @@ var _sim_pace_mult: float = 1.0
 var _law_diplomacy_wars: bool = true
 var _law_rebellions: bool = true
 var _law_disasters: bool = true
+var _has_get_gates: bool = false
+var _has_fauna_cnt: bool = false
+var _cur_has_fauna: bool = false
+var _turret_raw_cd: float = 0.0
+var _turret_pace_acc: float = 0.0
+var _portal_raw_cd: float = 0.0
+var _portal_pace_acc: float = 0.0
 
 
 func _ready() -> void:
@@ -136,10 +166,16 @@ func _exit_tree() -> void:
 		_mm_teleport_arcs.multimesh = null
 		_mm_teleport_arcs.material = null
 		_mm_teleport_arcs = null
+	if _mm_projectiles != null:
+		_mm_projectiles.multimesh = null
+		_mm_projectiles.material = null
+		_mm_projectiles = null
 	_beam_mesh = null
 	_arc_mesh = null
+	_proj_mesh = null
 	_beam_mat = null
 	_arc_mat = null
+	_proj_mat = null
 	_world = null
 	_physics = null
 	_civ = null
@@ -151,6 +187,8 @@ func bind_systems(world: Node2D, physics: Node2D, civ: Node2D) -> void:
 	_world = world
 	_physics = physics
 	_civ = civ
+	_has_get_gates = (_civ != null and _civ.has_method("get_quantum_gates"))
+	_has_fauna_cnt = (_physics != null and _physics.has_method("get_fauna_count"))
 	if _fx == null:
 		_fx = get_node_or_null("../FxAudio") as Node2D
 
@@ -212,21 +250,41 @@ func push_lights_to_fx(fx: Node2D) -> void:
 			fx.push_light(mid_b, rad * 0.85, _beam_color[b], b_inten * 0.8)
 			pushed += 1
 
+	for p in range(_proj_count):
+		if pushed >= cap:
+			break
+		var pk := int(_proj_kind[p])
+		if pk == ProjKind.BOLT and (p & 1) == 1:
+			continue
+		var p_pos := Vector2(_proj_px[p], _proj_py[p] - _proj_pz[p])
+		fx.push_light(p_pos, 18.0 if pk == ProjKind.GRENADE else 14.0, _proj_color[p], 0.95)
+		pushed += 1
+
 
 func step_combat(dt: float) -> void:
 	_ensure_initialized()
 	var safe_dt: float = clampf(dt, 0.0, 0.1)
 	_sim_time += safe_dt
+	_proj_fx_cd = maxf(0.0, _proj_fx_cd - safe_dt)
+	_turret_raw_cd = maxf(0.0, _turret_raw_cd - safe_dt)
+	_portal_raw_cd = maxf(0.0, _portal_raw_cd - safe_dt)
 
 	var pace_dt: float = safe_dt * clampf(_sim_pace_mult, 0.05, 80.0)
+	_turret_pace_acc += pace_dt
+	_portal_pace_acc += pace_dt
 	_update_beams(safe_dt)
 	_update_arcs(safe_dt)
+	if _proj_count > 0:
+		_update_projectiles(pace_dt)
 	_pull_unit_beams()
+	_pull_unit_projectiles()
 	_step_city_turrets(pace_dt)
 	_step_quantum_gates(pace_dt)
 
 	_sync_beam_multimesh()
 	_sync_arc_multimesh()
+	if _proj_count > 0 or _proj_was_vis:
+		_sync_projectile_multimesh()
 
 
 func step_visual_fade(dt: float) -> void:
@@ -238,6 +296,8 @@ func step_visual_fade(dt: float) -> void:
 	_update_arcs(safe_dt)
 	_sync_beam_multimesh()
 	_sync_arc_multimesh()
+	if _proj_count > 0 or _proj_was_vis:
+		_sync_projectile_multimesh()
 
 
 func fire_orbital_strike(world_pos: Vector2, radius: float) -> Dictionary:
@@ -359,7 +419,69 @@ func get_combat_stats() -> Dictionary:
 		"active_arcs": _arc_count,
 		"turret_shots": _turret_shots,
 		"orbital_strikes": _orbital_strikes,
+		"active_projectiles": _proj_count,
+		"projectiles_fired": _projectiles_fired,
 	}
+
+
+func get_projectile_count() -> int:
+	return _proj_count
+
+
+func spawn_ballistic_projectile(src_dst: Rect2, kind_and_dmg: Vector2, owner_fac: int = -1) -> void:
+	_ensure_initialized()
+	var src: Vector2 = src_dst.position
+	var dst: Vector2 = src_dst.size
+	var kind: int = clampi(int(kind_and_dmg.x), 0, 3)
+	var dmg: float = maxf(kind_and_dmg.y, 1.0)
+	var dist: float = src.distance_to(dst)
+	var spd: float = 115.0 if (kind == ProjKind.BOLT or kind == ProjKind.SHARD) else (65.0 if kind == ProjKind.GRENADE else 88.0)
+	var grav: float = 145.0 if kind == ProjKind.GRENADE else (110.0 if (kind == ProjKind.BOLT or kind == ProjKind.SHARD) else 125.0)
+	var min_t: float = 0.35 if kind == ProjKind.GRENADE else 0.18
+	var max_t: float = 1.80 if kind == ProjKind.GRENADE else 1.35
+	var t_flight: float = clampf(dist / maxf(spd, 10.0), min_t, max_t)
+	var slot: int = _proj_count
+	if slot >= MAX_PROJECTILES:
+		slot = 0
+	else:
+		_proj_count += 1
+	_proj_px[slot] = src.x
+	_proj_py[slot] = src.y
+	_proj_pz[slot] = 3.5
+	_proj_vx[slot] = (dst.x - src.x) / t_flight
+	_proj_vy[slot] = (dst.y - src.y) / t_flight
+	_proj_vz[slot] = 0.5 * grav * t_flight
+	_proj_grav[slot] = grav
+	_proj_kind[slot] = kind
+	_proj_dmg[slot] = dmg
+	_proj_owner[slot] = owner_fac
+	var col: Color = Color(1.0, 0.52, 0.22, 1.0)
+	if kind == ProjKind.GRENADE:
+		col = Color(1.0, 0.56, 0.18, 1.0)
+	elif kind == ProjKind.SHARD:
+		col = Color(0.86, 0.44, 1.0, 1.0)
+	elif owner_fac == 0:
+		col = COL_HUMAN
+	elif owner_fac == 1:
+		col = COL_ROBOT
+	elif owner_fac == 2:
+		col = COL_SPORE
+	_proj_color[slot] = col
+	_projectiles_fired += 1
+
+
+func get_save_state() -> Dictionary:
+	return {"version": SAVE_VERSION, "blob": pack_state()}
+
+
+func load_save_state(state: Variant) -> bool:
+	if state is PackedByteArray:
+		return unpack_state(state as PackedByteArray)
+	if state is Dictionary and (state as Dictionary).has("blob"):
+		var b: Variant = (state as Dictionary)["blob"]
+		if b is PackedByteArray:
+			return unpack_state(b as PackedByteArray)
+	return false
 
 
 func pack_state() -> PackedByteArray:
@@ -412,7 +534,29 @@ func pack_state() -> PackedByteArray:
 		spb.put_float(_beam_alpha[b])
 		spb.put_float(_beam_rate[b])
 
+	_pack_projectiles(spb)
 	return spb.data_array
+
+
+func _pack_projectiles(spb: StreamPeerBuffer) -> void:
+	spb.put_64(_projectiles_fired)
+	spb.put_u16(_proj_count)
+	for p in range(_proj_count):
+		spb.put_float(_proj_px[p])
+		spb.put_float(_proj_py[p])
+		spb.put_float(_proj_pz[p])
+		spb.put_float(_proj_vx[p])
+		spb.put_float(_proj_vy[p])
+		spb.put_float(_proj_vz[p])
+		spb.put_float(_proj_grav[p])
+		spb.put_u8(_proj_kind[p])
+		spb.put_float(_proj_dmg[p])
+		spb.put_32(_proj_owner[p])
+		var pc: Color = _proj_color[p]
+		spb.put_float(pc.r)
+		spb.put_float(pc.g)
+		spb.put_float(pc.b)
+		spb.put_float(pc.a)
 
 
 func unpack_state(raw: PackedByteArray) -> bool:
@@ -425,7 +569,7 @@ func unpack_state(raw: PackedByteArray) -> bool:
 	if spb.get_32() != MAGIC_STATE:
 		return false
 	var ver: int = spb.get_16()
-	if ver != SAVE_VERSION:
+	if ver != 5 and ver != SAVE_VERSION:
 		return false
 
 	_beams_fired = spb.get_64()
@@ -500,9 +644,40 @@ func unpack_state(raw: PackedByteArray) -> bool:
 			_beam_rate[b] = maxf(brate, 0.5)
 			_beam_count += 1
 
+	if ver >= 6:
+		_unpack_projectiles(spb)
+	else:
+		_proj_count = 0
+		_projectiles_fired = 0
+
 	_sync_beam_multimesh()
 	_sync_arc_multimesh()
+	_sync_projectile_multimesh()
 	return true
+
+
+func _unpack_projectiles(spb: StreamPeerBuffer) -> void:
+	_proj_count = 0
+	_projectiles_fired = 0
+	if spb.get_position() + 10 > spb.get_size():
+		return
+	_projectiles_fired = spb.get_64()
+	var saved_p: int = mini(spb.get_u16(), MAX_PROJECTILES)
+	for p in range(saved_p):
+		if spb.get_position() + 53 > spb.get_size():
+			break
+		_proj_px[p] = spb.get_float()
+		_proj_py[p] = spb.get_float()
+		_proj_pz[p] = spb.get_float()
+		_proj_vx[p] = spb.get_float()
+		_proj_vy[p] = spb.get_float()
+		_proj_vz[p] = spb.get_float()
+		_proj_grav[p] = maxf(spb.get_float(), 10.0)
+		_proj_kind[p] = spb.get_u8()
+		_proj_dmg[p] = spb.get_float()
+		_proj_owner[p] = spb.get_32()
+		_proj_color[p] = Color(spb.get_float(), spb.get_float(), spb.get_float(), spb.get_float())
+		_proj_count += 1
 
 
 func _ensure_initialized() -> void:
@@ -512,6 +687,7 @@ func _ensure_initialized() -> void:
 	_init_pools()
 	_init_beam_multimesh()
 	_init_arc_multimesh()
+	_init_projectile_multimesh()
 
 
 func _init_pools() -> void:
@@ -532,6 +708,18 @@ func _init_pools() -> void:
 	_arc_lift.resize(MAX_ARCS)
 	_arc_phase.resize(MAX_ARCS)
 	_arc_pulse.resize(MAX_ARCS)
+
+	_proj_px.resize(MAX_PROJECTILES)
+	_proj_py.resize(MAX_PROJECTILES)
+	_proj_pz.resize(MAX_PROJECTILES)
+	_proj_vx.resize(MAX_PROJECTILES)
+	_proj_vy.resize(MAX_PROJECTILES)
+	_proj_vz.resize(MAX_PROJECTILES)
+	_proj_grav.resize(MAX_PROJECTILES)
+	_proj_kind.resize(MAX_PROJECTILES)
+	_proj_dmg.resize(MAX_PROJECTILES)
+	_proj_owner.resize(MAX_PROJECTILES)
+	_proj_color.resize(MAX_PROJECTILES)
 
 	_city_turret_cd.resize(MAX_CITIES)
 	for cid in range(MAX_CITIES):
@@ -676,6 +864,51 @@ func _init_arc_multimesh() -> void:
 	mm.custom_aabb = AABB(Vector3(-128.0, -320.0, -1.0), Vector3(1536.0, 1152.0, 2.0))
 	_mm_teleport_arcs.multimesh = mm
 	add_child(_mm_teleport_arcs)
+
+
+func _build_proj_mesh() -> ArrayMesh:
+	var verts := PackedVector2Array([Vector2.ZERO])
+	var cols := PackedColorArray([Color.WHITE])
+	var indices := PackedInt32Array()
+	var segs: int = 8
+	for k in range(segs):
+		var ang: float = TAU * float(k) / float(segs)
+		verts.append(Vector2(cos(ang) * 0.5, sin(ang) * 0.5))
+		cols.append(Color(1.0, 1.0, 1.0, 0.85))
+	for k in range(segs):
+		indices.append(0)
+		indices.append(1 + k)
+		indices.append(1 + ((k + 1) % segs))
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_COLOR] = cols
+	arr[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return mesh
+
+
+func _init_projectile_multimesh() -> void:
+	_proj_mesh = _build_proj_mesh()
+	_proj_mat = CanvasItemMaterial.new()
+	_proj_mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+
+	_mm_projectiles = MultiMeshInstance2D.new()
+	_mm_projectiles.name = "CombatProjectilesPool"
+	_mm_projectiles.z_index = 2
+	_mm_projectiles.material = _proj_mat
+
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true
+	mm.use_custom_data = false
+	mm.mesh = _proj_mesh
+	mm.instance_count = MAX_PROJECTILES * 2
+	mm.visible_instance_count = 0
+	mm.custom_aabb = AABB(Vector3(-128.0, -320.0, -1.0), Vector3(1536.0, 1152.0, 2.0))
+	_mm_projectiles.multimesh = mm
+	add_child(_mm_projectiles)
 
 
 func _cap_hdr_color(c: Color, mult: float) -> Color:
@@ -841,6 +1074,114 @@ func _sync_arc_multimesh() -> void:
 		mm.set_instance_custom_data(i, custom)
 
 
+func _update_projectiles(dt: float) -> void:
+	var i: int = 0
+	while i < _proj_count:
+		_proj_px[i] += _proj_vx[i] * dt
+		_proj_py[i] += _proj_vy[i] * dt
+		_proj_vz[i] -= _proj_grav[i] * dt
+		var nz: float = _proj_pz[i] + _proj_vz[i] * dt
+		if nz <= 0.0:
+			_on_projectile_land(i)
+			var last: int = _proj_count - 1
+			if i != last:
+				_proj_px[i] = _proj_px[last]
+				_proj_py[i] = _proj_py[last]
+				_proj_pz[i] = _proj_pz[last]
+				_proj_vx[i] = _proj_vx[last]
+				_proj_vy[i] = _proj_vy[last]
+				_proj_vz[i] = _proj_vz[last]
+				_proj_grav[i] = _proj_grav[last]
+				_proj_kind[i] = _proj_kind[last]
+				_proj_dmg[i] = _proj_dmg[last]
+				_proj_owner[i] = _proj_owner[last]
+				_proj_color[i] = _proj_color[last]
+			_proj_count = last
+			continue
+		_proj_pz[i] = minf(nz, 128.0)
+		i += 1
+
+
+func _on_projectile_land(slot: int) -> void:
+	var impact_pos := Vector2(_proj_px[slot], _proj_py[slot])
+	var kind: int = int(_proj_kind[slot])
+	var dmg: float = _proj_dmg[slot]
+	var col: Color = _proj_color[slot]
+	var rad: float = 14.0 if kind == ProjKind.GRENADE else 7.5
+	var burn: float = 0.45 if kind == ProjKind.GRENADE else 0.0
+	var imp: float = 55.0 if kind == ProjKind.GRENADE else 22.0
+	if _physics != null and _physics.has_method("apply_external_damage"):
+		_physics.apply_external_damage(impact_pos, rad, {
+			"damage": dmg,
+			"burn": burn,
+			"impulse": imp,
+			"armor_pierce": (kind == ProjKind.SHARD),
+		})
+	if _fx != null and _proj_fx_cd <= 0.0:
+		_proj_fx_cd = 0.05
+		if kind == ProjKind.GRENADE:
+			_fx.spawn_shockwave(impact_pos, 16.0, col, 0.25)
+			_fx.spawn_burst(impact_pos, 8, col, 36.0, 0.34, 18.0)
+		else:
+			_fx.spawn_burst(impact_pos, 4, col, 20.0, 0.22, 8.0)
+
+
+func _sync_projectile_multimesh() -> void:
+	if _proj_count == 0 and not _proj_was_vis:
+		return
+	if _mm_projectiles == null or _mm_projectiles.multimesh == null:
+		return
+	var mm: MultiMesh = _mm_projectiles.multimesh
+	var n: int = mini(_proj_count, MAX_PROJECTILES)
+	mm.visible_instance_count = n * 2
+	_proj_was_vis = (n > 0)
+	for i in range(n):
+		var px: float = _proj_px[i]
+		var py: float = _proj_py[i]
+		var pz: float = maxf(_proj_pz[i], 0.0)
+		var sh_scale := Vector2(clampf(2.4 - pz * 0.025, 0.9, 2.4), clampf(1.0 - pz * 0.012, 0.45, 1.0))
+		mm.set_instance_transform_2d(i, Transform2D(0.0, sh_scale, 0.0, Vector2(px, py)))
+		mm.set_instance_color(i, Color(0.02, 0.03, 0.06, clampf(0.42 - pz * 0.007, 0.14, 0.42)))
+	for i in range(n):
+		var slot: int = n + i
+		var pk: int = int(_proj_kind[i])
+		var pos := Vector2(_proj_px[i], _proj_py[i] - maxf(_proj_pz[i], 0.0))
+		var vel_vis := Vector2(_proj_vx[i], _proj_vy[i] - _proj_vz[i])
+		var ang: float = vel_vis.angle() if vel_vis.length_squared() > 0.25 else 0.0
+		var sz := Vector2(3.6, 1.4) if (pk == ProjKind.BOLT or pk == ProjKind.SHARD) else (Vector2(2.8, 2.8) if pk == ProjKind.GRENADE else Vector2(2.6, 2.0))
+		mm.set_instance_transform_2d(slot, Transform2D(ang, sz, 0.0, pos))
+		mm.set_instance_color(slot, _cap_hdr_color(_proj_color[i], 1.65))
+
+
+func _pull_unit_projectiles() -> void:
+	if _physics == null:
+		return
+	var q_v: Variant = _physics.get("_proj_src")
+	if not (q_v is PackedVector2Array) or (q_v as PackedVector2Array).is_empty():
+		return
+	if not _physics.has_method("pop_fired_projectiles"):
+		return
+	var res: Variant = _physics.pop_fired_projectiles()
+	if not (res is Dictionary):
+		return
+	var pop: Dictionary = res
+	var src_v: Variant = pop.get("src", null)
+	var dst_v: Variant = pop.get("dst", null)
+	if not (src_v is PackedVector2Array) or not (dst_v is PackedVector2Array):
+		return
+	var srcs: PackedVector2Array = src_v
+	var dsts: PackedVector2Array = dst_v
+	var kd_v: Variant = pop.get("kind_dmg", null)
+	var own_v: Variant = pop.get("owner", null)
+	var kds: PackedVector2Array = kd_v if kd_v is PackedVector2Array else PackedVector2Array()
+	var owns: PackedInt32Array = own_v if own_v is PackedInt32Array else PackedInt32Array()
+	var n: int = mini(srcs.size(), dsts.size())
+	for i in range(n):
+		var kd: Vector2 = kds[i] if i < kds.size() else Vector2(0.0, 14.0)
+		var ow: int = owns[i] if i < owns.size() else -1
+		spawn_ballistic_projectile(Rect2(srcs[i], dsts[i]), kd, ow)
+
+
 func _pull_unit_beams() -> void:
 	if _physics == null or not _physics.has_method("pop_fired_beams"):
 		return
@@ -900,9 +1241,15 @@ func _pull_unit_beams() -> void:
 			_fx.play_sfx("laser_heavy", heavy_x_sum / float(heavy_n))
 
 
-func _step_city_turrets(dt: float) -> void:
+func _step_city_turrets(_dt: float) -> void:
 	if _civ == null or _physics == null:
 		return
+	if _sim_pace_mult >= 10.0:
+		if _turret_raw_cd > 0.0:
+			return
+		_turret_raw_cd = 0.12
+	var step_dt: float = _turret_pace_acc
+	_turret_pace_acc = 0.0
 	if not _civ.has_method("get_goal_buffers") or not _civ.has_method("consume_city_energy"):
 		return
 	var goals: Dictionary = _civ.get_goal_buffers()
@@ -923,14 +1270,16 @@ func _step_city_turrets(dt: float) -> void:
 	var tier_range: float = float(TUNING_KNOBS["TURRET_RANGE_PER_TIER_PX"])
 	var turret_cd: float = float(TUNING_KNOBS["TURRET_INTERVAL_SEC"])
 	var miss_cd: float = float(TUNING_KNOBS["TURRET_MISS_COOLDOWN_SEC"])
+	var eff_miss_cd: float = maxf(miss_cd, 0.14 * _sim_pace_mult) if _sim_pace_mult >= 10.0 else miss_cd
 	var energy_cost: float = float(TUNING_KNOBS["TURRET_ENERGY_COST"])
 	var base_dmg: float = float(TUNING_KNOBS["TURRET_DAMAGE"])
 	var tier_dmg: float = float(TUNING_KNOBS["TURRET_DAMAGE_PER_TIER"])
 	var turret_x_sum: float = 0.0
 	var turret_shots_step: int = 0
+	_cur_has_fauna = _has_fauna_cnt and int(_physics.call("get_fauna_count")) > 0
 
 	for cid in range(n_cities):
-		_city_turret_cd[cid] = maxf(0.0, _city_turret_cd[cid] - dt)
+		_city_turret_cd[cid] = maxf(0.0, _city_turret_cd[cid] - step_dt)
 		if city_active[cid] == 0:
 			continue
 		var tier: int = int(city_tier[cid])
@@ -945,16 +1294,16 @@ func _step_city_turrets(dt: float) -> void:
 		var scan_r: float = clampf(base_range + float(tier - 1) * tier_range, 42.0, 52.0)
 		var target: Dictionary = _find_hostile_target(origin, scan_r, cid, goals)
 		if not bool(target.get("found", false)):
-			_city_turret_cd[cid] = miss_cd
+			_city_turret_cd[cid] = eff_miss_cd
 			continue
 		if not _law_diplomacy_wars and not bool(target.get("is_threat", false)):
 			var t_fac: int = int(target.get("faction", -1))
 			var t_cid: int = int(target.get("city_id", -1))
 			if t_fac != FACTION_MUTANT and t_cid >= 0 and t_cid != cid:
-				_city_turret_cd[cid] = miss_cd
+				_city_turret_cd[cid] = eff_miss_cd
 				continue
 		if not _civ.consume_city_energy(cid, energy_cost):
-			_city_turret_cd[cid] = miss_cd
+			_city_turret_cd[cid] = eff_miss_cd
 			continue
 
 		_city_turret_cd[cid] = turret_cd
@@ -1000,10 +1349,19 @@ func _try_paid_portal_hop(src_pos: Vector2, dst_pos: Vector2, src_cid: int) -> i
 	return transfer_squad_portal(src_pos, dst_pos, src_cid)
 
 
-func _step_quantum_gates(dt: float) -> void:
-	if _civ == null or _physics == null:
+func _step_quantum_gates(_dt: float) -> void:
+	if _civ == null or _physics == null or not _has_get_gates:
 		return
-	if not _civ.has_method("get_quantum_gates") or not _civ.has_method("consume_city_energy"):
+	if _sim_pace_mult >= 10.0:
+		if _portal_raw_cd > 0.0:
+			return
+		_portal_raw_cd = 0.12
+	var step_dt: float = _portal_pace_acc
+	_portal_pace_acc = 0.0
+	_portal_timer -= step_dt
+	if _portal_timer > 0.0:
+		return
+	if not _civ.has_method("consume_city_energy"):
 		return
 	var gates_raw: Variant = _civ.get_quantum_gates()
 	if not (gates_raw is Array):
@@ -1018,11 +1376,7 @@ func _step_quantum_gates(dt: float) -> void:
 			active_gates.append(g)
 
 	if active_gates.size() < 2:
-		_portal_timer = 0.0
-		return
-
-	_portal_timer -= dt
-	if _portal_timer > 0.0:
+		_portal_timer = 1.0 if _sim_pace_mult >= 10.0 else 0.4
 		return
 	_portal_timer = float(TUNING_KNOBS["PORTAL_INTERVAL_SEC"])
 
@@ -1094,23 +1448,15 @@ func _step_quantum_gates(dt: float) -> void:
 		var hot_b_win: bool = _is_city_hot(cid_b_win, war_states, alerted)
 
 		# Reinforce threatened/wartime gate endpoint first, falling back to reverse direction
-		var first_src_pos: Vector2 = pos_a
-		var first_dst_pos: Vector2 = pos_b_win
-		var first_cid: int = cid_a
-		var second_src_pos: Vector2 = pos_b_win
-		var second_dst_pos: Vector2 = pos_a
-		var second_cid: int = cid_b_win
+		var moved: int = 0
 		if hot_a and not hot_b_win:
-			first_src_pos = pos_b_win
-			first_dst_pos = pos_a
-			first_cid = cid_b_win
-			second_src_pos = pos_a
-			second_dst_pos = pos_b_win
-			second_cid = cid_a
-
-		var moved: int = _try_paid_portal_hop(first_src_pos, first_dst_pos, first_cid)
-		if moved <= 0:
-			moved = _try_paid_portal_hop(second_src_pos, second_dst_pos, second_cid)
+			moved = _try_paid_portal_hop(pos_b_win, pos_a, cid_b_win)
+			if moved <= 0:
+				moved = _try_paid_portal_hop(pos_a, pos_b_win, cid_a)
+		else:
+			moved = _try_paid_portal_hop(pos_a, pos_b_win, cid_a)
+			if moved <= 0:
+				moved = _try_paid_portal_hop(pos_b_win, pos_a, cid_b_win)
 		if moved > 0:
 			used[i] = 1
 			used[best_j] = 1
@@ -1176,6 +1522,17 @@ func _find_hostile_target(origin: Vector2, max_range: float, owner_cid: int, goa
 		return {"found": false}
 	if _physics.has_method("find_nearest_hostile_pos"):
 		var res: Variant = _physics.find_nearest_hostile_pos(origin, max_range, owner_cid)
+		if res is Dictionary and bool((res as Dictionary).get("found", false)):
+			return res
+		if _cur_has_fauna and _physics.has_method("find_nearest_hostile_fauna"):
+			var f_res0: Variant = _physics.call("find_nearest_hostile_fauna", origin, max_range, false)
+			if f_res0 is Dictionary and bool((f_res0 as Dictionary).get("found", false)):
+				return {
+					"found": true,
+					"unit_idx": -1,
+					"pos": Vector2((f_res0 as Dictionary).get("pos", origin)),
+					"is_threat": true,
+				}
 		if res is Dictionary:
 			return res
 
@@ -1207,6 +1564,15 @@ func _find_hostile_target(origin: Vector2, max_range: float, owner_cid: int, goa
 			best_pos = p
 
 	if best_idx < 0:
+		if _cur_has_fauna and _physics.has_method("find_nearest_hostile_fauna"):
+			var f_res: Variant = _physics.call("find_nearest_hostile_fauna", origin, max_range, false)
+			if f_res is Dictionary and bool((f_res as Dictionary).get("found", false)):
+				return {
+					"found": true,
+					"unit_idx": -1,
+					"pos": Vector2((f_res as Dictionary).get("pos", origin)),
+					"is_threat": true,
+				}
 		return {"found": false}
 	return {"found": true, "unit_idx": best_idx, "pos": best_pos}
 

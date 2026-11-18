@@ -41,12 +41,29 @@ const REG_IDLE: int = 0
 const REG_GATHER: int = 1
 const REG_MARCH: int = 2
 
+const TR_PYRO_BIT: int = 1 << 12
+const TR_CRYO_BIT: int = 1 << 13
+const TR_VAMP_BIT: int = 1 << 14
+const TR_STRONG_BIT: int = 1 << 18
+const TR_DEFLECT_BIT: int = 1 << 20
+const TR_PSYCHIC_BIT: int = 1 << 21
+const TR_TOXIC_BIT: int = 1 << 23
+const TR_THORNS_BIT: int = 1 << 24
+const TR_EAGLE_BIT: int = 1 << 25
+const TR_OVERCLOCK_BIT: int = 1 << 30
+const TR_ION_SHIELD_BIT: int = 1 << 6
+const ST_CRYO_BIT: int = 1 << 2
+const ST_STUN_BIT: int = 1 << 5
+const ST_SLEEP_BIT: int = 1 << 11
+const ST_INVINC_BIT: int = 1 << 14
+
 var _reg_active: PackedByteArray
 var _reg_state: PackedByteArray
 var _reg_faction: PackedByteArray
 var _reg_color: PackedColorArray
 var _reg_leader_uid: PackedInt32Array
 var _reg_leader_idx: PackedInt32Array
+var _reg_leader_score: PackedInt32Array
 var _reg_leader_pos: PackedVector2Array
 var _reg_rally_pos: PackedVector2Array
 var _reg_target_pos: PackedVector2Array
@@ -77,6 +94,7 @@ func _init() -> void:
 	_reg_color.resize(MAX_CITIES)
 	_reg_leader_uid.resize(MAX_CITIES)
 	_reg_leader_idx.resize(MAX_CITIES)
+	_reg_leader_score.resize(MAX_CITIES)
 	_reg_leader_pos.resize(MAX_CITIES)
 	_reg_rally_pos.resize(MAX_CITIES)
 	_reg_target_pos.resize(MAX_CITIES)
@@ -98,6 +116,7 @@ func reset_state() -> void:
 	_reg_faction.fill(0)
 	_reg_leader_uid.fill(-1)
 	_reg_leader_idx.fill(-1)
+	_reg_leader_score.fill(-9999)
 	_reg_count.fill(0)
 	_reg_assembled.fill(0)
 	_reg_min_squad.fill(6)
@@ -193,7 +212,7 @@ func step_regiments(up: Node2D, safe_dt: float) -> void:
 	_order_refresh_cd -= safe_dt
 	var need_reassign: bool = false
 	if _order_refresh_cd <= 0.0:
-		_order_refresh_cd = 0.30
+		_order_refresh_cd = 0.45
 		_refresh_army_orders(up)
 		need_reassign = true
 
@@ -212,7 +231,7 @@ func step_regiments(up: Node2D, safe_dt: float) -> void:
 
 	_reg_assign_cd -= safe_dt
 	if need_reassign or _reg_assign_cd <= 0.0:
-		_reg_assign_cd = 0.22
+		_reg_assign_cd = 0.36
 		_reg_count.fill(0)
 		_reg_leader_idx.fill(-1)
 		up._u_in_regiment.fill(0)
@@ -267,15 +286,33 @@ func _assign_regiment_members(up: Node2D, u_cnt: int) -> void:
 		if uid_arr[i] == _reg_leader_uid[cid]:
 			_reg_leader_idx[cid] = i
 
-	# Pass 3: elect banner-bearer if previous leader fell or unassigned
+	# Pass 3: elect regiment captain by kills*2 + dodges + (10 if notable)
+	_elect_regiment_leaders(up, u_cnt)
+
+
+func _elect_regiment_leaders(up: Node2D, u_cnt: int) -> void:
+	_reg_leader_score.fill(-9999)
+	var in_reg: PackedByteArray = up._u_in_regiment
+	var cid_arr: PackedInt32Array = up._u_city_id
+	var uid_arr: PackedInt32Array = up._u_uid
+	var role_arr: PackedByteArray = up._u_role
+	var kills_arr: PackedInt32Array = up._u_kills
+	var dodges_arr: PackedInt32Array = up._u_dodges
+	var notable_arr: PackedInt32Array = up._u_notable_idx
+	var not_sz: int = notable_arr.size()
 	for i in range(u_cnt):
-		if up._u_in_regiment[i] == 0:
+		if in_reg[i] == 0:
 			continue
 		var cid: int = cid_arr[i]
-		if _reg_leader_idx[cid] < 0:
-			_reg_leader_idx[cid] = i
-			_reg_leader_uid[cid] = uid_arr[i]
-		elif role_arr[i] == ROLE_SOLDIER and role_arr[_reg_leader_idx[cid]] != ROLE_SOLDIER:
+		if cid < 0 or cid >= MAX_CITIES:
+			continue
+		var is_notable: bool = (i < not_sz and notable_arr[i] >= 0)
+		var score: int = kills_arr[i] * 2 + dodges_arr[i] + (10 if is_notable else 0)
+		var inc_bonus: int = 1 if uid_arr[i] == _reg_leader_uid[cid] else 0
+		var sol_bonus: int = 1 if role_arr[i] == ROLE_SOLDIER else 0
+		var eff_score: int = score * 4 + sol_bonus * 2 + inc_bonus
+		if _reg_leader_idx[cid] < 0 or eff_score > _reg_leader_score[cid]:
+			_reg_leader_score[cid] = eff_score
 			_reg_leader_idx[cid] = i
 			_reg_leader_uid[cid] = uid_arr[i]
 
@@ -428,6 +465,13 @@ func compute_combat_params(up: Node2D, i: int) -> Vector3:
 		cd_sec *= (0.72 if fac == FACTION_SPORE else 0.82)
 		if fac == FACTION_SPORE:
 			dmg *= 1.18
+	var tm: int = up._u_trait_mask[i] if i < up._u_trait_mask.size() else 0
+	if (tm & TR_EAGLE_BIT) != 0 and rng_px > 12.0:
+		rng_px = minf(36.0, rng_px + 4.0)
+	if (tm & TR_OVERCLOCK_BIT) != 0:
+		cd_sec *= 0.78
+	if i < up._u_dmg_mul.size():
+		dmg *= up._u_dmg_mul[i]
 	return Vector3(rng_px, cd_sec, dmg)
 
 
@@ -481,12 +525,14 @@ func resolve_target(up: Node2D, i: int, range_px: float) -> void:
 			var edy: float = py_f - up._cur_enemy_y
 			up._cur_enemy_d2 = edx * edx + edy * edy
 		else:
-			up._u_acq_cd[i] = (0.42 if (role == ROLE_SOLDIER or in_reg) else 0.78) + float((i + up._tick_idx) & 3) * 0.06
+			up._u_acq_cd[i] = (0.50 if (role == ROLE_SOLDIER or in_reg) else 0.85) + float((i + up._tick_idx) & 3) * 0.06
 
 
 func execute_attack(up: Node2D, attacker: int, my_range_px: float) -> bool:
 	var enemy_idx: int = up._cur_enemy_idx
 	if enemy_idx < 0 or up._u_attack_cd[attacker] > 0.0:
+		return false
+	if attacker < up._u_status_mask.size() and (up._u_status_mask[attacker] & (ST_CRYO_BIT | ST_STUN_BIT)) != 0:
 		return false
 	var atk_r2: float = my_range_px * my_range_px
 	if up._cur_enemy_d2 > atk_r2:
@@ -518,6 +564,8 @@ func execute_attack(up: Node2D, attacker: int, my_range_px: float) -> bool:
 		up._beam_colors.append(beam_col)
 		up._beam_widths.append(b_width)
 		up._beam_heavy.append(is_heavy)
+	if is_ranged_beam or (up._u_trait_mask[attacker] & (TR_PYRO_BIT | TR_PSYCHIC_BIT | TR_CRYO_BIT)) != 0:
+		_maybe_queue_attack_projectile(up, attacker, Vector2(px_f, py_f), Vector2(ex, ey), is_ranged_beam)
 
 	up._cur_hit_kdx = kdx
 	up._cur_hit_kdy = kdy
@@ -526,13 +574,65 @@ func execute_attack(up: Node2D, attacker: int, my_range_px: float) -> bool:
 	up._cur_hit_col = beam_col
 	up._cur_hit_ranged = is_ranged_beam
 
+	if (up._u_trait_mask[enemy_idx] & TR_DEFLECT_BIT) != 0 and _try_defender_deflect(up, attacker, enemy_idx):
+		return false
 	if _try_defender_dodge(up, enemy_idx):
 		return false
 
 	return _apply_hit_damage(up, attacker, enemy_idx)
 
 
+func _maybe_queue_attack_projectile(up: Node2D, attacker: int, src: Vector2, dst: Vector2, is_ranged: bool) -> void:
+	if up._proj_src.size() >= 24:
+		return
+	var att_tm: int = up._u_trait_mask[attacker] if attacker < up._u_trait_mask.size() else 0
+	var proj_kind: int = -1
+	var proj_dmg: float = 10.0
+	if (att_tm & TR_PYRO_BIT) != 0:
+		proj_kind = 2
+		proj_dmg = 16.0
+	elif (att_tm & TR_PSYCHIC_BIT) != 0:
+		proj_kind = 0
+		proj_dmg = 14.0
+	elif (att_tm & TR_CRYO_BIT) != 0:
+		proj_kind = 3
+		proj_dmg = 12.0
+	elif is_ranged and up._sim_pace_mult < 12.0 and ((attacker + up._tick_idx) & 3) == 0:
+		var cid: int = up._u_city_id[attacker]
+		var tier: int = int(up._city_tech_tier[cid]) if (cid >= 0 and cid < up._city_tech_tier.size()) else 0
+		if tier >= 2:
+			proj_kind = 1 if int(up._u_faction_id[attacker]) == FACTION_HUMAN else 0
+			proj_dmg = 6.0
+	if proj_kind >= 0:
+		var cid_o: int = up._u_city_id[attacker]
+		var enc_owner: int = (100 + cid_o) if cid_o >= 0 else int(up._u_faction_id[attacker])
+		up.queue_projectile(Rect2(src, dst), Vector2(float(proj_kind), proj_dmg), enc_owner)
+
+
+func _try_defender_deflect(up: Node2D, attacker: int, def_idx: int) -> bool:
+	if def_idx >= up._u_trait_mask.size() or (up._u_trait_mask[def_idx] & TR_DEFLECT_BIT) == 0:
+		return false
+	if up._u_dodge_cd[def_idx] > 0.0 or up._ext_rng.randf() >= 0.24:
+		return false
+	up._u_dodge_cd[def_idx] = 1.4
+	up._hit_flash_timer[def_idx] = maxf(up._hit_flash_timer[def_idx], 0.16)
+	up._hp[attacker] -= up._cur_dmg * 0.35
+	if up._hp[attacker] <= 0.0:
+		up._cur_any_died = true
+	up._hit_flash_timer[attacker] = maxf(up._hit_flash_timer[attacker], 0.14)
+	if up._fx != null:
+		if up._fx.has_method("spawn_reaction_strip") and up._strip_fx_budget > 0:
+			up._strip_fx_budget -= 1
+			up._fx.call("spawn_reaction_strip", Vector2(up._px[def_idx], up._py[def_idx] - 7.0), STRIP_BLOCK)
+		if up._skirmish_fx_budget > 0:
+			up._skirmish_fx_budget -= 1
+			up._fx.emit_spark_arc(up._cur_hit_dst, Vector2(-up._cur_hit_kdx, -up._cur_hit_kdy), Color(0.65, 0.96, 1.0, 0.95))
+	return true
+
+
 func _try_defender_dodge(up: Node2D, def_idx: int) -> bool:
+	if def_idx < up._u_status_mask.size() and (up._u_status_mask[def_idx] & (ST_CRYO_BIT | ST_STUN_BIT)) != 0:
+		return false
 	var kdx: float = up._cur_hit_kdx
 	var kdy: float = up._cur_hit_kdy
 	var def_role: int = int(up._u_role[def_idx])
@@ -540,6 +640,8 @@ func _try_defender_dodge(up: Node2D, def_idx: int) -> bool:
 	var def_glitched: bool = (def_idx < up._u_glitch_timer.size() and up._u_glitch_timer[def_idx] > 0.0)
 	var human_dodge_p: float = up._k_human_dodge_p
 	var dodge_p: float = (human_dodge_p if def_fac == FACTION_HUMAN else (0.14 if def_fac == FACTION_ROBOT else 0.24)) if (def_role == ROLE_SOLDIER or def_role == ROLE_MUTANT) else (0.18 if def_fac == FACTION_HUMAN else 0.10)
+	if def_idx < up._u_dodge_bonus.size():
+		dodge_p = minf(0.70, dodge_p + up._u_dodge_bonus[def_idx])
 	if def_glitched or (def_fac == FACTION_ROBOT and up._is_unit_rain_stunned(def_idx)):
 		dodge_p *= 0.20
 	if up._u_dodge_cd[def_idx] > 0.0 or up._rng.randf() >= dodge_p:
@@ -560,6 +662,9 @@ func _try_defender_dodge(up: Node2D, def_idx: int) -> bool:
 	up._vy[def_idx] = dvy * d_spd
 	up._vel[def_idx] = Vector2(up._vx[def_idx], up._vy[def_idx])
 	up._knockback_timer[def_idx] = maxf(up._knockback_timer[def_idx], 0.18)
+	if def_idx < up._u_vel_z.size():
+		up._u_vel_z[def_idx] = maxf(up._u_vel_z[def_idx], 16.0)
+		up._any_z_active = true
 	up._u_dodge_cd[def_idx] = 1.65 if def_fac == FACTION_HUMAN else 1.85
 	up._u_dodges[def_idx] += 1
 	up._total_dodges += 1
@@ -583,11 +688,21 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 	var role: int = int(up._u_role[attacker])
 	var def_fac: int = int(up._u_faction_id[def_idx])
 	var def_cid: int = up._u_city_id[def_idx]
-	var def_invuln: bool = (def_idx < up._u_invuln_timer.size() and up._u_invuln_timer[def_idx] > 0.0)
+	var def_invuln: bool = (def_idx < up._u_invuln_timer.size() and up._u_invuln_timer[def_idx] > 0.0) or (def_idx < up._u_status_mask.size() and (up._u_status_mask[def_idx] & ST_INVINC_BIT) != 0)
 	var died: bool = false
+	if def_idx < up._u_status_mask.size() and (up._u_status_mask[def_idx] & ST_SLEEP_BIT) != 0 and up._traits_fauna != null:
+		up._traits_fauna.clear_status(up, def_idx, 11)
 
 	if not def_invuln:
 		var final_dmg: float = up._cur_dmg
+		var att_cid: int = up._u_city_id[attacker]
+		if att_cid >= 0 and att_cid < MAX_CITIES and _reg_active[att_cid] != 0:
+			var l_idx: int = _reg_leader_idx[att_cid]
+			if l_idx >= 0 and l_idx < up._unit_count and up._hp[l_idx] > 0.0:
+				var ldx: float = up._px[attacker] - up._px[l_idx]
+				var ldy: float = up._py[attacker] - up._py[l_idx]
+				if ldx * ldx + ldy * ldy <= 400.0:
+					final_dmg *= 1.18
 		var def_glitched: bool = (def_idx < up._u_glitch_timer.size() and up._u_glitch_timer[def_idx] > 0.0)
 		var def_emp: bool = (def_cid >= 0 and def_cid < up._city_emp_timer.size() and up._city_emp_timer[def_cid] > 0.0)
 		if def_fac == FACTION_ROBOT and not def_glitched and not def_emp and not up._is_unit_rain_stunned(def_idx):
@@ -600,7 +715,18 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 			final_dmg *= 1.40
 			up._u_fire_now[def_idx] = maxf(up._u_fire_now[def_idx], 0.24)
 			up._u_has_status[def_idx] = 1
+		if def_idx < up._u_armor_mul.size():
+			final_dmg *= up._u_armor_mul[def_idx]
+		if attacker < up._u_crit_chance.size() and up._u_crit_chance[attacker] > 0.055 and up._ext_rng.randf() < up._u_crit_chance[attacker]:
+			final_dmg *= 1.55
+			if def_idx < up._u_vel_z.size():
+				up._u_vel_z[def_idx] = maxf(up._u_vel_z[def_idx], 22.0)
+				up._any_z_active = true
 		up._hp[def_idx] -= final_dmg
+		if (up._u_trait_mask[attacker] | up._u_trait_mask[def_idx]) != 0:
+			_apply_trait_hit_effects(up, attacker, def_idx, final_dmg)
+		if def_idx < up._u_last_attacker_uid.size():
+			up._u_last_attacker_uid[def_idx] = up._u_uid[attacker]
 		if fac == FACTION_SPORE and def_idx < up._u_corrode_timer.size():
 			up._u_corrode_timer[def_idx] = maxf(up._u_corrode_timer[def_idx], up._k_spore_corrode_sec)
 			up._u_has_status[def_idx] = 1
@@ -620,11 +746,16 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 	up._vx[def_idx] += kdx * 36.0
 	up._vy[def_idx] += kdy * 36.0
 	up._knockback_timer[def_idx] = maxf(up._knockback_timer[def_idx], 0.18)
+	if def_idx < up._u_vel_z.size() and ((attacker < up._u_trait_mask.size() and (up._u_trait_mask[attacker] & TR_STRONG_BIT) != 0) or up._cur_dmg >= 20.0):
+		up._u_vel_z[def_idx] = maxf(up._u_vel_z[def_idx], 18.0)
+		up._any_z_active = true
 	up._hit_flash_timer[def_idx] = maxf(up._hit_flash_timer[def_idx], 0.16)
 	up._record_memory(attacker, MEM_FOUGHT)
 	up._record_memory(def_idx, MEM_FOUGHT)
 	if up._hp[def_idx] <= 0.0:
 		up._u_kills[attacker] += 1
+		if up._traits_fauna != null:
+			up._traits_fauna.on_unit_killed_hooks(up, attacker, def_idx)
 		died = true
 	if up._skirmish_fx_budget > 0 and up._fx != null:
 		up._skirmish_fx_budget -= 1
@@ -636,6 +767,34 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 			up._skirmish_sfx_cd = 0.09
 			up._fx.play_sfx("skirmish")
 	return died
+
+
+func _apply_trait_hit_effects(up: Node2D, attacker: int, def_idx: int, final_dmg: float) -> void:
+	var att_tm: int = up._u_trait_mask[attacker] if attacker < up._u_trait_mask.size() else 0
+	var def_tm: int = up._u_trait_mask[def_idx] if def_idx < up._u_trait_mask.size() else 0
+	if att_tm == 0 and def_tm == 0:
+		return
+	var tf: RefCounted = up._traits_fauna
+	if (att_tm & TR_VAMP_BIT) != 0 and final_dmg > 0.0:
+		up._hp[attacker] = minf(up.get_unit_max_hp(attacker), up._hp[attacker] + final_dmg * 0.30)
+	if tf != null:
+		if (att_tm & TR_PYRO_BIT) != 0:
+			tf.apply_status(up, def_idx, 0, 3.0)
+		if (att_tm & TR_CRYO_BIT) != 0 and up._ext_rng.randf() < 0.25:
+			tf.apply_status(up, def_idx, 2, 2.2)
+		if (att_tm & TR_TOXIC_BIT) != 0:
+			tf.apply_status(up, def_idx, 1, 4.5)
+		if (def_tm & TR_ION_SHIELD_BIT) != 0 and up._hp[def_idx] > 0.0 and up._ext_rng.randf() < 0.14:
+			tf.apply_status(up, def_idx, 3, 5.0)
+			if up._fx != null and up._fx.has_method("spawn_reaction_strip") and up._strip_fx_budget > 0:
+				up._strip_fx_budget -= 1
+				up._fx.call("spawn_reaction_strip", Vector2(up._px[def_idx], up._py[def_idx] - 7.0), STRIP_SHIELD)
+		if (def_tm & TR_TOXIC_BIT) != 0 and not up._cur_hit_ranged:
+			tf.apply_status(up, attacker, 1, 3.5)
+	if (def_tm & TR_THORNS_BIT) != 0 and not up._cur_hit_ranged:
+		up._hp[attacker] -= final_dmg * 0.20
+		if up._hp[attacker] <= 0.0:
+			up._cur_any_died = true
 
 
 func execute_sparring(up: Node2D, attacker: int, partner: int) -> void:
@@ -710,7 +869,7 @@ func process_spore_biomass_on_death(up: Node2D, dead_idx: int) -> void:
 					var dx: float = up._px[j] - sx
 					var dy: float = up._py[j] - sy
 					if dx * dx + dy * dy <= r2:
-						up._hp[j] = minf(100.0, up._hp[j] + 18.0)
+						up._hp[j] = minf(up.get_unit_max_hp(j), up._hp[j] + 18.0)
 						up._hit_flash_timer[j] = maxf(up._hit_flash_timer[j], 0.14)
 						if deposit_cid < 0 and up._u_city_id[j] >= 0:
 							deposit_cid = up._u_city_id[j]

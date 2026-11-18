@@ -2,19 +2,20 @@
   "atlas_path": "res://assets/atlases/units_atlas.png",
   "mask_path": "res://assets/atlases/units_atlas_mask.png",
   "atlas_size": [
-    192,
+    352,
     8
   ],
   "cell_size": [
     8,
     8
   ],
-  "atlas_cols": 24,
+  "atlas_cols": 44,
+  "cols": 44,
   "shader_mode": 3,
   "shader_uniforms": {
     "sprite_mode": 3,
     "motion_mode": 2,
-    "atlas_cols": 24,
+    "atlas_cols": 44,
     "sprite_size": [
       8,
       8
@@ -46,7 +47,27 @@
     "MUTANT_CRYSTAL_A": 20,
     "MUTANT_CRYSTAL_B": 21,
     "HUMAN_FARMER": 22,
-    "CARGO_PIP": 23
+    "CARGO_PIP": 23,
+    "FAUNA_DEER": 24,
+    "FAUNA_RABBIT": 25,
+    "FAUNA_CRAB": 26,
+    "FAUNA_FISH": 27,
+    "FAUNA_TURTLE": 28,
+    "FAUNA_XENO_LAMB": 29,
+    "FAUNA_WOLF": 30,
+    "FAUNA_BEAR": 31,
+    "FAUNA_RAPTOR": 32,
+    "FAUNA_CROC": 33,
+    "FAUNA_SCORPION": 34,
+    "INSECT_BEE": 35,
+    "INSECT_BEETLE": 36,
+    "INSECT_FIREFLY": 37,
+    "BOSS_XENO_LEVIATHAN": 38,
+    "BOSS_ORBITAL_UFO": 39,
+    "BOSS_TECHNO_NECROMANCER": 40,
+    "BOSS_CYBER_COLOSSUS": 41,
+    "UNIT_SLEEPING_POD": 42,
+    "UNIT_DROP_POD": 43
   },
   "cells": [
     {
@@ -71,7 +92,7 @@
       "uv_rect": [
         0.0,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -95,9 +116,9 @@
         0
       ],
       "uv_rect": [
-        0.041667,
+        0.022727,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -121,9 +142,9 @@
         0
       ],
       "uv_rect": [
-        0.083333,
+        0.045455,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -147,9 +168,9 @@
         0
       ],
       "uv_rect": [
-        0.125,
+        0.068182,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -173,9 +194,9 @@
         0
       ],
       "uv_rect": [
-        0.166667,
+        0.090909,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -199,9 +220,9 @@
         0
       ],
       "uv_rect": [
-        0.208333,
+        0.113636,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -225,9 +246,9 @@
         0
       ],
       "uv_rect": [
-        0.25,
+        0.136364,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -251,9 +272,9 @@
         0
       ],
       "uv_rect": [
-        0.291667,
+        0.159091,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -277,9 +298,9 @@
         0
       ],
       "uv_rect": [
-        0.333333,
+        0.181818,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -303,9 +324,9 @@
         0
       ],
       "uv_rect": [
-        0.375,
+        0.204545,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -329,9 +350,9 @@
         0
       ],
       "uv_rect": [
-        0.416667,
+        0.227273,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -355,9 +376,9 @@
         0
       ],
       "uv_rect": [
-        0.458333,
+        0.25,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -381,9 +402,9 @@
         0
       ],
       "uv_rect": [
-        0.5,
+        0.272727,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -407,9 +428,9 @@
         0
       ],
       "uv_rect": [
-        0.541667,
+        0.295455,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -433,9 +454,9 @@
         0
       ],
       "uv_rect": [
-        0.583333,
+        0.318182,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -459,9 +480,9 @@
         0
       ],
       "uv_rect": [
-        0.625,
+        0.340909,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -485,9 +506,9 @@
         0
       ],
       "uv_rect": [
-        0.666667,
+        0.363636,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -511,9 +532,9 @@
         0
       ],
       "uv_rect": [
-        0.708333,
+        0.386364,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -537,9 +558,9 @@
         0
       ],
       "uv_rect": [
-        0.75,
+        0.409091,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -563,9 +584,9 @@
         0
       ],
       "uv_rect": [
-        0.791667,
+        0.431818,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -589,9 +610,9 @@
         0
       ],
       "uv_rect": [
-        0.833333,
+        0.454545,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -615,9 +636,9 @@
         0
       ],
       "uv_rect": [
-        0.875,
+        0.477273,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -641,9 +662,9 @@
         0
       ],
       "uv_rect": [
-        0.916667,
+        0.5,
         0.0,
-        0.041667,
+        0.022727,
         1.0
       ]
     },
@@ -667,9 +688,529 @@
         0
       ],
       "uv_rect": [
-        0.958333,
+        0.522727,
         0.0,
-        0.041667,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 24,
+      "id": "fauna_deer",
+      "src": "assets/src_sprites/unit_fauna_deer.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        192,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.545455,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 25,
+      "id": "fauna_rabbit",
+      "src": "assets/src_sprites/unit_fauna_rabbit.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        200,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.568182,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 26,
+      "id": "fauna_crab",
+      "src": "assets/src_sprites/unit_fauna_crab.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        208,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.590909,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 27,
+      "id": "fauna_fish",
+      "src": "assets/src_sprites/unit_fauna_fish.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        216,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.613636,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 28,
+      "id": "fauna_turtle",
+      "src": "assets/src_sprites/unit_fauna_turtle.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        224,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.636364,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 29,
+      "id": "fauna_xeno_lamb",
+      "src": "assets/src_sprites/unit_fauna_xeno_lamb.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        232,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.659091,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 30,
+      "id": "fauna_wolf",
+      "src": "assets/src_sprites/unit_fauna_wolf.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        240,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.681818,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 31,
+      "id": "fauna_bear",
+      "src": "assets/src_sprites/unit_fauna_bear.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        248,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.704545,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 32,
+      "id": "fauna_raptor",
+      "src": "assets/src_sprites/unit_fauna_raptor.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        256,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.727273,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 33,
+      "id": "fauna_croc",
+      "src": "assets/src_sprites/unit_fauna_croc.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        264,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.75,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 34,
+      "id": "fauna_scorpion",
+      "src": "assets/src_sprites/unit_fauna_scorpion.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        272,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.772727,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 35,
+      "id": "insect_bee",
+      "src": "assets/src_sprites/unit_insect_bee.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        280,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.795455,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 36,
+      "id": "insect_beetle",
+      "src": "assets/src_sprites/unit_insect_beetle.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        288,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.818182,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 37,
+      "id": "insect_firefly",
+      "src": "assets/src_sprites/unit_insect_firefly.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        296,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.840909,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 38,
+      "id": "boss_xeno_leviathan",
+      "src": "assets/src_sprites/unit_boss_xeno_leviathan.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        304,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.863636,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 39,
+      "id": "boss_orbital_ufo",
+      "src": "assets/src_sprites/unit_boss_orbital_ufo.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        312,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.886364,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 40,
+      "id": "boss_techno_necromancer",
+      "src": "assets/src_sprites/unit_boss_techno_necromancer.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        320,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.909091,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 41,
+      "id": "boss_cyber_colossus",
+      "src": "assets/src_sprites/unit_boss_cyber_colossus.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        328,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.931818,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 42,
+      "id": "unit_sleeping_pod",
+      "src": "assets/src_sprites/unit_sleeping_pod.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        336,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.954545,
+        0.0,
+        0.022727,
+        1.0
+      ]
+    },
+    {
+      "col": 43,
+      "id": "unit_drop_pod",
+      "src": "assets/src_sprites/unit_drop_pod.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        344,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.977273,
+        0.0,
+        0.022727,
         1.0
       ]
     }

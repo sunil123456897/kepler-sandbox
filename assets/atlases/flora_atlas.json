@@ -2,19 +2,20 @@
   "atlas_path": "res://assets/atlases/flora_atlas.png",
   "mask_path": "res://assets/atlases/flora_atlas_mask.png",
   "atlas_size": [
-    168,
+    288,
     12
   ],
   "cell_size": [
     12,
     12
   ],
-  "atlas_cols": 14,
+  "atlas_cols": 24,
+  "cols": 24,
   "shader_mode": 3,
   "shader_uniforms": {
     "sprite_mode": 3,
     "motion_mode": 1,
-    "atlas_cols": 14,
+    "atlas_cols": 24,
     "sprite_size": [
       12,
       12
@@ -36,7 +37,17 @@
     "FLORA_SPORE_POD": 10,
     "FLORA_CRYSTAL_CLUSTER": 11,
     "FLORA_LUSH_SAPLING": 12,
-    "FLORA_BURNING_BUSH": 13
+    "FLORA_BURNING_BUSH": 13,
+    "FLORA_XENO_PALM": 14,
+    "FLORA_CRYO_CRYSTAL": 15,
+    "FLORA_ACID_WEED": 16,
+    "FLORA_SILICA_CACTUS": 17,
+    "FLORA_BIOLUM_BELL": 18,
+    "FLORA_VOID_TENDRIL": 19,
+    "FLORA_MYCELIUM_NODE": 20,
+    "FLORA_CYBER_SPIRE": 21,
+    "FLORA_MUTAGEN_BULB": 22,
+    "FLORA_MONOLITH_SHARD": 23
   },
   "cells": [
     {
@@ -61,7 +72,7 @@
       "uv_rect": [
         0.0,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -85,9 +96,9 @@
         0
       ],
       "uv_rect": [
-        0.071429,
+        0.041667,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -111,9 +122,9 @@
         0
       ],
       "uv_rect": [
-        0.142857,
+        0.083333,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -137,9 +148,9 @@
         0
       ],
       "uv_rect": [
-        0.214286,
+        0.125,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -163,9 +174,9 @@
         0
       ],
       "uv_rect": [
-        0.285714,
+        0.166667,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -189,9 +200,9 @@
         0
       ],
       "uv_rect": [
-        0.357143,
+        0.208333,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -215,9 +226,9 @@
         0
       ],
       "uv_rect": [
-        0.428571,
+        0.25,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -241,9 +252,9 @@
         0
       ],
       "uv_rect": [
-        0.5,
+        0.291667,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -267,9 +278,9 @@
         0
       ],
       "uv_rect": [
-        0.571429,
+        0.333333,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -293,9 +304,9 @@
         0
       ],
       "uv_rect": [
-        0.642857,
+        0.375,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -319,9 +330,9 @@
         0
       ],
       "uv_rect": [
-        0.714286,
+        0.416667,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -345,9 +356,9 @@
         0
       ],
       "uv_rect": [
-        0.785714,
+        0.458333,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -371,9 +382,9 @@
         0
       ],
       "uv_rect": [
-        0.857143,
+        0.5,
         0.0,
-        0.071429,
+        0.041667,
         1.0
       ]
     },
@@ -397,9 +408,269 @@
         0
       ],
       "uv_rect": [
-        0.928571,
+        0.541667,
         0.0,
-        0.071429,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 14,
+      "id": "flora_xeno_palm",
+      "src": "assets/src_sprites/flora_xeno_palm.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        168,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.583333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 15,
+      "id": "flora_cryo_crystal",
+      "src": "assets/src_sprites/flora_cryo_crystal.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        180,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.625,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 16,
+      "id": "flora_acid_weed",
+      "src": "assets/src_sprites/flora_acid_weed.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        192,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.666667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 17,
+      "id": "flora_silica_cactus",
+      "src": "assets/src_sprites/flora_silica_cactus.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        204,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.708333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 18,
+      "id": "flora_biolum_bell",
+      "src": "assets/src_sprites/flora_biolum_bell.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        216,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.75,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 19,
+      "id": "flora_void_tendril",
+      "src": "assets/src_sprites/flora_void_tendril.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        228,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.791667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 20,
+      "id": "flora_mycelium_node",
+      "src": "assets/src_sprites/flora_mycelium_node.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        240,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.833333,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 21,
+      "id": "flora_cyber_spire",
+      "src": "assets/src_sprites/flora_cyber_spire.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        252,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.875,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 22,
+      "id": "flora_mutagen_bulb",
+      "src": "assets/src_sprites/flora_mutagen_bulb.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        264,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.916667,
+        0.0,
+        0.041667,
+        1.0
+      ]
+    },
+    {
+      "col": 23,
+      "id": "flora_monolith_shard",
+      "src": "assets/src_sprites/flora_monolith_shard.png",
+      "native_size": [
+        12,
+        12
+      ],
+      "tier": 0,
+      "cell_px": [
+        276,
+        0,
+        12,
+        12
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.958333,
+        0.0,
+        0.041667,
         1.0
       ]
     }

@@ -38,7 +38,7 @@ const TUNING_KNOBS := {
 const MAX_PARTICLES: int = 1600
 const PARTICLE_QUAD_PX: float = 4.0
 const MAX_STRIPS: int = 256
-const DEFAULT_STRIP_ATLAS_COLS: int = 16
+const DEFAULT_STRIP_ATLAS_COLS: int = 18
 const STRIP_CELL_PX: float = 8.0
 const LIGHTMAP_W: int = 214
 const LIGHTMAP_H: int = 120
@@ -48,7 +48,11 @@ const MAX_LIGHTS: int = 256
 const MAX_TRANSIENT_LIGHTS: int = 32
 const AUDIO_CHUNK_SIZE: int = 256
 const VOICE_COUNT: int = 16
-const SFX_KIND_COUNT: int = 18
+const SFX_KIND_COUNT: int = 29
+const MAX_SYNTH_FREQ_HZ: float = 8500.0
+const MAX_DROPS: int = 512
+const DROP_QUAD_PX: float = 4.0
+const DROP_ATLAS_COLS: int = 4
 
 const STRIP_DODGE: int = 0
 const STRIP_BLOCK: int = 1
@@ -66,6 +70,8 @@ const STRIP_PLOT_WAR: int = 12
 const STRIP_PLOT_PACT: int = 13
 const STRIP_PLOT_REBEL: int = 14
 const STRIP_CROWN_BANNER: int = 15
+const STRIP_RELIC_DIAMOND: int = 16
+const STRIP_FEUD_SWORDS: int = 17
 
 const P_COL_EMBER: int = 0
 const P_COL_PUFF: int = 1
@@ -98,15 +104,28 @@ enum SfxKind {
 	LASER_HEAVY = 15,
 	TELEPORT_HUM = 16,
 	EMP_GLITCH = 17,
+	UI_TAB = 18,
+	UI_PIN = 19,
+	UI_DENIED = 20,
+	DROP_RAIN = 21,
+	DROP_IMPACT = 22,
+	EARTHQUAKE = 23,
+	VOLCANO_TORNADO = 24,
+	FOOTSTEP_WORK = 25,
+	UI_HOVER = 26,
+	WINDOW_WHOOSH = 27,
+	BIT_SCALE_WHOOSH = 28,
 }
 
 signal impact_trauma(trauma: float, hit_stop_sec: float)
 
 var _mm_particles: MultiMeshInstance2D
 var _mm_strips: MultiMeshInstance2D
+var _mm_drops: MultiMeshInstance2D
 var _strips_mat: ShaderMaterial
 var _strip_atlas_cols: int = DEFAULT_STRIP_ATLAS_COLS
 var _initialized: bool = false
+var _drop_flash_budget: int = 24
 
 # Flat SoA particle buffers (zero GC)
 var _p_pos: PackedVector2Array
@@ -160,12 +179,34 @@ var _tl_evict_cursor: int = 0
 # Procedural audio synth state (zero GC)
 var _audio_player: AudioStreamPlayer
 var _audio_supported: bool = false
+var _audio_unlocked: bool = false
 var _mix_chunk: PackedVector2Array
 var _was_silent: bool = true
 var _rng := RandomNumberGenerator.new()
 var _cam_zoom: float = 2.0
 var _cam_center_x: float = 320.0
+var _cam_rect: Rect2 = Rect2(0.0, 0.0, 320.0, 180.0)
+var _sim_speed: float = 1.0
 var _cursor_speed_norm: float = 0.0
+var _ambient_age_id: int = 0
+var _ambient_biome_id: int = 1
+var _biome_scan_timer: float = 0.0
+var _amb_pause_gain: float = 1.0
+var _amb_pause_target: float = 1.0
+var _amb_biome_f_mul: float = 1.0
+var _amb_biome_wind_mul: float = 1.0
+var _world_ref: Node2D = null
+var _amb_noise_state: int = 0x51A7F00D
+var _amb_wind_prev: float = 0.0
+var _amb_wind_curr: float = 0.0
+var _amb_wind_lpf: float = 0.0
+var _amb_drone_ph1: float = 0.0
+var _amb_drone_ph2: float = 0.0
+var _amb_lfo_ph: float = 0.0
+var _amb_freq1: float = 110.0
+var _amb_freq2: float = 165.0
+var _amb_target_f1: float = 110.0
+var _amb_target_f2: float = 165.0
 
 var _v_active: PackedByteArray
 var _v_kind: PackedByteArray
@@ -193,6 +234,7 @@ func _ensure_initialized() -> void:
 	_rng.seed = 90125
 	_init_particle_buffers()
 	_init_particle_multimesh()
+	_init_drops_multimesh()
 	_init_strip_buffers()
 	_init_strips_multimesh()
 	_init_lightmap_pass()
@@ -213,11 +255,17 @@ func _exit_tree() -> void:
 		_mm_particles.material = null
 		_mm_particles.texture = null
 		_mm_particles = null
+	if _mm_drops != null:
+		_mm_drops.multimesh = null
+		_mm_drops.material = null
+		_mm_drops.texture = null
+		_mm_drops = null
 	if _mm_strips != null:
 		_mm_strips.multimesh = null
 		_mm_strips.material = null
 		_mm_strips.texture = null
 		_mm_strips = null
+	_world_ref = null
 	_strips_mat = null
 	if _light_sprite != null:
 		_light_sprite.texture = null
@@ -340,6 +388,68 @@ func _make_particle_atlas() -> ImageTexture:
 		img.set_pixel(20 + x, 2, Color(1, 1, 1, edge * 0.88))
 
 	return ImageTexture.create_from_image(img)
+
+
+func _make_drops_atlas() -> ImageTexture:
+	# 16x4 atlas: 4 columns of 4x4 sky-drop silhouettes (streak, orb, capsule, crystal/snow)
+	var img := Image.create(DROP_ATLAS_COLS * 4, 4, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	# Col 0: vertical droplet streak
+	for y in range(4):
+		img.set_pixel(1, y, Color(1.0, 1.0, 1.0, 0.72 if y == 0 else 1.0))
+		img.set_pixel(2, y, Color(1.0, 1.0, 1.0, 0.45 if y == 3 else 0.90))
+	# Col 1: glowing orb / seed
+	for y in range(1, 3):
+		for x in range(1, 3):
+			img.set_pixel(4 + x, y, Color(1.0, 1.0, 1.0, 1.0))
+	img.set_pixel(5, 0, Color(1.0, 1.0, 1.0, 0.60))
+	img.set_pixel(4, 1, Color(1.0, 1.0, 1.0, 0.60))
+	img.set_pixel(7, 2, Color(1.0, 1.0, 1.0, 0.60))
+	img.set_pixel(6, 3, Color(1.0, 1.0, 1.0, 0.60))
+	# Col 2: meteor / plasma bomb capsule
+	for y in range(4):
+		for x in range(4):
+			var d := absf(float(x) - 1.5) + absf(float(y) - 1.5)
+			if d <= 1.2:
+				img.set_pixel(8 + x, y, Color(1.0, 1.0, 1.0, 1.0))
+			elif d <= 2.1:
+				img.set_pixel(8 + x, y, Color(1.0, 1.0, 1.0, 0.65))
+	# Col 3: diamond snow / crystal flake
+	img.set_pixel(13, 1, Color(1.0, 1.0, 1.0, 1.0))
+	img.set_pixel(14, 2, Color(1.0, 1.0, 1.0, 1.0))
+	img.set_pixel(13, 0, Color(1.0, 1.0, 1.0, 0.80))
+	img.set_pixel(12, 1, Color(1.0, 1.0, 1.0, 0.80))
+	img.set_pixel(14, 1, Color(1.0, 1.0, 1.0, 0.80))
+	img.set_pixel(13, 2, Color(1.0, 1.0, 1.0, 0.80))
+	return ImageTexture.create_from_image(img)
+
+
+func _init_drops_multimesh() -> void:
+	_mm_drops = MultiMeshInstance2D.new()
+	_mm_drops.z_as_relative = false
+	_mm_drops.z_index = 4
+	_mm_drops.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_mm_drops.texture = _make_drops_atlas()
+
+	var mat := ShaderMaterial.new()
+	mat.shader = UNIT_SPRITE_SHADER
+	mat.set_shader_parameter("sprite_mode", 2)
+	mat.set_shader_parameter("atlas_cols", DROP_ATLAS_COLS)
+	mat.set_shader_parameter("sprite_size", Vector2(DROP_QUAD_PX, DROP_QUAD_PX))
+	_mm_drops.material = mat
+
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	var q := QuadMesh.new()
+	q.size = Vector2(DROP_QUAD_PX, DROP_QUAD_PX)
+	mm.mesh = q
+	mm.instance_count = MAX_DROPS
+	mm.visible_instance_count = 0
+	_mm_drops.multimesh = mm
+	_mm_drops.visible = false
+	add_child(_mm_drops)
 
 
 func _load_png_texture(res_path: String) -> Texture2D:
@@ -468,6 +578,14 @@ func _stamp_fallback_strips_diplo(img: Image, pal: Dictionary) -> void:
 		"........", "KY.YY.YK", "KYYYYYYK", "KYYAAYYK",
 		"KYYYYYYK", ".KKKKKK.", "........", "........",
 	], pal)
+	_stamp_pattern(img, STRIP_RELIC_DIAMOND, [
+		"...KK...", "..KYYK..", ".KYWWYK.", "KYWWWWYK",
+		".KYAAYK.", "..KAAK..", "...KK...", "........",
+	], pal)
+	_stamp_pattern(img, STRIP_FEUD_SWORDS, [
+		"KK....KK", "KWK..KWK", ".KRKKRK.", "..KRRK..",
+		".KRKKRK.", "KYK..KYK", "KK....KK", "........",
+	], pal)
 
 
 func _init_strip_buffers() -> void:
@@ -555,7 +673,7 @@ func _init_lightmap_pass() -> void:
 	_light_viewport.transparent_bg = true
 	_light_viewport.disable_3d = true
 	_light_viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
-	_light_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_light_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	add_child(_light_viewport)
 
 	_light_mm = MultiMeshInstance2D.new()
@@ -584,10 +702,25 @@ render_mode blend_add, unshaded;
 uniform float night_mix : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 age_tint = vec3(1.0, 1.0, 1.0);
 
+float bayer4(vec2 p) {
+	int x = int(mod(floor(p.x), 4.0));
+	int y = int(mod(floor(p.y), 4.0));
+	int x0 = x & 1;
+	int y0 = y & 1;
+	int x1 = (x >> 1) & 1;
+	int y1 = (y >> 1) & 1;
+	int m = (((x0 ^ y0) << 3) | (y0 << 2) | ((x1 ^ y1) << 1) | y1);
+	return (float(m) + 0.5) / 16.0;
+}
+
 void fragment() {
 	vec4 lt = texture(TEXTURE, UV);
 	float gain = mix(0.46, 0.86, clamp(night_mix, 0.0, 1.0));
-	vec3 soft = lt.rgb / (vec3(1.0) + lt.rgb * 0.42);
+	float luma = max(lt.r, max(lt.g, lt.b));
+	float dither = bayer4(floor(UV * vec2(214.0, 120.0)));
+	float stepped = floor(clamp(luma, 0.0, 1.6) * 5.0 + dither * 0.72) / 5.0;
+	vec3 quant_rgb = (luma > 0.005) ? (lt.rgb * (stepped / luma)) : vec3(0.0);
+	vec3 soft = quant_rgb / (vec3(1.0) + quant_rgb * 0.42);
 	vec3 halo = soft * mix(vec3(1.0), age_tint, 0.25) * gain;
 	COLOR = vec4(halo, 1.0);
 }
@@ -602,7 +735,7 @@ void fragment() {
 	_light_sprite.scale = Vector2(LIGHTMAP_SCALE, LIGHTMAP_SCALE)
 	_light_sprite.z_as_relative = false
 	_light_sprite.z_index = 4
-	_light_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_light_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_light_sprite.texture = _light_viewport.get_texture()
 	_light_sprite.material = _light_mat
 	_light_sprite.visible = false
@@ -682,6 +815,8 @@ func _classify_burst_visual(color: Color, gravity: float) -> Vector2:
 		return Vector2(float(P_COL_SPARKLE), 2.2)
 	if color.b > 0.72 and color.r < 0.58 and gravity > 10.0:
 		return Vector2(float(P_COL_EMBER), 1.35)
+	if max_c < 0.30:
+		return Vector2(float(P_COL_EMBER), 1.05)
 	return Vector2(float(P_COL_PUFF), 0.85)
 
 
@@ -709,11 +844,11 @@ func spawn_burst(world_pos: Vector2, count: int, color: Color, speed: float, lif
 		_p_col_idx[slot] = col_idx
 		_p_hdr[slot] = hdr_mult
 		if col_idx == P_COL_PUFF:
-			_p_color[slot] = Color(color.r * 0.86, color.g * 0.86, color.b * 0.86, minf(color.a, 0.62))
-			_p_size[slot] = _rng.randf_range(0.56, 0.74)
+			_p_color[slot] = Color(color.r * 0.86, color.g * 0.86, color.b * 0.86, minf(color.a, 0.42))
+			_p_size[slot] = _rng.randf_range(0.36, 0.50)
 		else:
 			_p_color[slot] = color
-			_p_size[slot] = _rng.randf_range(0.55, 0.95)
+			_p_size[slot] = _rng.randf_range(0.45, 0.82)
 		_p_aspect[slot] = 1.0
 		_p_rot[slot] = 0.0
 		_write_instance_visual(slot)
@@ -728,22 +863,7 @@ func spawn_shockwave(world_pos: Vector2, max_radius: float, color: Color, life_o
 	var life: float = life_override if life_override > 0.0 else float(TUNING_KNOBS["SHOCKWAVE_LIFETIME"])
 	var safe_r := maxf(max_radius, 8.0)
 
-	# 1) Ground scorch smear + brief central starburst flash
-	var scorch_slot := _alloc_particle_slot()
-	_p_mode[scorch_slot] = MODE_BALLISTIC
-	_p_pos[scorch_slot] = world_pos
-	_p_vel[scorch_slot] = Vector2.ZERO
-	_p_age[scorch_slot] = 0.0
-	_p_life[scorch_slot] = life * 1.65
-	_p_gravity[scorch_slot] = 0.0
-	_p_col_idx[scorch_slot] = P_COL_PUFF
-	_p_hdr[scorch_slot] = 0.72
-	_p_color[scorch_slot] = Color(0.08, 0.07, 0.06, 0.72)
-	_p_size[scorch_slot] = clampf(safe_r * 0.11, 1.1, 2.5)
-	_p_aspect[scorch_slot] = 1.0
-	_p_rot[scorch_slot] = 0.0
-	_write_instance_visual(scorch_slot)
-
+	# 1) Brief central starburst flash (zero muddy P_COL_PUFF scorch disc over craters)
 	var flash_slot := _alloc_particle_slot()
 	_p_mode[flash_slot] = MODE_BALLISTIC
 	_p_pos[flash_slot] = world_pos
@@ -754,7 +874,7 @@ func spawn_shockwave(world_pos: Vector2, max_radius: float, color: Color, life_o
 	_p_col_idx[flash_slot] = P_COL_FLASH
 	_p_hdr[flash_slot] = 2.4
 	_p_color[flash_slot] = color.lightened(0.20)
-	_p_size[flash_slot] = clampf(safe_r * 0.11, 1.1, 2.2)
+	_p_size[flash_slot] = clampf(safe_r * 0.10, 1.0, 1.9)
 	_p_aspect[flash_slot] = 1.0
 	_p_rot[flash_slot] = _rng.randf_range(0.0, TAU)
 	_write_instance_visual(flash_slot)
@@ -952,8 +1072,7 @@ func _copy_strip(src: int, dst: int) -> void:
 func _write_strip_visual(i: int) -> void:
 	var life := maxf(_s_life[i], 0.01)
 	var t := clampf(_s_age[i] / life, 0.0, 1.0)
-	var pop := clampf(t / 0.14, 0.0, 1.0)
-	var scale_s := lerpf(0.48, 0.78, sin(pop * PI * 0.5)) * lerpf(1.0, 0.86, maxf(0.0, t - 0.55) / 0.45)
+	var scale_s := 0.5 if (t < 0.08 or t > 0.88) else 1.0
 	var fade_in := clampf(t / 0.08, 0.0, 1.0)
 	var fade_out := 1.0
 	if t > 0.58:
@@ -962,7 +1081,7 @@ func _write_strip_visual(i: int) -> void:
 	var alpha := clampf(fade_in * fade_out, 0.0, 1.0)
 
 	var mm := _mm_strips.multimesh
-	mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(scale_s, scale_s), 0.0, _s_pos[i]))
+	mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(scale_s, scale_s), 0.0, _s_pos[i].round()))
 	mm.set_instance_color(i, Color(1.0, 1.0, 1.0, alpha))
 	mm.set_instance_custom_data(i, Color(_s_hdr[i], 0.0, 1.0, float(_s_col_idx[i])))
 
@@ -1046,8 +1165,15 @@ func end_light_frame() -> void:
 		_push_light_raw(_tl_pos[i], _tl_rad[i], _tl_col[i], eff)
 	if _light_mm != null and _light_mm.multimesh != null:
 		_light_mm.multimesh.visible_instance_count = _light_count
+	var any_light := (_light_count > 0)
 	if _light_sprite != null:
-		_light_sprite.visible = (_light_count > 0)
+		_light_sprite.visible = any_light
+	if _light_viewport != null:
+		_light_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if any_light else SubViewport.UPDATE_DISABLED
+
+
+func is_light_layer_visible() -> bool:
+	return _light_sprite != null and _light_sprite.visible
 
 
 func emit_orbital_beam(world_pos: Vector2, intercepted: bool, stop_pos: Vector2 = Vector2.ZERO) -> void:
@@ -1221,6 +1347,170 @@ func set_camera_center_x(cx: float) -> void:
 	_cam_center_x = cx
 
 
+func set_camera_audio_context(cam_rect: Rect2, zoom_val: float, sim_speed: float) -> void:
+	_ensure_initialized()
+	_cam_rect = cam_rect
+	_cam_zoom = clampf(zoom_val, 0.5, 16.0)
+	_sim_speed = clampf(sim_speed, 0.0, 200.0)
+	if cam_rect.size.x > 0.0:
+		_cam_center_x = cam_rect.position.x + cam_rect.size.x * 0.5
+	_amb_pause_target = 0.0 if _sim_speed <= 0.001 else 1.0
+	if _biome_scan_timer <= 0.0:
+		_scan_visible_biome_audio()
+		_biome_scan_timer = 0.50
+
+
+func get_audio_context_state() -> Dictionary:
+	return {
+		"cam_zoom": _cam_zoom,
+		"sim_speed": _sim_speed,
+		"pause_gain": _amb_pause_gain,
+		"pause_target": _amb_pause_target,
+		"ambient_biome_id": _ambient_biome_id,
+		"biome_f_mul": _amb_biome_f_mul,
+		"biome_wind_mul": _amb_biome_wind_mul,
+		"drop_instances": _mm_drops.multimesh.visible_instance_count if (_mm_drops != null and _mm_drops.multimesh != null) else 0,
+	}
+
+
+func _resolve_world_ref() -> Node2D:
+	if _world_ref != null and is_instance_valid(_world_ref):
+		return _world_ref
+	var p := get_parent()
+	if p != null:
+		var cand := p.get_node_or_null("WorldTerrain") as Node2D
+		if cand != null:
+			_world_ref = cand
+			return _world_ref
+	_world_ref = get_node_or_null("../WorldTerrain") as Node2D
+	return _world_ref
+
+
+func _scan_visible_biome_audio() -> void:
+	var w := _resolve_world_ref()
+	if w == null:
+		return
+	var dom_b: int = 1
+	if w.has_method("get_dominant_biome_in_rect"):
+		dom_b = int(w.call("get_dominant_biome_in_rect", _cam_rect))
+	elif w.has_method("get_biome"):
+		var mw: int = int(w.get("map_w"))
+		var mh: int = int(w.get("map_h"))
+		var sx: int = clampi(int(_cam_rect.position.x + _cam_rect.size.x * 0.5), 0, maxi(0, mw - 1))
+		var sy: int = clampi(int(_cam_rect.position.y + _cam_rect.size.y * 0.5), 0, maxi(0, mh - 1))
+		dom_b = int(w.call("get_biome", sx, sy))
+	_ambient_biome_id = dom_b
+	match dom_b:
+		4, 3, 7:
+			_amb_biome_f_mul = 0.78
+			_amb_biome_wind_mul = 1.25
+		6:
+			_amb_biome_f_mul = 1.32
+			_amb_biome_wind_mul = 1.35
+		2, 11:
+			_amb_biome_f_mul = 1.44
+			_amb_biome_wind_mul = 0.85
+		9, 5:
+			_amb_biome_f_mul = 1.16
+			_amb_biome_wind_mul = 1.08
+		10:
+			_amb_biome_f_mul = 0.86
+			_amb_biome_wind_mul = 0.92
+		0, 8:
+			_amb_biome_f_mul = 0.94
+			_amb_biome_wind_mul = 1.18
+		_:
+			_amb_biome_f_mul = 1.0
+			_amb_biome_wind_mul = 1.0
+
+
+func sync_sky_drops(positions: PackedVector2Array, colors: PackedColorArray, z_heights: PackedFloat32Array) -> void:
+	_ensure_initialized()
+	if _mm_drops == null or _mm_drops.multimesh == null:
+		return
+	var mm := _mm_drops.multimesh
+	var n := mini(positions.size(), mini(colors.size(), mini(z_heights.size(), MAX_DROPS)))
+	if n <= 0:
+		mm.visible_instance_count = 0
+		_mm_drops.visible = false
+		return
+	_mm_drops.visible = true
+	mm.visible_instance_count = n
+	for i in range(n):
+		var pos: Vector2 = positions[i]
+		var z: float = clampf(z_heights[i], 0.0, 120.0)
+		var col: Color = colors[i]
+		var col_idx: int = 1
+		var hdr: float = 1.75
+		var sc: float = 0.68
+		if col.r > 0.90 and col.g < 0.62 and col.b < 0.30:
+			col_idx = 2
+			hdr = 2.45
+			sc = 0.78
+		elif col.r > 0.86 and col.g > 0.90 and col.b > 0.92:
+			col_idx = 3
+			hdr = 1.35
+			sc = 0.66
+		elif col.b > 0.80 and col.r < 0.60:
+			col_idx = 0
+			hdr = 1.65
+			sc = 0.66
+		var draw_pos := Vector2(pos.x, pos.y - z)
+		mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(sc, sc), 0.0, draw_pos))
+		mm.set_instance_color(i, col)
+		mm.set_instance_custom_data(i, Color(hdr, 1.0, 1.0, float(col_idx)))
+
+
+func emit_drop_land_flash(world_pos: Vector2, color: Color) -> void:
+	_ensure_initialized()
+	if _drop_flash_budget <= 0:
+		return
+	_drop_flash_budget -= 1
+	var slot := _alloc_particle_slot()
+	_p_mode[slot] = MODE_BALLISTIC
+	_p_pos[slot] = world_pos
+	_p_vel[slot] = Vector2.ZERO
+	_p_age[slot] = 0.0
+	_p_life[slot] = 0.05
+	_p_gravity[slot] = 0.0
+	_p_col_idx[slot] = P_COL_FLASH
+	_p_hdr[slot] = 2.55
+	_p_color[slot] = Color(1.0, 0.98, 0.92, 0.96).lerp(color, 0.25)
+	_p_size[slot] = 0.54
+	_p_aspect[slot] = 1.0
+	_p_rot[slot] = 0.0
+	_write_instance_visual(slot)
+	_mm_particles.multimesh.visible_instance_count = _active_count
+
+
+func activate_audio() -> void:
+	_ensure_initialized()
+	if not _audio_supported:
+		return
+	_audio_unlocked = true
+	_pump_audio(AUDIO_CHUNK_SIZE * 2)
+
+
+func set_ambient_age(age_id: int) -> void:
+	_ambient_age_id = clampi(age_id, 0, 4)
+	match _ambient_age_id:
+		1:
+			_amb_target_f1 = 55.0
+			_amb_target_f2 = 82.5
+		2:
+			_amb_target_f1 = 293.6
+			_amb_target_f2 = 146.8
+		3:
+			_amb_target_f1 = 98.0
+			_amb_target_f2 = 147.0
+		4:
+			_amb_target_f1 = 220.0
+			_amb_target_f2 = 330.0
+		_:
+			_amb_target_f1 = 110.0
+			_amb_target_f2 = 165.0
+
+
 func _parse_sfx_kind(kind: Variant) -> int:
 	if kind is int or kind is float:
 		return clampi(int(kind), 0, SFX_KIND_COUNT - 1)
@@ -1259,41 +1549,144 @@ func _parse_sfx_kind(kind: Variant) -> int:
 			return SfxKind.TELEPORT_HUM
 		"emp_glitch", "emp", "glitch":
 			return SfxKind.EMP_GLITCH
+		"ui_tab", "tab":
+			return SfxKind.UI_TAB
+		"ui_pin", "pin":
+			return SfxKind.UI_PIN
+		"ui_denied", "denied":
+			return SfxKind.UI_DENIED
+		"drop_rain", "rain", "drop":
+			return SfxKind.DROP_RAIN
+		"drop_impact", "seed", "powder":
+			return SfxKind.DROP_IMPACT
+		"earthquake", "quake":
+			return SfxKind.EARTHQUAKE
+		"volcano", "tornado", "geyser", "volcano_tornado":
+			return SfxKind.VOLCANO_TORNADO
+		"footstep", "chop", "mine", "repair", "work", "footstep_work":
+			return SfxKind.FOOTSTEP_WORK
+		"ui_hover", "hover":
+			return SfxKind.UI_HOVER
+		"window_whoosh", "window", "whoosh":
+			return SfxKind.WINDOW_WHOOSH
+		"bit_scale_whoosh", "zoom_whoosh", "zoom":
+			return SfxKind.BIT_SCALE_WHOOSH
 		_:
 			return SfxKind.UI
 
 
-func play_sfx(kind: Variant, world_x: float = NAN) -> void:
+func _sfx_cooldown_for(k: int) -> float:
+	match k:
+		SfxKind.METEOR, SfxKind.UI, SfxKind.UI_TAB, SfxKind.UI_PIN, SfxKind.UI_DENIED:
+			return 0.02
+		SfxKind.UI_HOVER:
+			return 0.045
+		SfxKind.WINDOW_WHOOSH, SfxKind.BIT_SCALE_WHOOSH:
+			return 0.075
+		SfxKind.DROP_RAIN, SfxKind.DROP_IMPACT:
+			return 0.045
+		SfxKind.FOOTSTEP_WORK:
+			return 0.065
+		SfxKind.EARTHQUAKE, SfxKind.VOLCANO_TORNADO:
+			return 0.18
+		SfxKind.BUILD_POP:
+			return float(TUNING_KNOBS["BUILD_POP_COOLDOWN_SEC"])
+		SfxKind.SKIRMISH:
+			return 0.075
+		SfxKind.MELTDOWN, SfxKind.STORM, SfxKind.SHUTTLE:
+			return 0.16
+		SfxKind.ORBITAL_BEAM:
+			return 0.10
+		SfxKind.SHIELD_DEFLECT:
+			return 0.08
+		SfxKind.MUTATE:
+			return 0.09
+		SfxKind.LASER_LIGHT:
+			return 0.035
+		SfxKind.LASER_HEAVY:
+			return 0.060
+		SfxKind.TELEPORT_HUM:
+			return 0.120
+		SfxKind.EMP_GLITCH:
+			return 0.110
+		_:
+			return 0.055
+
+
+func _sfx_duration_for(k: int) -> float:
+	match k:
+		SfxKind.METEOR:
+			return 0.52
+		SfxKind.TERRAFORM:
+			return 0.20
+		SfxKind.CRYSTAL:
+			return 0.24
+		SfxKind.LAVA:
+			return 0.30
+		SfxKind.VORTEX:
+			return 0.22
+		SfxKind.UI:
+			return 0.050
+		SfxKind.UI_TAB:
+			return 0.055
+		SfxKind.UI_PIN:
+			return 0.110
+		SfxKind.UI_DENIED:
+			return 0.085
+		SfxKind.DROP_RAIN:
+			return 0.065
+		SfxKind.DROP_IMPACT:
+			return 0.055
+		SfxKind.EARTHQUAKE:
+			return 0.68
+		SfxKind.VOLCANO_TORNADO:
+			return 0.52
+		SfxKind.FOOTSTEP_WORK:
+			return 0.042
+		SfxKind.UI_HOVER:
+			return 0.028
+		SfxKind.WINDOW_WHOOSH:
+			return 0.16
+		SfxKind.BIT_SCALE_WHOOSH:
+			return 0.18
+		SfxKind.BUILD_POP:
+			return float(TUNING_KNOBS["BUILD_POP_DURATION_SEC"])
+		SfxKind.SKIRMISH:
+			return 0.12
+		SfxKind.MELTDOWN:
+			return 0.72
+		SfxKind.STORM:
+			return 0.42
+		SfxKind.SHUTTLE:
+			return 0.52
+		SfxKind.MUTATE:
+			return 0.28
+		SfxKind.ORBITAL_BEAM:
+			return 0.48
+		SfxKind.SHIELD_DEFLECT:
+			return 0.38
+		SfxKind.LASER_LIGHT:
+			return 0.095
+		SfxKind.LASER_HEAVY:
+			return 0.180
+		SfxKind.TELEPORT_HUM:
+			return 0.420
+		SfxKind.EMP_GLITCH:
+			return 0.320
+		_:
+			return 0.13
+
+
+func play_sfx(kind: Variant, world_x: float = -1.0) -> void:
 	_ensure_initialized()
 	var k := _parse_sfx_kind(kind)
+	if k == SfxKind.FOOTSTEP_WORK and _cam_zoom <= 2.2:
+		return
 	if _sfx_cooldown[k] > 0.0:
 		return
-	if k == SfxKind.METEOR or k == SfxKind.UI:
-		_sfx_cooldown[k] = 0.02
-	elif k == SfxKind.BUILD_POP:
-		_sfx_cooldown[k] = float(TUNING_KNOBS["BUILD_POP_COOLDOWN_SEC"])
-	elif k == SfxKind.SKIRMISH:
-		_sfx_cooldown[k] = 0.075
-	elif k == SfxKind.MELTDOWN or k == SfxKind.STORM or k == SfxKind.SHUTTLE:
-		_sfx_cooldown[k] = 0.16
-	elif k == SfxKind.ORBITAL_BEAM:
-		_sfx_cooldown[k] = 0.10
-	elif k == SfxKind.SHIELD_DEFLECT:
-		_sfx_cooldown[k] = 0.08
-	elif k == SfxKind.MUTATE:
-		_sfx_cooldown[k] = 0.09
-	elif k == SfxKind.LASER_LIGHT:
-		_sfx_cooldown[k] = 0.035
-	elif k == SfxKind.LASER_HEAVY:
-		_sfx_cooldown[k] = 0.060
-	elif k == SfxKind.TELEPORT_HUM:
-		_sfx_cooldown[k] = 0.120
-	elif k == SfxKind.EMP_GLITCH:
-		_sfx_cooldown[k] = 0.110
-	else:
-		_sfx_cooldown[k] = 0.055
+	_sfx_cooldown[k] = _sfx_cooldown_for(k)
 
-	var slot := -1
+	var slot := 0
 	var best_progress := -1.0
 	for v in range(VOICE_COUNT):
 		if _v_active[v] == 0:
@@ -1303,66 +1696,28 @@ func play_sfx(kind: Variant, world_x: float = NAN) -> void:
 		if prog > best_progress:
 			best_progress = prog
 			slot = v
-	if slot < 0:
-		slot = 0
 
-	var dur := 0.13
-	match k:
-		SfxKind.METEOR:
-			dur = 0.52
-		SfxKind.TERRAFORM:
-			dur = 0.20
-		SfxKind.CRYSTAL:
-			dur = 0.24
-		SfxKind.LAVA:
-			dur = 0.30
-		SfxKind.VORTEX:
-			dur = 0.22
-		SfxKind.UI:
-			dur = 0.13
-		SfxKind.BUILD_POP:
-			dur = float(TUNING_KNOBS["BUILD_POP_DURATION_SEC"])
-		SfxKind.SKIRMISH:
-			dur = 0.12
-		SfxKind.MELTDOWN:
-			dur = 0.72
-		SfxKind.STORM:
-			dur = 0.42
-		SfxKind.SHUTTLE:
-			dur = 0.52
-		SfxKind.MUTATE:
-			dur = 0.28
-		SfxKind.ORBITAL_BEAM:
-			dur = 0.48
-		SfxKind.SHIELD_DEFLECT:
-			dur = 0.38
-		SfxKind.LASER_LIGHT:
-			dur = 0.095
-		SfxKind.LASER_HEAVY:
-			dur = 0.180
-		SfxKind.TELEPORT_HUM:
-			dur = 0.420
-		SfxKind.EMP_GLITCH:
-			dur = 0.320
-
-	var macro_t := clampf((_cam_zoom - 0.85) / 1.15, 0.0, 1.0)
+	var dur := _sfx_duration_for(k)
+	var macro_t := clampf((_cam_zoom - 1.2) / 3.8, 0.0, 1.0)
 	var zoom_gain := 1.0
 	match k:
 		SfxKind.BUILD_POP, SfxKind.SKIRMISH, SfxKind.MUTATE, SfxKind.LASER_LIGHT, SfxKind.TERRAFORM, SfxKind.CRYSTAL, SfxKind.LAVA, SfxKind.VORTEX:
 			zoom_gain = lerpf(0.28, 1.0, macro_t)
-		SfxKind.LASER_HEAVY, SfxKind.SHIELD_DEFLECT, SfxKind.EMP_GLITCH, SfxKind.SHUTTLE:
+		SfxKind.DROP_RAIN, SfxKind.DROP_IMPACT, SfxKind.FOOTSTEP_WORK:
+			zoom_gain = lerpf(0.22, 0.85, macro_t)
+		SfxKind.LASER_HEAVY, SfxKind.SHIELD_DEFLECT, SfxKind.EMP_GLITCH, SfxKind.SHUTTLE, SfxKind.VOLCANO_TORNADO:
 			zoom_gain = lerpf(0.52, 1.0, macro_t)
-		SfxKind.METEOR, SfxKind.MELTDOWN, SfxKind.STORM, SfxKind.ORBITAL_BEAM, SfxKind.TELEPORT_HUM:
+		SfxKind.METEOR, SfxKind.MELTDOWN, SfxKind.STORM, SfxKind.ORBITAL_BEAM, SfxKind.TELEPORT_HUM, SfxKind.EARTHQUAKE:
 			zoom_gain = lerpf(0.72, 1.0, macro_t)
-		SfxKind.UI:
-			zoom_gain = lerpf(0.88, 1.0, macro_t)
+		SfxKind.UI, SfxKind.UI_TAB, SfxKind.UI_PIN, SfxKind.UI_DENIED, SfxKind.UI_HOVER, SfxKind.WINDOW_WHOOSH, SfxKind.BIT_SCALE_WHOOSH:
+			zoom_gain = lerpf(0.90, 1.0, macro_t)
 		_:
 			zoom_gain = lerpf(0.65, 1.0, macro_t)
 
 	var pan := 0.0
-	if not is_nan(world_x) and not is_inf(world_x):
-		var pan_half := maxf(float(TUNING_KNOBS["STEREO_PAN_HALF_WIDTH_PX"]) / clampf(_cam_zoom, 0.5, 4.0), 48.0)
-		pan = clampf((world_x - _cam_center_x) / pan_half, -0.65, 0.65)
+	if world_x >= 0.0 and not is_nan(world_x) and not is_inf(world_x):
+		var pan_half := maxf(320.0 / clampf(_cam_zoom, 0.65, 6.0), 32.0)
+		pan = clampf((world_x - _cam_center_x) / pan_half, -0.75, 0.75)
 
 	var pitch_mul := _rng.randf_range(TUNING_KNOBS["PITCH_JITTER_MIN"], TUNING_KNOBS["PITCH_JITTER_MAX"])
 	if k == SfxKind.TERRAFORM or k == SfxKind.CRYSTAL or k == SfxKind.LAVA or k == SfxKind.VORTEX:
@@ -1382,6 +1737,7 @@ func play_sfx(kind: Variant, world_x: float = NAN) -> void:
 	_v_noise_state[slot] = int(_rng.randi() | 1)
 
 	if _audio_supported:
+		_audio_unlocked = true
 		_pump_audio(AUDIO_CHUNK_SIZE * 2)
 
 
@@ -1402,6 +1758,13 @@ func emit_build_pop(world_pos: Vector2) -> void:
 func step_fx(dt: float) -> void:
 	_ensure_initialized()
 	var safe_dt := clampf(dt, 0.0, 0.1)
+	_drop_flash_budget = 24
+	if _biome_scan_timer > 0.0:
+		_biome_scan_timer = maxf(0.0, _biome_scan_timer - safe_dt)
+	else:
+		_scan_visible_biome_audio()
+		_biome_scan_timer = 0.50
+	_amb_pause_gain = lerpf(_amb_pause_gain, _amb_pause_target, clampf(safe_dt * 8.0, 0.0, 1.0))
 
 	for k in range(SFX_KIND_COUNT):
 		if _sfx_cooldown[k] > 0.0:
@@ -1473,7 +1836,7 @@ func step_fx(dt: float) -> void:
 		_tl_age[tl_idx] = tl_age
 		tl_idx += 1
 
-	if _audio_supported:
+	if _audio_supported and _audio_unlocked:
 		_pump_audio(AUDIO_CHUNK_SIZE * 4)
 
 
@@ -1518,10 +1881,10 @@ func _write_instance_visual(i: int) -> void:
 		alpha_mult = (1.0 - t * t)
 		hdr_val *= (1.1 - 0.35 * t)
 	elif col_idx == P_COL_PUFF:
-		var puff_s := _p_size[i] * (0.42 + 0.44 * t)
+		var puff_s := _p_size[i] * (0.38 + 0.24 * t)
 		scale_x = puff_s * _p_aspect[i]
 		scale_y = puff_s
-		alpha_mult = sin(clampf(remain, 0.0, 1.0) * PI * 0.5) * 0.78
+		alpha_mult = sin(clampf(remain, 0.0, 1.0) * PI * 0.5) * 0.56
 	elif col_idx == P_COL_FLASH:
 		var flash_s := _p_size[i] * (0.85 + 0.45 * t)
 		scale_x = flash_s
@@ -1545,20 +1908,16 @@ func _write_instance_visual(i: int) -> void:
 	mm.set_instance_custom_data(i, Color(hdr_val, remain, 1.0, float(col_idx)))
 
 
-func _any_voice_active() -> bool:
+func _count_active_voices() -> int:
+	var n := 0
 	for v in range(VOICE_COUNT):
 		if _v_active[v] != 0:
-			return true
-	return false
+			n += 1
+	return n
 
 
 func _pump_audio(max_frames: int) -> void:
-	if _audio_player == null:
-		return
-	var active := _any_voice_active()
-	if not active and _was_silent:
-		if _audio_player.playing:
-			_audio_player.stop()
+	if _audio_player == null or not _audio_unlocked:
 		return
 	if not _audio_player.playing:
 		_audio_player.play()
@@ -1570,12 +1929,6 @@ func _pump_audio(max_frames: int) -> void:
 	var avail := pb.get_frames_available()
 	var pushed := 0
 	while avail >= AUDIO_CHUNK_SIZE and pushed < max_frames:
-		if not _any_voice_active():
-			if not _was_silent:
-				_mix_chunk.fill(Vector2.ZERO)
-				pb.push_buffer(_mix_chunk)
-				_was_silent = true
-			break
 		_was_silent = false
 		_fill_audio_chunk()
 		pb.push_buffer(_mix_chunk)
@@ -1583,13 +1936,41 @@ func _pump_audio(max_frames: int) -> void:
 		pushed += AUDIO_CHUNK_SIZE
 
 
+func _step_ambient_sample(s: int, inv_sr: float, amb_gain: float) -> float:
+	if (s & 1) == 0:
+		var ns := _amb_noise_state
+		ns = (ns ^ (ns << 13)) & 0xFFFFFFFF
+		ns = (ns ^ (ns >> 17)) & 0xFFFFFFFF
+		ns = (ns ^ (ns << 5)) & 0xFFFFFFFF
+		_amb_noise_state = ns | 1
+		var white := float((ns & 65535) - 32768) / 32768.0
+		_amb_wind_lpf += 0.045 * (white - _amb_wind_lpf)
+		_amb_wind_prev = _amb_wind_curr
+		_amb_wind_curr = _amb_wind_lpf
+	var wind := 0.5 * (_amb_wind_prev + _amb_wind_curr) if (s & 1) != 0 else _amb_wind_curr
+	_amb_lfo_ph = fmod(_amb_lfo_ph + TAU * 0.14 * inv_sr, TAU)
+	var wind_env := 0.55 + 0.45 * sin(_amb_lfo_ph)
+	_amb_drone_ph1 = fmod(_amb_drone_ph1 + TAU * minf(_amb_freq1 - 0.6, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+	_amb_drone_ph2 = fmod(_amb_drone_ph2 + TAU * minf(_amb_freq2 + 0.6, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+	var drone := (sin(_amb_drone_ph1) * 0.62 + sin(_amb_drone_ph2) * 0.38) * 0.42
+	return (wind * wind_env * 0.52 * _amb_biome_wind_mul + drone) * amb_gain
+
+
 func _fill_audio_chunk() -> void:
 	var sr: float = TUNING_KNOBS["AUDIO_MIX_RATE"]
 	var inv_sr := 1.0 / sr
+	_amb_freq1 = lerpf(_amb_freq1, _amb_target_f1 * _amb_biome_f_mul, 0.06)
+	_amb_freq2 = lerpf(_amb_freq2, _amb_target_f2 * _amb_biome_f_mul, 0.06)
+	_amb_pause_gain = lerpf(_amb_pause_gain, _amb_pause_target, 0.08)
+	var active_n := _count_active_voices()
+	var macro_t := clampf((_cam_zoom - 1.2) / 3.8, 0.0, 1.0)
+	var duck := 0.18 if active_n >= 10 else lerpf(1.0, 0.45, clampf(float(active_n) / 10.0, 0.0, 1.0))
+	var amb_gain := lerpf(0.055, 0.032, macro_t) * duck * _amb_pause_gain
 
 	for s in range(AUDIO_CHUNK_SIZE):
-		var mix_l := 0.0
-		var mix_r := 0.0
+		var amb := _step_ambient_sample(s, inv_sr, amb_gain)
+		var mix_l := amb
+		var mix_r := amb
 		for v in range(VOICE_COUNT):
 			if _v_active[v] == 0:
 				continue
@@ -1598,202 +1979,242 @@ func _fill_audio_chunk() -> void:
 			if t >= dur:
 				_v_active[v] = 0
 				continue
-
-			var u := t / dur
-			var pitch := _v_pitch[v]
-			var kind := _v_kind[v]
-			var ph := _v_phase[v]
-			var ph2 := _v_phase2[v]
-
-			# Deterministic fast xorshift white noise in [-1, 1]
-			var ns := _v_noise_state[v]
-			ns ^= (ns << 13)
-			ns ^= (ns >> 17)
-			ns ^= (ns << 5)
-			_v_noise_state[v] = ns
-			var noise := float((ns & 65535) - 32768) / 32768.0
-
-			var sample := 0.0
-			match kind:
-				SfxKind.METEOR:
-					var sub_f := lerpf(118.0, 32.0, minf(u * 2.1, 1.0)) * pitch
-					ph = fmod(ph + TAU * sub_f * inv_sr, TAU)
-					var cutoff := 40.0 + 760.0 * exp(-t * 6.0)
-					var rc := TAU * cutoff * inv_sr
-					var alpha := rc / (1.0 + rc)
-					var lpf := _v_lpf[v] + alpha * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf
-					var sub_env := exp(-t * 7.5)
-					var rumble_env := exp(-t * 3.8)
-					sample = sin(ph) * sub_env * 0.65 + lpf * rumble_env * 1.45
-				SfxKind.TERRAFORM:
-					var f_t := lerpf(320.0, 660.0, u) * pitch
-					ph = fmod(ph + TAU * f_t * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * f_t * 1.5 * inv_sr, TAU)
-					var env_t := sin(u * PI) * exp(-u * 1.6)
-					sample = (sin(ph) * 0.55 + sin(ph2) * 0.25 + noise * 0.08) * env_t * 0.48
-				SfxKind.CRYSTAL:
-					var f_c := lerpf(880.0, 1320.0, u) * pitch
-					ph2 = fmod(ph2 + TAU * (f_c * 2.4) * inv_sr, TAU)
-					var mod_amt := sin(ph2) * 1.3 * exp(-u * 5.0)
-					ph = fmod(ph + TAU * f_c * inv_sr, TAU)
-					var env_c := exp(-u * 4.5) * minf(u * 18.0, 1.0)
-					sample = sin(ph + mod_amt) * env_c * 0.42
-				SfxKind.LAVA:
-					var bubble_lfo := 0.5 + 0.5 * sin(t * TAU * 22.0)
-					var f_l := lerpf(170.0, 72.0, u) * pitch
-					ph = fmod(ph + TAU * f_l * inv_sr, TAU)
-					var lpf_l := _v_lpf[v] + 0.09 * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf_l
-					var env_l := sin(u * PI) * 0.75
-					sample = (sin(ph) * 0.35 + lpf_l * (0.45 + 0.55 * bubble_lfo)) * env_l * 0.55
-				SfxKind.VORTEX:
-					var warble := 1.0 + 0.14 * sin(t * TAU * 24.0)
-					var f_v := lerpf(150.0, 290.0, u) * pitch * warble
-					ph = fmod(ph + TAU * f_v * inv_sr, TAU)
-					var lpf_v := _v_lpf[v] + 0.18 * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf_v
-					var env_v := sin(u * PI)
-					sample = (sin(ph) * 0.4 + lpf_v * 0.45) * env_v * 0.48
-				SfxKind.BUILD_POP:
-					var sweep_u := clampf(t / 0.045, 0.0, 1.0)
-					var f_b := lerpf(240.0, 580.0, sweep_u) * pitch
-					ph = fmod(ph + TAU * f_b * inv_sr, TAU)
-					var tri := 1.0 - 4.0 * absf((ph / TAU) - 0.5)
-					ph2 = fmod(ph2 + TAU * (f_b * 2.0) * inv_sr, TAU)
-					var atk := minf(t / 0.003, 1.0)
-					var env_b := atk * (1.0 - u) * exp(-maxf(t - 0.035, 0.0) * 30.0)
-					var click := sin(ph2) * exp(-t * 95.0) * minf(t / 0.002, 1.0) * 0.22
-					sample = (tri * 0.50 + click) * env_b
-				SfxKind.SKIRMISH:
-					# Crisp sci-fi laser / kinetic pulse snap
-					var f_k := lerpf(1180.0, 260.0, pow(u, 0.65)) * pitch
-					ph = fmod(ph + TAU * f_k * inv_sr, TAU)
-					var env_k := exp(-u * 6.0) * minf(t / 0.002, 1.0)
-					var lpf_k := _v_lpf[v] + 0.35 * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf_k
-					sample = (sin(ph) * 0.45 + lpf_k * 0.24) * env_k * 0.55
-				SfxKind.MELTDOWN:
-					# Deep reactor blast + pulsing containment klaxon
-					var sub_m := lerpf(92.0, 26.0, minf(u * 1.6, 1.0)) * pitch
-					ph = fmod(ph + TAU * sub_m * inv_sr, TAU)
-					var alarm_f := lerpf(540.0, 310.0, u) * pitch
-					ph2 = fmod(ph2 + TAU * alarm_f * inv_sr, TAU)
-					var pulse_m := 0.5 + 0.5 * sin(t * TAU * 12.0)
-					var lpf_m := _v_lpf[v] + 0.06 * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf_m
-					var env_m := exp(-u * 2.6) * minf(t / 0.006, 1.0)
-					sample = (sin(ph) * 0.62 + lpf_m * 0.85 + sin(ph2) * 0.22 * pulse_m) * env_m
-				SfxKind.STORM:
-					# Elemental wind rush + atmospheric resonance
-					var wind_swirl := 0.65 + 0.35 * sin(t * TAU * 5.5)
-					var f_s := lerpf(210.0, 370.0, sin(u * PI)) * pitch
-					ph = fmod(ph + TAU * f_s * inv_sr, TAU)
-					var lpf_s := _v_lpf[v] + (0.08 + 0.14 * sin(u * PI)) * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf_s
-					var env_s := sin(u * PI)
-					sample = (lpf_s * 0.72 * wind_swirl + sin(ph) * 0.26) * env_s
-				SfxKind.SHUTTLE:
-					# Thruster rumble rising into orbital ascent chime
-					var f_sh := lerpf(160.0, 740.0, u * u) * pitch
-					ph = fmod(ph + TAU * f_sh * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * (f_sh * 1.5) * inv_sr, TAU)
-					var lpf_sh := _v_lpf[v] + 0.12 * (noise - _v_lpf[v])
-					_v_lpf[v] = lpf_sh
-					var env_sh := sin(u * PI) * 0.88
-					sample = (lpf_sh * 0.52 + (sin(ph) * 0.32 + sin(ph2) * 0.18)) * env_sh
-				SfxKind.MUTATE:
-					# Alien crystalline FM warble
-					var warble_m := 1.0 + 0.08 * sin(t * TAU * 28.0)
-					var f_mu := lerpf(480.0, 920.0, u) * pitch * warble_m
-					ph2 = fmod(ph2 + TAU * (f_mu * 1.73) * inv_sr, TAU)
-					var fm_m := sin(ph2) * 1.45 * sin(u * PI)
-					ph = fmod(ph + TAU * f_mu * inv_sr, TAU)
-					var env_mu := exp(-u * 3.2) * minf(t / 0.005, 1.0)
-					sample = sin(ph + fm_m) * env_mu * 0.45
-				SfxKind.ORBITAL_BEAM:
-					# Deep orbital capacitor charge sweep + sub-bass plasma beam thump
-					if u < 0.24:
-						var cu := u / 0.24
-						var f_charge := lerpf(180.0, 940.0, cu * cu) * pitch
-						ph = fmod(ph + TAU * f_charge * inv_sr, TAU)
-						ph2 = fmod(ph2 + TAU * (f_charge * 1.5) * inv_sr, TAU)
-						var c_env := cu * 0.55
-						sample = (sin(ph) * 0.65 + sin(ph2) * 0.35) * c_env
-					else:
-						var bu := (u - 0.24) / 0.76
-						var f_sub := lerpf(145.0, 34.0, minf(bu * 1.9, 1.0)) * pitch
-						ph = fmod(ph + TAU * f_sub * inv_sr, TAU)
-						ph2 = fmod(ph2 + TAU * (lerpf(520.0, 110.0, bu) * pitch) * inv_sr, TAU)
-						var lpf_o := _v_lpf[v] + 0.14 * (noise - _v_lpf[v])
-						_v_lpf[v] = lpf_o
-						var b_env := exp(-bu * 3.4) * minf(bu * 16.0, 1.0)
-						sample = (sin(ph) * 0.68 + sin(ph2) * 0.22 + lpf_o * 0.46) * b_env * 0.92
-				SfxKind.SHIELD_DEFLECT:
-					# Harmonic metallic cyan dome chime + resonant shimmer
-					var f_sd := lerpf(660.0, 520.0, u * 0.4) * pitch
-					ph = fmod(ph + TAU * f_sd * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * (f_sd * 2.25) * inv_sr, TAU)
-					var fm_sd := sin(ph2) * (1.25 * exp(-u * 4.5))
-					var shim := 0.78 + 0.22 * sin(t * TAU * 34.0)
-					var env_sd := exp(-u * 4.0) * minf(t / 0.003, 1.0)
-					sample = (sin(ph + fm_sd) * 0.58 + sin(ph * 1.5) * 0.28) * shim * env_sd * 0.75
-				SfxKind.LASER_LIGHT:
-					# Band-limited soft-FM chirp sweep: 1380 Hz -> 280 Hz (zero sawtooth aliasing)
-					var f_ll := 1380.0 * pow(280.0 / 1380.0, pow(u, 0.72)) * pitch
-					ph = fmod(ph + TAU * f_ll * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * (f_ll * 1.5) * inv_sr, TAU)
-					var mod_idx_ll := 1.15 * exp(-u * 6.5)
-					var sig_ll := sin(ph + sin(ph2) * mod_idx_ll) + 0.22 * sin(ph * 2.0) * (1.0 - u)
-					var env_ll := exp(-u * 5.2) * minf(t / 0.002, 1.0)
-					sample = tanh(sig_ll * 1.25) * env_ll * 0.42
-				SfxKind.LASER_HEAVY:
-					# FM-sine (1.7x) + sub-impulse + 15 ms noise click: 540 Hz -> 90 Hz
-					var f_lh := 540.0 * pow(90.0 / 540.0, u) * pitch
-					ph = fmod(ph + TAU * f_lh * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * (f_lh * 1.7) * inv_sr, TAU)
-					var fm_lh := sin(ph2) * (1.35 * exp(-u * 3.8))
-					var click_lh := noise * exp(-t * 140.0) * (1.0 if t < 0.015 else 0.0) * 0.35
-					var env_lh := exp(-u * 3.6) * minf(t / 0.0025, 1.0)
-					sample = (sin(ph + fm_lh) * 0.62 + sin(ph * 0.5) * 0.25) * env_lh * 0.72 + click_lh
-				SfxKind.TELEPORT_HUM:
-					# Two detuned sines (3 Hz beat) + 2-pole resonant SVF bandpass noise: 110/113 -> 220/226 Hz
-					var f_base := lerpf(110.0, 220.0, u)
-					ph = fmod(ph + TAU * (f_base * pitch) * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * ((f_base + 3.0) * pitch) * inv_sr, TAU)
-					var cutoff_th := lerpf(1500.0, 480.0, u)
-					var svf_f := minf(2.0 * sin(PI * cutoff_th * inv_sr), 0.85)
-					var svf_q := 0.22
-					var lp_th := _v_lpf[v] + svf_f * _v_bp[v]
-					var hp_th := noise - lp_th - svf_q * _v_bp[v]
-					var bp_th := _v_bp[v] + svf_f * hp_th
-					_v_lpf[v] = clampf(lp_th, -4.0, 4.0)
-					_v_bp[v] = clampf(bp_th, -4.0, 4.0)
-					var env_th := sin(u * PI) * minf(t / 0.025, 1.0)
-					sample = ((sin(ph) + sin(ph2)) * 0.34 + bp_th * 0.26) * env_th * 0.65
-				SfxKind.EMP_GLITCH:
-					# Stepped quantized FM bit-crush + crackle burst: 1320 -> 95 Hz
-					var step_u := floorf(u * 12.0) / 12.0
-					var f_eg := lerpf(1320.0, 95.0, step_u) * pitch * (1.0 + 0.18 * sin(t * TAU * 47.0))
-					ph = fmod(ph + TAU * f_eg * inv_sr, TAU)
-					ph2 = fmod(ph2 + TAU * (f_eg * 2.31) * inv_sr, TAU)
-					var bit_carrier := clampf(sin(ph) * 2.4, -1.0, 1.0)
-					var crackle := noise * (1.0 if absf(sin(t * TAU * 29.0)) > 0.72 else 0.15)
-					var env_eg := exp(-u * 3.4) * minf(t / 0.002, 1.0)
-					sample = (bit_carrier * sin(ph2) * 0.45 + sin(ph) * 0.30 + crackle * 0.28) * env_eg * 0.62
-				_:
-					# Crisp UI / sci-fi sweep: 880 Hz -> 110 Hz
-					var f_u := 880.0 * pow(0.125, u) * pitch
-					ph = fmod(ph + TAU * f_u * inv_sr, TAU)
-					var env_u := exp(-u * 5.5) * minf(u * 25.0, 1.0)
-					sample = sin(ph) * env_u * 0.40
-
-			_v_phase[v] = ph
-			_v_phase2[v] = ph2
+			var sample := _synth_voice_sample(v, t, dur, inv_sr)
 			_v_t[v] = t + inv_sr
 			var voice_out := sample * _v_gain[v]
 			var pan_ang := (_v_pan[v] + 1.0) * (PI * 0.25)
 			mix_l += voice_out * (1.41421356 * cos(pan_ang))
 			mix_r += voice_out * (1.41421356 * sin(pan_ang))
-
 		_mix_chunk[s] = Vector2(tanh(mix_l * 0.85) * 0.45, tanh(mix_r * 0.85) * 0.45)
+
+
+func _next_voice_noise(v: int) -> float:
+	var ns := _v_noise_state[v]
+	ns = (ns ^ (ns << 13)) & 0xFFFFFFFF
+	ns = (ns ^ (ns >> 17)) & 0xFFFFFFFF
+	ns = (ns ^ (ns << 5)) & 0xFFFFFFFF
+	_v_noise_state[v] = ns | 1
+	return float((ns & 65535) - 32768) / 32768.0
+
+
+func _synth_voice_sample(v: int, t: float, dur: float, inv_sr: float) -> float:
+	var u := t / dur
+	var pitch := _v_pitch[v]
+	var kind := _v_kind[v]
+	var noise := _next_voice_noise(v)
+	if kind <= SfxKind.MUTATE:
+		return _synth_env_voice(v, kind, u, t, pitch, noise, inv_sr)
+	if kind >= SfxKind.DROP_RAIN:
+		return _synth_world_ext_voice(v, kind, u, t, pitch, noise, inv_sr)
+	return _synth_combat_ui_voice(v, kind, u, t, pitch, noise, inv_sr)
+
+
+func _synth_env_voice(v: int, kind: int, u: float, t: float, pitch: float, noise: float, inv_sr: float) -> float:
+	var ph := _v_phase[v]
+	var ph2 := _v_phase2[v]
+	var sample := 0.0
+	match kind:
+		SfxKind.METEOR:
+			var sub_f := minf(lerpf(118.0, 32.0, minf(u * 2.1, 1.0)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * sub_f * inv_sr, TAU)
+			var rc := TAU * (40.0 + 760.0 * exp(-t * 6.0)) * inv_sr
+			var lpf := _v_lpf[v] + (rc / (1.0 + rc)) * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf
+			sample = sin(ph) * exp(-t * 7.5) * 0.65 + lpf * exp(-t * 3.8) * 1.45
+		SfxKind.TERRAFORM:
+			var f_t := minf(lerpf(320.0, 660.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_t * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_t * 1.5, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			sample = (sin(ph) * 0.55 + sin(ph2) * 0.25 + noise * 0.08) * sin(u * PI) * exp(-u * 1.6) * 0.48
+		SfxKind.CRYSTAL:
+			var f_c := minf(lerpf(880.0, 1320.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph2 = fmod(ph2 + TAU * minf(f_c * 2.4, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			ph = fmod(ph + TAU * f_c * inv_sr, TAU)
+			sample = sin(ph + sin(ph2) * 1.3 * exp(-u * 5.0)) * exp(-u * 4.5) * minf(u * 18.0, 1.0) * 0.42
+		SfxKind.LAVA:
+			var f_l := minf(lerpf(170.0, 72.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_l * inv_sr, TAU)
+			var lpf_l := _v_lpf[v] + 0.09 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_l
+			sample = (sin(ph) * 0.35 + lpf_l * (0.45 + 0.55 * (0.5 + 0.5 * sin(t * TAU * 22.0)))) * sin(u * PI) * 0.41
+		SfxKind.VORTEX:
+			var f_v := minf(lerpf(150.0, 290.0, u) * pitch * (1.0 + 0.14 * sin(t * TAU * 24.0)), MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_v * inv_sr, TAU)
+			var lpf_v := _v_lpf[v] + 0.18 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_v
+			sample = (sin(ph) * 0.4 + lpf_v * 0.45) * sin(u * PI) * 0.48
+		SfxKind.UI:
+			var f_u := minf(lerpf(660.0, 880.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_u * inv_sr, TAU)
+			sample = sin(ph) * exp(-u * 4.8) * minf(u * 22.0, 1.0) * 0.36
+		SfxKind.BUILD_POP:
+			var f_b := minf(lerpf(240.0, 580.0, clampf(t / 0.045, 0.0, 1.0)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_b * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_b * 2.0, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var tri := 1.0 - 4.0 * absf((ph / TAU) - 0.5)
+			var env_b := minf(t / 0.003, 1.0) * (1.0 - u) * exp(-maxf(t - 0.035, 0.0) * 30.0)
+			var click := sin(ph2) * exp(-t * 95.0) * minf(t / 0.002, 1.0) * 0.22
+			sample = (tri * 0.50 + click) * env_b
+		SfxKind.SKIRMISH:
+			var f_k := minf(lerpf(1180.0, 260.0, pow(u, 0.65)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_k * inv_sr, TAU)
+			var lpf_k := _v_lpf[v] + 0.35 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_k
+			sample = (sin(ph) * 0.45 + lpf_k * 0.24) * exp(-u * 6.0) * minf(t / 0.002, 1.0) * 0.55
+		SfxKind.MELTDOWN:
+			var sub_m := minf(lerpf(92.0, 26.0, minf(u * 1.6, 1.0)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * sub_m * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(lerpf(540.0, 310.0, u) * pitch, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var lpf_m := _v_lpf[v] + 0.06 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_m
+			sample = (sin(ph) * 0.62 + lpf_m * 0.85 + sin(ph2) * 0.22 * (0.5 + 0.5 * sin(t * TAU * 12.0))) * exp(-u * 2.6) * minf(t / 0.006, 1.0)
+		SfxKind.STORM:
+			var f_s := minf(lerpf(210.0, 370.0, sin(u * PI)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_s * inv_sr, TAU)
+			var lpf_s := _v_lpf[v] + (0.08 + 0.14 * sin(u * PI)) * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_s
+			sample = (lpf_s * 0.72 * (0.65 + 0.35 * sin(t * TAU * 5.5)) + sin(ph) * 0.26) * sin(u * PI)
+		SfxKind.SHUTTLE:
+			var f_sh := minf(lerpf(160.0, 740.0, u * u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_sh * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_sh * 1.5, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var lpf_sh := _v_lpf[v] + 0.12 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_sh
+			sample = (lpf_sh * 0.52 + (sin(ph) * 0.32 + sin(ph2) * 0.18)) * sin(u * PI) * 0.88
+		SfxKind.MUTATE:
+			var f_mu := minf(lerpf(480.0, 920.0, u) * pitch * (1.0 + 0.08 * sin(t * TAU * 28.0)), MAX_SYNTH_FREQ_HZ)
+			ph2 = fmod(ph2 + TAU * minf(f_mu * 1.73, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			ph = fmod(ph + TAU * f_mu * inv_sr, TAU)
+			sample = sin(ph + sin(ph2) * 1.45 * sin(u * PI)) * exp(-u * 3.2) * minf(t / 0.005, 1.0) * 0.45
+	_v_phase[v] = ph
+	_v_phase2[v] = ph2
+	return sample
+
+
+func _synth_combat_ui_voice(v: int, kind: int, u: float, t: float, pitch: float, noise: float, inv_sr: float) -> float:
+	var ph := _v_phase[v]
+	var ph2 := _v_phase2[v]
+	var sample := 0.0
+	match kind:
+		SfxKind.ORBITAL_BEAM:
+			if u < 0.24:
+				var cu := u / 0.24
+				var f_ch := minf(lerpf(180.0, 940.0, cu * cu) * pitch, MAX_SYNTH_FREQ_HZ)
+				ph = fmod(ph + TAU * f_ch * inv_sr, TAU)
+				ph2 = fmod(ph2 + TAU * minf(f_ch * 1.5, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+				sample = (sin(ph) * 0.65 + sin(ph2) * 0.35) * cu * 0.55
+			else:
+				var bu := (u - 0.24) / 0.76
+				ph = fmod(ph + TAU * minf(lerpf(145.0, 34.0, minf(bu * 1.9, 1.0)) * pitch, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+				ph2 = fmod(ph2 + TAU * minf(lerpf(520.0, 110.0, bu) * pitch, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+				var lpf_o := _v_lpf[v] + 0.14 * (noise - _v_lpf[v])
+				_v_lpf[v] = lpf_o
+				sample = (sin(ph) * 0.68 + sin(ph2) * 0.22 + lpf_o * 0.46) * exp(-bu * 3.4) * minf(bu * 16.0, 1.0) * 0.92
+		SfxKind.SHIELD_DEFLECT:
+			var f_sd := minf(lerpf(660.0, 520.0, u * 0.4) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_sd * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_sd * 2.25, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var fm_sd := sin(ph2) * (1.25 * exp(-u * 4.5))
+			sample = (sin(ph + fm_sd) * 0.58 + sin(ph * 1.5) * 0.28) * (0.78 + 0.22 * sin(t * TAU * 34.0)) * exp(-u * 4.0) * minf(t / 0.003, 1.0) * 0.75
+		SfxKind.LASER_LIGHT:
+			var f_ll := minf(1380.0 * pow(280.0 / 1380.0, pow(u, 0.72)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_ll * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_ll * 1.5, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var sig_ll := sin(ph + sin(ph2) * (1.15 * exp(-u * 6.5))) + 0.22 * sin(ph * 2.0) * (1.0 - u)
+			sample = tanh(sig_ll * 1.25) * exp(-u * 5.2) * minf(t / 0.002, 1.0) * 0.42
+		SfxKind.LASER_HEAVY:
+			var f_lh := minf(540.0 * pow(90.0 / 540.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_lh * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_lh * 1.7, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var click_lh := noise * exp(-t * 140.0) * (1.0 if t < 0.015 else 0.0) * 0.35
+			sample = (sin(ph + sin(ph2) * (1.35 * exp(-u * 3.8))) * 0.62 + sin(ph * 0.5) * 0.25) * exp(-u * 3.6) * minf(t / 0.0025, 1.0) * 0.72 + click_lh
+		SfxKind.TELEPORT_HUM:
+			var f_base := minf(lerpf(110.0, 220.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_base * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf((f_base + 3.0 * pitch), MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var svf_f := minf(2.0 * sin(PI * lerpf(1500.0, 480.0, u) * inv_sr), 0.85)
+			var lp_th := _v_lpf[v] + svf_f * _v_bp[v]
+			var bp_th := _v_bp[v] + svf_f * (noise - lp_th - 0.22 * _v_bp[v])
+			_v_lpf[v] = clampf(lp_th, -4.0, 4.0)
+			_v_bp[v] = clampf(bp_th, -4.0, 4.0)
+			sample = ((sin(ph) + sin(ph2)) * 0.34 + bp_th * 0.26) * sin(u * PI) * minf(t / 0.025, 1.0) * 0.65
+		SfxKind.EMP_GLITCH:
+			var step_u := floorf(u * 12.0) / 12.0
+			var f_eg := minf(lerpf(1320.0, 95.0, step_u) * pitch * (1.0 + 0.18 * sin(t * TAU * 47.0)), MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_eg * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_eg * 2.31, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var bit_carrier := tanh(sin(ph) * 1.65)
+			var crackle := noise * (1.0 if absf(sin(t * TAU * 29.0)) > 0.72 else 0.15)
+			sample = (bit_carrier * sin(ph2) * 0.45 + sin(ph) * 0.30 + crackle * 0.28) * exp(-u * 3.4) * minf(t / 0.002, 1.0) * 0.62
+		SfxKind.UI_TAB:
+			var f_ut := minf(lerpf(440.0, 587.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_ut * inv_sr, TAU)
+			sample = sin(ph) * exp(-u * 4.5) * minf(u * 20.0, 1.0) * 0.34
+		SfxKind.UI_PIN:
+			ph = fmod(ph + TAU * minf(523.25 * pitch, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(783.99 * pitch, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			sample = (sin(ph) * 0.55 + sin(ph2) * 0.45) * exp(-u * 3.8) * minf(u * 18.0, 1.0) * 0.38
+		SfxKind.UI_DENIED:
+			var f_ud := minf(lerpf(165.0, 110.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_ud * inv_sr, TAU)
+			var dbl := 1.0 if (u < 0.38 or u > 0.52) else 0.25
+			sample = tanh(sin(ph) * 1.5) * dbl * exp(-u * 3.2) * 0.40
+		_:
+			var f_def := minf(880.0 * pow(0.125, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_def * inv_sr, TAU)
+			sample = sin(ph) * exp(-u * 5.5) * minf(u * 25.0, 1.0) * 0.36
+	_v_phase[v] = ph
+	_v_phase2[v] = ph2
+	return sample
+
+
+func _synth_world_ext_voice(v: int, kind: int, u: float, t: float, pitch: float, noise: float, inv_sr: float) -> float:
+	var ph := _v_phase[v]
+	var ph2 := _v_phase2[v]
+	var sample := 0.0
+	match kind:
+		SfxKind.DROP_RAIN:
+			var f_dr := minf(lerpf(620.0, 1180.0, u * u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_dr * inv_sr, TAU)
+			sample = (sin(ph) * 0.42 + noise * 0.09) * exp(-u * 5.0) * minf(u * 24.0, 1.0) * 0.32
+		SfxKind.DROP_IMPACT:
+			var f_di := minf(lerpf(360.0, 145.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_di * inv_sr, TAU)
+			sample = (sin(ph) * 0.48 + noise * 0.14 * exp(-u * 6.0)) * exp(-u * 4.6) * minf(t / 0.002, 1.0) * 0.36
+		SfxKind.EARTHQUAKE:
+			var f_eq := minf(lerpf(68.0, 28.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_eq * inv_sr, TAU)
+			var lpf_eq := _v_lpf[v] + 0.045 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_eq
+			sample = (sin(ph) * 0.60 + lpf_eq * 1.15) * sin(u * PI) * 0.85
+		SfxKind.VOLCANO_TORNADO:
+			var f_vt := minf(lerpf(95.0, 165.0, sin(u * PI)) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_vt * inv_sr, TAU)
+			var lpf_vt := _v_lpf[v] + (0.07 + 0.10 * sin(u * PI)) * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_vt
+			sample = (sin(ph) * 0.38 + lpf_vt * 0.86) * sin(u * PI) * 0.72
+		SfxKind.FOOTSTEP_WORK:
+			var f_fw := minf(lerpf(210.0, 110.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_fw * inv_sr, TAU)
+			sample = (sin(ph) * 0.34 + noise * 0.16) * exp(-u * 6.2) * minf(t / 0.002, 1.0) * 0.24
+		SfxKind.UI_HOVER:
+			var f_uh := minf(lerpf(960.0, 1160.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_uh * inv_sr, TAU)
+			sample = sin(ph) * exp(-u * 6.5) * minf(u * 20.0, 1.0) * 0.18
+		SfxKind.WINDOW_WHOOSH:
+			var f_ww := minf(lerpf(280.0, 520.0, u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_ww * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_ww * 1.5, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var lpf_ww := _v_lpf[v] + 0.16 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_ww
+			sample = ((sin(ph) * 0.28 + sin(ph2) * 0.14) + lpf_ww * 0.35) * sin(u * PI) * 0.44
+		SfxKind.BIT_SCALE_WHOOSH:
+			var f_bs := minf(lerpf(340.0, 880.0, u * u) * pitch, MAX_SYNTH_FREQ_HZ)
+			ph = fmod(ph + TAU * f_bs * inv_sr, TAU)
+			ph2 = fmod(ph2 + TAU * minf(f_bs * 1.25, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
+			var lpf_bs := _v_lpf[v] + 0.12 * (noise - _v_lpf[v])
+			_v_lpf[v] = lpf_bs
+			sample = (sin(ph) * 0.32 + sin(ph2) * 0.20 + lpf_bs * 0.22) * sin(u * PI) * 0.46
+	_v_phase[v] = ph
+	_v_phase2[v] = ph2
+	return sample

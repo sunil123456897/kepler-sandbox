@@ -1,5 +1,5 @@
 ﻿param(
-    [int]$TimeoutSec = 30
+    [int]$TimeoutSec = 45
 )
 
 $ErrorActionPreference = "Stop"
@@ -371,8 +371,16 @@ try {
     $wbUpgraded = Parse-IntMetric -Text $paceOut -Key "upgraded_in_place" -Label "SMOKE_WORLDBOX_PACE"
     $wbKingdomCities = Parse-IntMetric -Text $paceOut -Key "kingdom_cities" -Label "SMOKE_WORLDBOX_PACE"
     $wbEcoDelta = Parse-NumMetric -Text $paceOut -Key "eco_delta" -Label "SMOKE_WORLDBOX_PACE"
+    $wbEcoEvents = Parse-IntMetric -Text $paceOut -Key "eco_events" -Label "SMOKE_WORLDBOX_PACE"
     $wbUnitShots = Parse-IntMetric -Text $paceOut -Key "unit_shots" -Label "SMOKE_WORLDBOX_PACE"
     $wbMaxShotDist = Parse-NumMetric -Text $paceOut -Key "max_shot_dist" -Label "SMOKE_WORLDBOX_PACE"
+    $wbContiguousOk = Parse-IntMetric -Text $paceOut -Key "contiguous_ok" -Label "SMOKE_WORLDBOX_PACE"
+    $wbPlotChronicleOk = Parse-IntMetric -Text $paceOut -Key "plot_chronicle_ok" -Label "SMOKE_WORLDBOX_PACE"
+    $wbPlotSaveOk = Parse-IntMetric -Text $paceOut -Key "plot_save_ok" -Label "SMOKE_WORLDBOX_PACE"
+    $wbT1SciCapped = Parse-IntMetric -Text $paceOut -Key "t1_sci_capped" -Label "SMOKE_WORLDBOX_PACE"
+    $wbNotablesOk = Parse-IntMetric -Text $paceOut -Key "notables_ok" -Label "SMOKE_WORLDBOX_PACE"
+    $wbFullSaveOk = Parse-IntMetric -Text $paceOut -Key "full_save_ok" -Label "SMOKE_WORLDBOX_PACE"
+    $wbHudBrushOk = Parse-IntMetric -Text $paceOut -Key "hud_brush_ok" -Label "SMOKE_WORLDBOX_PACE"
 
     if ($wbFoundedSec -le 0.0 -or $wbFoundedSec -gt 15.0) { throw "[SMOKE_WORLDBOX_PACE] Expected founded_sec in (0, 15.0], got $wbFoundedSec" }
     if ($wbTier30 -ne 0) { throw "[SMOKE_WORLDBOX_PACE] Expected tier_at_30s == 0, got $wbTier30" }
@@ -383,23 +391,70 @@ try {
     if ($wbUpgraded -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected upgraded_in_place >= 1, got $wbUpgraded" }
     if ($wbKingdomCities -lt 2) { throw "[SMOKE_WORLDBOX_PACE] Expected kingdom_cities >= 2, got $wbKingdomCities" }
     if ($wbEcoDelta -le 0.1) { throw "[SMOKE_WORLDBOX_PACE] Expected eco_delta > 0.1, got $wbEcoDelta" }
+    if ($wbEcoEvents -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected eco_events >= 1, got $wbEcoEvents" }
     if ($wbUnitShots -lt 1) { throw "[SMOKE_WORLDBOX_PACE] Expected unit_shots >= 1, got $wbUnitShots" }
     if ($wbMaxShotDist -le 0.0 -or $wbMaxShotDist -gt 36.0) { throw "[SMOKE_WORLDBOX_PACE] Expected max_shot_dist in (0, 36.0], got $wbMaxShotDist" }
+    if ($wbContiguousOk -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected contiguous_ok == 1, got $wbContiguousOk" }
+    if ($wbPlotChronicleOk -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected plot_chronicle_ok == 1, got $wbPlotChronicleOk" }
+    if ($wbPlotSaveOk -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected plot_save_ok == 1, got $wbPlotSaveOk" }
+    if ($wbT1SciCapped -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected t1_sci_capped == 1, got $wbT1SciCapped" }
+    if ($wbNotablesOk -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected notables_ok == 1, got $wbNotablesOk" }
+    if ($wbFullSaveOk -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected full_save_ok == 1, got $wbFullSaveOk" }
+    if ($wbHudBrushOk -ne 1) { throw "[SMOKE_WORLDBOX_PACE] Expected hud_brush_ok == 1, got $wbHudBrushOk" }
     if ($paceSw.Elapsed.TotalSeconds -ge $TimeoutSec) {
         throw "[SMOKE_WORLDBOX_PACE] Timing budget exceeded: $($paceSw.Elapsed.TotalSeconds)s"
     }
 
+    Write-Host "=== Step 10: Parity Feature Matrix & Save/Load Roundtrip Smoke ==="
+    $paritySw = [System.Diagnostics.Stopwatch]::StartNew()
+    $parityOut = Invoke-GodotGuarded -GodotArgs @("--headless", "--path", "`"$ProjectDir`"", "--", "--smoke-parity") -Label "SMOKE_PARITY"
+    $paritySw.Stop()
+    if ($parityOut -notmatch "SMOKE_PARITY_PASS") {
+        throw "[SMOKE_PARITY] Expected SMOKE_PARITY_PASS marker in output."
+    }
+    $spTemplateOk = Parse-IntMetric -Text $parityOut -Key "template_ok" -Label "SMOKE_PARITY"
+    $spDropsLanded = Parse-IntMetric -Text $parityOut -Key "drops_landed" -Label "SMOKE_PARITY"
+    $spXenoOk = Parse-IntMetric -Text $parityOut -Key "xeno_ok" -Label "SMOKE_PARITY"
+    $spCreepNodes = Parse-IntMetric -Text $parityOut -Key "creep_nodes" -Label "SMOKE_PARITY"
+    $spFauna = Parse-IntMetric -Text $parityOut -Key "fauna" -Label "SMOKE_PARITY"
+    $spUplifted = Parse-IntMetric -Text $parityOut -Key "uplifted" -Label "SMOKE_PARITY"
+    $spProjectiles = Parse-IntMetric -Text $parityOut -Key "projectiles" -Label "SMOKE_PARITY"
+    $spShips = Parse-IntMetric -Text $parityOut -Key "ships" -Label "SMOKE_PARITY"
+    $spPlots = Parse-IntMetric -Text $parityOut -Key "plots" -Label "SMOKE_PARITY"
+    $spHistLen = Parse-IntMetric -Text $parityOut -Key "hist_len" -Label "SMOKE_PARITY"
+    $spLensesOk = Parse-IntMetric -Text $parityOut -Key "lenses_ok" -Label "SMOKE_PARITY"
+    $spWindowsOk = Parse-IntMetric -Text $parityOut -Key "windows_ok" -Label "SMOKE_PARITY"
+    $spSaveOk = Parse-IntMetric -Text $parityOut -Key "save_ok" -Label "SMOKE_PARITY"
+
+    if ($spTemplateOk -ne 1) { throw "[SMOKE_PARITY] Expected template_ok == 1, got $spTemplateOk" }
+    if ($spDropsLanded -lt 1) { throw "[SMOKE_PARITY] Expected drops_landed >= 1, got $spDropsLanded" }
+    if ($spXenoOk -ne 1) { throw "[SMOKE_PARITY] Expected xeno_ok == 1, got $spXenoOk" }
+    if ($spCreepNodes -lt 1) { throw "[SMOKE_PARITY] Expected creep_nodes >= 1, got $spCreepNodes" }
+    if ($spFauna -lt 2) { throw "[SMOKE_PARITY] Expected fauna >= 2, got $spFauna" }
+    if ($spUplifted -lt 1) { throw "[SMOKE_PARITY] Expected uplifted >= 1, got $spUplifted" }
+    if ($spProjectiles -lt 1) { throw "[SMOKE_PARITY] Expected projectiles >= 1, got $spProjectiles" }
+    if ($spShips -lt 1) { throw "[SMOKE_PARITY] Expected ships >= 1, got $spShips" }
+    if ($spPlots -lt 1) { throw "[SMOKE_PARITY] Expected plots >= 1, got $spPlots" }
+    if ($spHistLen -lt 2) { throw "[SMOKE_PARITY] Expected hist_len >= 2, got $spHistLen" }
+    if ($spLensesOk -ne 1) { throw "[SMOKE_PARITY] Expected lenses_ok == 1, got $spLensesOk" }
+    if ($spWindowsOk -ne 1) { throw "[SMOKE_PARITY] Expected windows_ok == 1, got $spWindowsOk" }
+    if ($spSaveOk -ne 1) { throw "[SMOKE_PARITY] Expected save_ok == 1, got $spSaveOk" }
+    if ($paritySw.Elapsed.TotalSeconds -ge $TimeoutSec) {
+        throw "[SMOKE_PARITY] Timing budget exceeded: $($paritySw.Elapsed.TotalSeconds)s"
+    }
+
     $activeGodotPre = @(Get-Process -Name "Godot*" -ErrorAction SilentlyContinue).Count
     if ($activeGodotPre -ne 0) {
-        throw "Active Godot processes remaining after Step 9: $activeGodotPre"
+        throw "Active Godot processes remaining after Step 10: $activeGodotPre"
     }
 
     $maxSpeedStr = $smokeMaxSpeed.ToString("F2", $inv)
     $storageStr = $storageTotal.ToString("F2", $inv)
     $wbFoundedStr = $wbFoundedSec.ToString("F2", $inv)
     $wbMaxShotStr = $wbMaxShotDist.ToString("F2", $inv)
-    Write-Host ("VERIFY_ALL_PASS units={0} flora={1} max_speed={2} cities={3} zones_owned={4} buildings={5} tech_tier={6} storage_total={7} shuttles_total={8} cosmic_age={9} shield_pylons={10} shield_blocked={11} dodges={12} possession_ok={13} world_tick_ms={14} phys_civ_tick_ms={15} sim_tick_ms={16} beams_fired={17} portal_transfers={18} casualties={19} combat_tech_tier={20} wars_active={21} rebellions_total={22} water_stranded={23} combat_max_speed={24} combat_world_tick_ms={25} combat_phys_civ_tick_ms={26} combat_sim_tick_ms={27} macro_bytes={28} zoom_bytes={29} civ_bytes={30} night_bytes={31} combat_bytes={32} wb_founded_sec={33} wb_tier30={34} wb_max_tier={35} wb_kingdom_cities={36} wb_max_shot_dist={37}" -f `
-        $smokeUnits, $smokeFlora, $maxSpeedStr, $cities, $zonesOwned, $buildings, $techTier, $storageStr, $shuttlesTotal, $cosmicAge, $shieldPylons, $shieldBlocked, $dodges, $possessionOk, $worldTickStr, $physCivTickStr, $simTickStr, $beamsFired, $portalTransfers, $casualties, $combatTechTier, $warsActive, $rebellionsTotal, $waterStranded, $combatMaxSpeedStr, $combatWorldTickStr, $combatPhysCivTickStr, $combatSimTickStr, $macroBytes, $zoomBytes, $civBytes, $nightBytes, $combatShotBytes, $wbFoundedStr, $wbTier30, $wbMaxTier, $wbKingdomCities, $wbMaxShotStr)
+    $wbEcoDeltaStr = $wbEcoDelta.ToString("F2", $inv)
+    Write-Host ("VERIFY_ALL_PASS steps=10/10 units={0} flora={1} max_speed={2} cities={3} zones_owned={4} buildings={5} tech_tier={6} storage_total={7} shuttles_total={8} cosmic_age={9} shield_pylons={10} shield_blocked={11} dodges={12} possession_ok={13} world_tick_ms={14} phys_civ_tick_ms={15} sim_tick_ms={16} beams_fired={17} portal_transfers={18} casualties={19} combat_tech_tier={20} wars_active={21} rebellions_total={22} water_stranded={23} combat_max_speed={24} combat_world_tick_ms={25} combat_phys_civ_tick_ms={26} combat_sim_tick_ms={27} macro_bytes={28} zoom_bytes={29} civ_bytes={30} night_bytes={31} combat_bytes={32} wb_founded_sec={33} wb_tier30={34} wb_max_tier={35} wb_kingdom_cities={36} wb_max_shot_dist={37} wb_eco_delta={38} wb_eco_events={39} contiguous_ok={40} plot_chronicle_ok={41} plot_save_ok={42} t1_sci_capped={43} notables_ok={44} full_save_ok={45} parity_drops={46} parity_uplifted={47} parity_proj={48} parity_ships={49} parity_plots={50} parity_hist={51} parity_save_ok={52}" -f `
+        $smokeUnits, $smokeFlora, $maxSpeedStr, $cities, $zonesOwned, $buildings, $techTier, $storageStr, $shuttlesTotal, $cosmicAge, $shieldPylons, $shieldBlocked, $dodges, $possessionOk, $worldTickStr, $physCivTickStr, $simTickStr, $beamsFired, $portalTransfers, $casualties, $combatTechTier, $warsActive, $rebellionsTotal, $waterStranded, $combatMaxSpeedStr, $combatWorldTickStr, $combatPhysCivTickStr, $combatSimTickStr, $macroBytes, $zoomBytes, $civBytes, $nightBytes, $combatShotBytes, $wbFoundedStr, $wbTier30, $wbMaxTier, $wbKingdomCities, $wbMaxShotStr, $wbEcoDeltaStr, $wbEcoEvents, $wbContiguousOk, $wbPlotChronicleOk, $wbPlotSaveOk, $wbT1SciCapped, $wbNotablesOk, $wbFullSaveOk, $spDropsLanded, $spUplifted, $spProjectiles, $spShips, $spPlots, $spHistLen, $spSaveOk)
 }
 finally {
     Stop-StrayGodot

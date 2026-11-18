@@ -1,0 +1,1684 @@
+{
+  "atlas_path": "res://assets/atlases/ui_icons_atlas.png",
+  "mask_path": "res://assets/atlases/ui_icons_atlas_mask.png",
+  "atlas_size": [
+    944,
+    16
+  ],
+  "cell_size": [
+    16,
+    16
+  ],
+  "atlas_cols": 59,
+  "cols": 59,
+  "shader_mode": 0,
+  "shader_uniforms": {
+    "sprite_mode": 0,
+    "motion_mode": 0,
+    "atlas_cols": 59,
+    "sprite_size": [
+      16,
+      16
+    ],
+    "mask_tex": "res://assets/atlases/ui_icons_atlas_mask.png",
+    "hdr_emissive": 2.6
+  },
+  "icons": {
+    "tab_earth": 0,
+    "tab_weather": 1,
+    "tab_war": 2,
+    "tab_evo": 3,
+    "tab_biomes": 4,
+    "tab_fauna": 5,
+    "shape_circle": 6,
+    "shape_square": 7,
+    "shape_diamond": 8,
+    "shape_spray": 9,
+    "magnet": 10,
+    "flick": 11,
+    "trait_rain": 12,
+    "gear_rain": 13,
+    "monolith": 14,
+    "grey_goo": 15,
+    "conway": 16,
+    "bomb": 17,
+    "tornado": 18,
+    "earthquake": 19,
+    "geyser": 20,
+    "eraser": 21,
+    "rain": 22,
+    "fire": 23,
+    "ion": 24,
+    "diplo": 25,
+    "orbital": 26,
+    "meteor": 27,
+    "vortex": 28,
+    "ai_glitch": 29,
+    "xeno_virus": 30,
+    "bio_seeder": 31,
+    "colony": 32,
+    "bless": 33,
+    "inspect": 34,
+    "human": 35,
+    "robot": 36,
+    "spore": 37,
+    "terraform": 38,
+    "canal": 39,
+    "crystal": 40,
+    "lava": 41,
+    "lens_kingdoms": 42,
+    "lens_cities": 43,
+    "lens_wars": 44,
+    "lens_armies": 45,
+    "lens_cultures": 46,
+    "lens_biomes": 47,
+    "lens_tech": 48,
+    "win_unit": 49,
+    "win_city": 50,
+    "win_wars": 51,
+    "win_log": 52,
+    "win_graphs": 53,
+    "win_codex": 54,
+    "wall": 55,
+    "drain": 56,
+    "laws": 57,
+    "regen": 58
+  },
+  "columns": {
+    "TAB_EARTH": 0,
+    "TAB_WEATHER": 1,
+    "TAB_WAR": 2,
+    "TAB_EVO": 3,
+    "TAB_BIOMES": 4,
+    "TAB_FAUNA": 5,
+    "SHAPE_CIRCLE": 6,
+    "SHAPE_SQUARE": 7,
+    "SHAPE_DIAMOND": 8,
+    "SHAPE_SPRAY": 9,
+    "MAGNET": 10,
+    "FLICK": 11,
+    "TRAIT_RAIN": 12,
+    "GEAR_RAIN": 13,
+    "MONOLITH": 14,
+    "GREY_GOO": 15,
+    "CONWAY": 16,
+    "BOMB": 17,
+    "TORNADO": 18,
+    "EARTHQUAKE": 19,
+    "GEYSER": 20,
+    "ERASER": 21,
+    "RAIN": 22,
+    "FIRE": 23,
+    "ION": 24,
+    "DIPLO": 25,
+    "ORBITAL": 26,
+    "METEOR": 27,
+    "VORTEX": 28,
+    "AI_GLITCH": 29,
+    "XENO_VIRUS": 30,
+    "BIO_SEEDER": 31,
+    "COLONY": 32,
+    "BLESS": 33,
+    "INSPECT": 34,
+    "HUMAN": 35,
+    "ROBOT": 36,
+    "SPORE": 37,
+    "TERRAFORM": 38,
+    "CANAL": 39,
+    "CRYSTAL": 40,
+    "LAVA": 41,
+    "LENS_KINGDOMS": 42,
+    "LENS_CITIES": 43,
+    "LENS_WARS": 44,
+    "LENS_ARMIES": 45,
+    "LENS_CULTURES": 46,
+    "LENS_BIOMES": 47,
+    "LENS_TECH": 48,
+    "WIN_UNIT": 49,
+    "WIN_CITY": 50,
+    "WIN_WARS": 51,
+    "WIN_LOG": 52,
+    "WIN_GRAPHS": 53,
+    "WIN_CODEX": 54,
+    "WALL": 55,
+    "DRAIN": 56,
+    "LAWS": 57,
+    "REGEN": 58
+  },
+  "cells": [
+    {
+      "col": 0,
+      "id": "tab_earth",
+      "src": "assets/src_sprites/ui_icon_tab_earth.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        0,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.0,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 1,
+      "id": "tab_weather",
+      "src": "assets/src_sprites/ui_icon_tab_weather.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        16,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.016949,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 2,
+      "id": "tab_war",
+      "src": "assets/src_sprites/ui_icon_tab_war.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        32,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.033898,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 3,
+      "id": "tab_evo",
+      "src": "assets/src_sprites/ui_icon_tab_evo.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        48,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.050847,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 4,
+      "id": "tab_biomes",
+      "src": "assets/src_sprites/ui_icon_tab_biomes.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        64,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.067797,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 5,
+      "id": "tab_fauna",
+      "src": "assets/src_sprites/ui_icon_tab_fauna.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        80,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.084746,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 6,
+      "id": "shape_circle",
+      "src": "assets/src_sprites/ui_icon_shape_circle.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        96,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.101695,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 7,
+      "id": "shape_square",
+      "src": "assets/src_sprites/ui_icon_shape_square.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        112,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.118644,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 8,
+      "id": "shape_diamond",
+      "src": "assets/src_sprites/ui_icon_shape_diamond.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        128,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.135593,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 9,
+      "id": "shape_spray",
+      "src": "assets/src_sprites/ui_icon_shape_spray.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        144,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.152542,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 10,
+      "id": "magnet",
+      "src": "assets/src_sprites/ui_icon_magnet.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        160,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.169492,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 11,
+      "id": "flick",
+      "src": "assets/src_sprites/ui_icon_flick.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        176,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.186441,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 12,
+      "id": "trait_rain",
+      "src": "assets/src_sprites/ui_icon_trait_rain.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        192,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.20339,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 13,
+      "id": "gear_rain",
+      "src": "assets/src_sprites/ui_icon_gear_rain.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        208,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.220339,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 14,
+      "id": "monolith",
+      "src": "assets/src_sprites/ui_icon_monolith.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        224,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.237288,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 15,
+      "id": "grey_goo",
+      "src": "assets/src_sprites/ui_icon_grey_goo.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        240,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.254237,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 16,
+      "id": "conway",
+      "src": "assets/src_sprites/ui_icon_conway.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        256,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.271186,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 17,
+      "id": "bomb",
+      "src": "assets/src_sprites/ui_icon_bomb.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        272,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.288136,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 18,
+      "id": "tornado",
+      "src": "assets/src_sprites/ui_icon_tornado.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        288,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.305085,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 19,
+      "id": "earthquake",
+      "src": "assets/src_sprites/ui_icon_earthquake.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        304,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.322034,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 20,
+      "id": "geyser",
+      "src": "assets/src_sprites/ui_icon_geyser.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        320,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.338983,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 21,
+      "id": "eraser",
+      "src": "assets/src_sprites/ui_icon_eraser.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        336,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.355932,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 22,
+      "id": "rain",
+      "src": "assets/src_sprites/ui_icon_rain.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        352,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.372881,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 23,
+      "id": "fire",
+      "src": "assets/src_sprites/ui_icon_fire.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        368,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.389831,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 24,
+      "id": "ion",
+      "src": "assets/src_sprites/ui_icon_ion.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        384,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.40678,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 25,
+      "id": "diplo",
+      "src": "assets/src_sprites/ui_icon_diplo.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        400,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.423729,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 26,
+      "id": "orbital",
+      "src": "assets/src_sprites/ui_icon_orbital.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        416,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.440678,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 27,
+      "id": "meteor",
+      "src": "assets/src_sprites/ui_icon_meteor.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        432,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.457627,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 28,
+      "id": "vortex",
+      "src": "assets/src_sprites/ui_icon_vortex.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        448,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.474576,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 29,
+      "id": "ai_glitch",
+      "src": "assets/src_sprites/ui_icon_ai_glitch.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        464,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.491525,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 30,
+      "id": "xeno_virus",
+      "src": "assets/src_sprites/ui_icon_xeno_virus.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        480,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.508475,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 31,
+      "id": "bio_seeder",
+      "src": "assets/src_sprites/ui_icon_bio_seeder.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        496,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.525424,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 32,
+      "id": "colony",
+      "src": "assets/src_sprites/ui_icon_colony.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        512,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.542373,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 33,
+      "id": "bless",
+      "src": "assets/src_sprites/ui_icon_bless.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        528,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.559322,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 34,
+      "id": "inspect",
+      "src": "assets/src_sprites/ui_icon_inspect.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        544,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.576271,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 35,
+      "id": "human",
+      "src": "assets/src_sprites/ui_icon_human.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        560,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.59322,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 36,
+      "id": "robot",
+      "src": "assets/src_sprites/ui_icon_robot.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        576,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.610169,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 37,
+      "id": "spore",
+      "src": "assets/src_sprites/ui_icon_spore.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        592,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.627119,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 38,
+      "id": "terraform",
+      "src": "assets/src_sprites/ui_icon_terraform.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        608,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.644068,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 39,
+      "id": "canal",
+      "src": "assets/src_sprites/ui_icon_canal.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        624,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.661017,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 40,
+      "id": "crystal",
+      "src": "assets/src_sprites/ui_icon_crystal.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        640,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.677966,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 41,
+      "id": "lava",
+      "src": "assets/src_sprites/ui_icon_lava.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        656,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.694915,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 42,
+      "id": "lens_kingdoms",
+      "src": "assets/src_sprites/ui_icon_lens_kingdoms.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        672,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.711864,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 43,
+      "id": "lens_cities",
+      "src": "assets/src_sprites/ui_icon_lens_cities.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        688,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.728814,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 44,
+      "id": "lens_wars",
+      "src": "assets/src_sprites/ui_icon_lens_wars.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        704,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.745763,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 45,
+      "id": "lens_armies",
+      "src": "assets/src_sprites/ui_icon_lens_armies.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        720,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.762712,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 46,
+      "id": "lens_cultures",
+      "src": "assets/src_sprites/ui_icon_lens_cultures.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        736,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.779661,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 47,
+      "id": "lens_biomes",
+      "src": "assets/src_sprites/ui_icon_lens_biomes.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        752,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.79661,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 48,
+      "id": "lens_tech",
+      "src": "assets/src_sprites/ui_icon_lens_tech.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        768,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.813559,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 49,
+      "id": "win_unit",
+      "src": "assets/src_sprites/ui_icon_win_unit.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        784,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.830508,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 50,
+      "id": "win_city",
+      "src": "assets/src_sprites/ui_icon_win_city.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        800,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.847458,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 51,
+      "id": "win_wars",
+      "src": "assets/src_sprites/ui_icon_win_wars.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        816,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.864407,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 52,
+      "id": "win_log",
+      "src": "assets/src_sprites/ui_icon_win_log.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        832,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.881356,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 53,
+      "id": "win_graphs",
+      "src": "assets/src_sprites/ui_icon_win_graphs.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        848,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.898305,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 54,
+      "id": "win_codex",
+      "src": "assets/src_sprites/ui_icon_win_codex.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        864,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.915254,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 55,
+      "id": "wall",
+      "src": "assets/src_sprites/ui_icon_wall.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        880,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.932203,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 56,
+      "id": "drain",
+      "src": "assets/src_sprites/ui_icon_drain.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        896,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.949153,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 57,
+      "id": "laws",
+      "src": "assets/src_sprites/ui_icon_laws.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        912,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.966102,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    },
+    {
+      "col": 58,
+      "id": "regen",
+      "src": "assets/src_sprites/ui_icon_regen.png",
+      "native_size": [
+        16,
+        16
+      ],
+      "tier": 0,
+      "cell_px": [
+        928,
+        0,
+        16,
+        16
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.983051,
+        0.0,
+        0.016949,
+        1.0
+      ]
+    }
+  ]
+}

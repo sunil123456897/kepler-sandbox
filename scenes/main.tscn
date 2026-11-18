@@ -15,8 +15,6 @@ script = ExtResource("1_main")
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_hdr")
 
-[node name="CanvasModulate" type="CanvasModulate" parent="."]
-
 [node name="WorldTerrain" type="Node2D" parent="."]
 z_index = 0
 script = ExtResource("2_world")
@@ -37,10 +35,11 @@ script = ExtResource("6_combat")
 z_index = 4
 script = ExtResource("4_fx")
 
-[node name="WorldOverlay" type="Node2D" parent="."]
+[node name="WorldBorderMask" type="Node2D" parent="."]
 z_index = 5
+z_as_relative = false
 
-[node name="BrushReticle" type="Node2D" parent="."]
+[node name="WorldOverlay" type="Node2D" parent="."]
 z_index = 6
 
 [node name="Camera2D" type="Camera2D" parent="."]
@@ -63,23 +62,23 @@ mouse_filter = 2
 [node name="TopBar" type="PanelContainer" parent="HUD"]
 offset_left = 12.0
 offset_top = 10.0
-offset_right = 960.0
-offset_bottom = 42.0
+offset_right = 540.0
+offset_bottom = 38.0
 
 [node name="TopRow" type="HBoxContainer" parent="HUD/TopBar"]
 layout_mode = 2
-theme_override_constants/separation = 2
+theme_override_constants/separation = 3
 alignment = 1
 
 [node name="PlanetLabel" type="Label" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
+tooltip_text = "Планета Kepler-1"
 text = "KEPLER-1"
 
 [node name="Sep1" type="VSeparator" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 
 [node name="ColonistsLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(56, 0)
 layout_mode = 2
 text = "Юниты: 0"
 
@@ -87,7 +86,6 @@ text = "Юниты: 0"
 layout_mode = 2
 
 [node name="CitiesLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 text = "Города: 0"
 
@@ -95,72 +93,32 @@ text = "Города: 0"
 layout_mode = 2
 
 [node name="TechLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(44, 0)
 layout_mode = 2
-text = "Тех: 0/4"
+text = "Тех: 0/5"
 
 [node name="SepWars" type="VSeparator" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 
 [node name="WarsLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(64, 0)
 tooltip_text = "Активные войны и мятежи"
 layout_mode = 2
 text = "Войн: 0 · М:0"
 
-[node name="Sep2" type="VSeparator" parent="HUD/TopBar/TopRow"]
-layout_mode = 2
-
-[node name="FloraLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(50, 0)
-layout_mode = 2
-text = "Флора: 0"
-
-[node name="Sep3" type="VSeparator" parent="HUD/TopBar/TopRow"]
-layout_mode = 2
-
-[node name="TempLabel" type="Label" parent="HUD/TopBar/TopRow"]
-custom_minimum_size = Vector2(68, 0)
-layout_mode = 2
-text = "Темп: +18.0°C"
-
 [node name="SepLight" type="VSeparator" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 
-[node name="LightRow" type="HBoxContainer" parent="HUD/TopBar/TopRow"]
-layout_mode = 2
-theme_override_constants/separation = 3
-
-[node name="BtnLightDay" type="Button" parent="HUD/TopBar/TopRow/LightRow"]
+[node name="BtnLightMode" type="Button" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 focus_mode = 0
-toggle_mode = true
+tooltip_text = "Освещение [L]: День / Закат / Ночь / Цикл"
 text = "День"
-
-[node name="BtnLightDusk" type="Button" parent="HUD/TopBar/TopRow/LightRow"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-text = "Закат"
-
-[node name="BtnLightNight" type="Button" parent="HUD/TopBar/TopRow/LightRow"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-text = "Ночь"
-
-[node name="BtnLightCycle" type="Button" parent="HUD/TopBar/TopRow/LightRow"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-text = "Цикл"
 
 [node name="Sep4" type="VSeparator" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
 
 [node name="SpeedRow" type="HBoxContainer" parent="HUD/TopBar/TopRow"]
 layout_mode = 2
-theme_override_constants/separation = 3
+theme_override_constants/separation = 2
 
 [node name="BtnSpeed0" type="Button" parent="HUD/TopBar/TopRow/SpeedRow"]
 layout_mode = 2
@@ -194,9 +152,11 @@ tooltip_text = "Ускорение времени 20x (безопасный ша
 text = "20x"
 
 [node name="SepFps" type="VSeparator" parent="HUD/TopBar/TopRow"]
+visible = false
 layout_mode = 2
 
 [node name="FpsLabel" type="Label" parent="HUD/TopBar/TopRow"]
+visible = false
 custom_minimum_size = Vector2(42, 0)
 layout_mode = 2
 text = "FPS: 60"
@@ -219,6 +179,44 @@ focus_mode = 0
 toggle_mode = true
 tooltip_text = "Законы мира: самооснование, войны, мятежи, эпохи, катастрофы, мутации"
 text = "Законы"
+
+[node name="SepPins" type="VSeparator" parent="HUD/TopBar/TopRow"]
+visible = false
+layout_mode = 2
+
+[node name="PinRow" type="HBoxContainer" parent="HUD/TopBar/TopRow"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 3
+alignment = 1
+
+[node name="BtnPin0" type="Button" parent="HUD/TopBar/TopRow/PinRow"]
+visible = false
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+
+[node name="BtnPin1" type="Button" parent="HUD/TopBar/TopRow/PinRow"]
+visible = false
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+
+[node name="BtnPin2" type="Button" parent="HUD/TopBar/TopRow/PinRow"]
+visible = false
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+
+[node name="BtnPin3" type="Button" parent="HUD/TopBar/TopRow/PinRow"]
+visible = false
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
 
 [node name="InspectorPanel" type="PanelContainer" parent="HUD"]
 anchors_preset = 1
@@ -249,6 +247,23 @@ layout_mode = 2
 text = ""
 autowrap_mode = 3
 
+[node name="BarTrack" type="ColorRect" parent="HUD/InspectorPanel/InspectorBox"]
+visible = false
+custom_minimum_size = Vector2(244, 4)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.08, 0.13, 0.2, 0.88)
+
+[node name="BarFill" type="ColorRect" parent="HUD/InspectorPanel/InspectorBox/BarTrack"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.28, 0.91, 0.62, 1)
+
 [node name="EntityExtraLabel" type="Label" parent="HUD/InspectorPanel/InspectorBox"]
 visible = false
 custom_minimum_size = Vector2(244, 0)
@@ -268,7 +283,7 @@ visible = false
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Прямое управление: WASD движение, Пробел/ЛКМ импульс [P] · Esc выход"
+tooltip_text = "Аватар: WASD движение · ЛКМ выстрел · E жест/реликт [P] · Esc выход"
 text = "Взять управление [P]"
 
 [node name="LocLabel" type="Label" parent="HUD/InspectorPanel/InspectorBox"]
@@ -285,274 +300,281 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -480.0
-offset_top = -46.0
-offset_right = 480.0
+offset_left = -220.0
+offset_top = -62.0
+offset_right = 220.0
 offset_bottom = -10.0
 grow_horizontal = 2
 grow_vertical = 0
 
-[node name="DockRow" type="HBoxContainer" parent="HUD/BottomDock"]
+[node name="DockCols" type="VBoxContainer" parent="HUD/BottomDock"]
 layout_mode = 2
 theme_override_constants/separation = 3
 alignment = 1
 
-[node name="TabsRow" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
+[node name="RowTop" type="HBoxContainer" parent="HUD/BottomDock/DockCols"]
+layout_mode = 2
+theme_override_constants/separation = 3
+alignment = 1
+
+[node name="TabsRow" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowTop"]
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="BtnTabEarth" type="Button" parent="HUD/BottomDock/DockRow/TabsRow"]
+[node name="BtnTabEarth" type="Button" parent="HUD/BottomDock/DockCols/RowTop/TabsRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Силы Земли и рельефа [Q/E]"
 text = "Земля"
 
-[node name="BtnTabWeather" type="Button" parent="HUD/BottomDock/DockRow/TabsRow"]
+[node name="BtnTabWeather" type="Button" parent="HUD/BottomDock/DockCols/RowTop/TabsRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Стихийные штормы и климат [Q/E]"
 text = "Погода"
 
-[node name="BtnTabWar" type="Button" parent="HUD/BottomDock/DockRow/TabsRow"]
+[node name="BtnTabWar" type="Button" parent="HUD/BottomDock/DockCols/RowTop/TabsRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Война, дипломатия и орбитальные удары [Q/E]"
 text = "Война"
 
-[node name="BtnTabEvo" type="Button" parent="HUD/BottomDock/DockRow/TabsRow"]
+[node name="BtnTabEvo" type="Button" parent="HUD/BottomDock/DockCols/RowTop/TabsRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Эволюция, ИИ-сбой и ксено-биология [Q/E]"
 text = "Эволюция"
 
-[node name="SepTabPowers" type="VSeparator" parent="HUD/BottomDock/DockRow"]
+[node name="SepFac" type="VSeparator" parent="HUD/BottomDock/DockCols/RowTop"]
 layout_mode = 2
 
-[node name="GroupEarth" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
-custom_minimum_size = Vector2(236, 0)
-layout_mode = 2
-theme_override_constants/separation = 2
-alignment = 1
-
-[node name="BtnTerraform" type="Button" parent="HUD/BottomDock/DockRow/GroupEarth"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "ЛКМ: Поднять сушу и жизнь · Shift+ЛКМ: Копать канал [1 / Alt+1]"
-text = "Поднять"
-
-[node name="BtnCanal" type="Button" parent="HUD/BottomDock/DockRow/GroupEarth"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Прорыть канал до воды [Alt+2]"
-text = "Канал"
-
-[node name="BtnCrystal" type="Button" parent="HUD/BottomDock/DockRow/GroupEarth"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Вырастить энергокристаллы [2 / Alt+3]"
-text = "Кристалл"
-
-[node name="BtnLava" type="Button" parent="HUD/BottomDock/DockRow/GroupEarth"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Извержение лавы и вулкана [3 / Alt+4]"
-text = "Лава"
-
-[node name="GroupWeather" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
-visible = false
-custom_minimum_size = Vector2(236, 0)
-layout_mode = 2
-theme_override_constants/separation = 2
-alignment = 1
-
-[node name="BtnRain" type="Button" parent="HUD/BottomDock/DockRow/GroupWeather"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Дождевой фронт: тушит огонь, питает оазисы [Alt+1]"
-text = "Дождь"
-
-[node name="BtnFirestorm" type="Button" parent="HUD/BottomDock/DockRow/GroupWeather"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Огненная буря: поджигает леса и почву [Alt+2]"
-text = "Огн. буря"
-
-[node name="BtnIonStorm" type="Button" parent="HUD/BottomDock/DockRow/GroupWeather"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Ионный шторм: радиация, кристаллы и ЭМИ по роботам [Alt+3]"
-text = "Ион-шторм"
-
-[node name="GroupWar" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
-visible = false
-custom_minimum_size = Vector2(236, 0)
-layout_mode = 2
-theme_override_constants/separation = 2
-alignment = 1
-
-[node name="BtnDiplo" type="Button" parent="HUD/BottomDock/DockRow/GroupWar"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "ЛКМ: Удар по лояльности (-35%) / война · Shift+ЛКМ: Мятеж [0 / Alt+1]"
-text = "Дипломат"
-
-[node name="BtnOrbitalStrike" type="Button" parent="HUD/BottomDock/DockRow/GroupWar"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Орбитальный плазменный удар (проверяет щиты колоний) [9 / Alt+2]"
-text = "Орбита"
-
-[node name="BtnMeteor" type="Button" parent="HUD/BottomDock/DockRow/GroupWar"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Метеоритный удар с кратером [4 / Alt+3]"
-text = "Метеор"
-
-[node name="BtnVortex" type="Button" parent="HUD/BottomDock/DockRow/GroupWar"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Стихийный вихрь (алхимия над водой/лавой/кристаллами) [5 / Alt+4]"
-text = "Вихрь"
-
-[node name="GroupEvo" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
-visible = false
-custom_minimum_size = Vector2(236, 0)
-layout_mode = 2
-theme_override_constants/separation = 2
-alignment = 1
-
-[node name="BtnAiGlitch" type="Button" parent="HUD/BottomDock/DockRow/GroupEvo"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "ИИ-сбой: ЭМИ по городам и роботам, удар по лояльности [Alt+1]"
-text = "ИИ-Сбой"
-
-[node name="BtnXenoVirus" type="Button" parent="HUD/BottomDock/DockRow/GroupEvo"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Ксено-вирус: заражает юнитов в радиусе кисти [Alt+2]"
-text = "Ксено-вирус"
-
-[node name="BtnBioSeeder" type="Button" parent="HUD/BottomDock/DockRow/GroupEvo"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "Био-посев: гасит пламя, озеленяет почву и растит ксено-споры [Alt+3]"
-text = "Био-посев"
-
-[node name="SepColony" type="VSeparator" parent="HUD/BottomDock/DockRow"]
-layout_mode = 2
-
-[node name="BtnColony" type="Button" parent="HUD/BottomDock/DockRow"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-tooltip_text = "ЛКМ: Высадить поселенцев (4->1, 8->4, 16+->8) · Shift+ЛКМ: Мгновенная колония [6]"
-text = "Колония"
-
-[node name="FactionRow" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
+[node name="FactionRow" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowTop"]
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="BtnFactionHuman" type="Button" parent="HUD/BottomDock/DockRow/FactionRow"]
+[node name="BtnFactionHuman" type="Button" parent="HUD/BottomDock/DockCols/RowTop/FactionRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Фракция: Люди (геокупола, сбалансированный рост) [F]"
+tooltip_text = "Высадить людей: ЛКМ / удержание на суше (повторный клик или Esc — отключить) [F]"
 text = "Люди"
 
-[node name="BtnFactionRobot" type="Button" parent="HUD/BottomDock/DockRow/FactionRow"]
+[node name="BtnFactionRobot" type="Button" parent="HUD/BottomDock/DockCols/RowTop/FactionRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Фракция: Роботы (радиация -> энергия, не голодают) [F]"
+tooltip_text = "Высадить роботов: ЛКМ / удержание на суше (радиация -> энергия) [F]"
 text = "Роботы"
 
-[node name="BtnFactionSpore" type="Button" parent="HUD/BottomDock/DockRow/FactionRow"]
+[node name="BtnFactionSpore" type="Button" parent="HUD/BottomDock/DockCols/RowTop/FactionRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Фракция: Ксено-Спора (быстрая биоэкспансия, уязвима к огню) [F]"
+tooltip_text = "Высадить ксено-споры: ЛКМ / удержание на суше (био-экспансия) [F]"
 text = "Споры"
 
-[node name="SepSize" type="VSeparator" parent="HUD/BottomDock/DockRow"]
+[node name="SepSize" type="VSeparator" parent="HUD/BottomDock/DockCols/RowTop"]
 layout_mode = 2
 
-[node name="SizeRow" type="HBoxContainer" parent="HUD/BottomDock/DockRow"]
+[node name="SizeRow" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowTop"]
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="BtnSize4" type="Button" parent="HUD/BottomDock/DockRow/SizeRow"]
+[node name="BtnSize4" type="Button" parent="HUD/BottomDock/DockCols/RowTop/SizeRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Радиус кисти: 4 px ["
 text = "4"
 
-[node name="BtnSize8" type="Button" parent="HUD/BottomDock/DockRow/SizeRow"]
+[node name="BtnSize8" type="Button" parent="HUD/BottomDock/DockCols/RowTop/SizeRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Радиус кисти: 8 px"
 text = "8"
 
-[node name="BtnSize16" type="Button" parent="HUD/BottomDock/DockRow/SizeRow"]
+[node name="BtnSize16" type="Button" parent="HUD/BottomDock/DockCols/RowTop/SizeRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Радиус кисти: 16 px"
 text = "16"
 
-[node name="BtnSize28" type="Button" parent="HUD/BottomDock/DockRow/SizeRow"]
+[node name="BtnSize28" type="Button" parent="HUD/BottomDock/DockCols/RowTop/SizeRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Радиус кисти: 28 px"
 text = "28"
 
-[node name="BtnSize48" type="Button" parent="HUD/BottomDock/DockRow/SizeRow"]
+[node name="BtnSize48" type="Button" parent="HUD/BottomDock/DockCols/RowTop/SizeRow"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "Радиус кисти: 48 px ]"
 text = "48"
 
-[node name="SepTools" type="VSeparator" parent="HUD/BottomDock/DockRow"]
+[node name="RowBottom" type="HBoxContainer" parent="HUD/BottomDock/DockCols"]
+layout_mode = 2
+theme_override_constants/separation = 3
+alignment = 1
+
+[node name="GroupEarth" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+alignment = 1
+
+[node name="BtnTerraform" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "ЛКМ: Поднять сушу и деревья · Shift+ЛКМ: Канал (повторный клик — выкл.) [1]"
+text = "Поднять"
+
+[node name="BtnCanal" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Прорыть канал до воды [Alt+2]"
+text = "Канал"
+
+[node name="BtnCrystal" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Вырастить энергокристаллы [2 / Alt+3]"
+text = "Кристалл"
+
+[node name="BtnLava" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Извержение лавы и вулкана [3 / Alt+4]"
+text = "Лава"
+
+[node name="GroupWeather" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
+visible = false
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+alignment = 1
+
+[node name="BtnRain" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWeather"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Дождевой фронт: тушит огонь, питает оазисы [Alt+1]"
+text = "Дождь"
+
+[node name="BtnFirestorm" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWeather"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Огненная буря: поджигает леса и почву [Alt+2]"
+text = "Огн. буря"
+
+[node name="BtnIonStorm" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWeather"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Ионный шторм: радиация, кристаллы и ЭМИ по роботам [Alt+3]"
+text = "Ион-шторм"
+
+[node name="GroupWar" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
+visible = false
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+alignment = 1
+
+[node name="BtnDiplo" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "ЛКМ: Удар по лояльности (-35%) / война · Shift+ЛКМ: Мятеж [0 / Alt+1]"
+text = "Дипломат"
+
+[node name="BtnOrbitalStrike" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Орбитальный плазменный удар (проверяет щиты колоний) [9 / Alt+2]"
+text = "Орбита"
+
+[node name="BtnMeteor" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Метеоритный удар с кратером [4 / Alt+3]"
+text = "Метеор"
+
+[node name="BtnVortex" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "ЛКМ: Вихрь огня/пара/радиации · Shift+ЛКМ: Морозный вихрь [5 / Alt+4]"
+text = "Вихрь"
+
+[node name="GroupEvo" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
+visible = false
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+alignment = 1
+
+[node name="BtnAiGlitch" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEvo"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "ИИ-сбой: ЭМИ по городам и роботам, удар по лояльности [Alt+1]"
+text = "ИИ-Сбой"
+
+[node name="BtnXenoVirus" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEvo"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Ксено-вирус: заражает юнитов в радиусе кисти [Alt+2]"
+text = "Ксено-вирус"
+
+[node name="BtnBioSeeder" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEvo"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Био-посев: гасит пламя, озеленяет почву и растит ксено-споры [Alt+3]"
+text = "Био-посев"
+
+[node name="SepTools" type="VSeparator" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 
-[node name="BtnBless" type="Button" parent="HUD/BottomDock/DockRow"]
+[node name="BtnColony" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Основать готовую колонию выбранной фракции (лагерь + палатка) [6]"
+text = "Колония"
+
+[node name="BtnBless" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 tooltip_text = "ЛКМ: Благословить / исцелить · Shift+ЛКМ: Мутировать [7]"
 text = "Благо"
 
-[node name="BtnInspect" type="Button" parent="HUD/BottomDock/DockRow"]
+[node name="BtnInspect" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Клик по городу или юниту: закрепить инспектор и следить камерой [8 / Esc]"
+tooltip_text = "Клик по городу или юниту: инспектор и закладка [B] [8 / Esc]"
 text = "Инсп"
 
-[node name="BtnRegen" type="Button" parent="HUD/BottomDock/DockRow"]
+[node name="BtnRegen" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 focus_mode = 0
-tooltip_text = "Сгенерировать новую планету"
+tooltip_text = "Сгенерировать новую планету (2-кликовое подтверждение)"
 text = "Новый мир"

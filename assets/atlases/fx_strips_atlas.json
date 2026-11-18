@@ -2,19 +2,20 @@
   "atlas_path": "res://assets/atlases/fx_strips_atlas.png",
   "mask_path": "res://assets/atlases/fx_strips_atlas_mask.png",
   "atlas_size": [
-    128,
+    256,
     8
   ],
   "cell_size": [
     8,
     8
   ],
-  "atlas_cols": 16,
+  "atlas_cols": 32,
+  "cols": 32,
   "shader_mode": 3,
   "shader_uniforms": {
     "sprite_mode": 3,
     "motion_mode": 0,
-    "atlas_cols": 16,
+    "atlas_cols": 32,
     "sprite_size": [
       8,
       8
@@ -38,7 +39,23 @@
     "PLOT_WAR": 12,
     "PLOT_PACT": 13,
     "PLOT_REBEL": 14,
-    "CROWN_BANNER": 15
+    "CROWN_BANNER": 15,
+    "RELIC": 16,
+    "FEUD": 17,
+    "TALK_FOOD": 18,
+    "TALK_WAR": 19,
+    "TALK_TECH": 20,
+    "TALK_FEAR": 21,
+    "SLEEP_ZZZ": 22,
+    "PLOT_PEACE": 23,
+    "PLOT_ALLIANCE": 24,
+    "PLOT_SCHISM": 25,
+    "PLOT_CODEX": 26,
+    "KING_CROWN": 27,
+    "LEADER_STAR": 28,
+    "SCAR_DIVINITY": 29,
+    "TROPHY_GEAR": 30,
+    "DROP_CAPSULE": 31
   },
   "cells": [
     {
@@ -63,7 +80,7 @@
       "uv_rect": [
         0.0,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -87,9 +104,9 @@
         0
       ],
       "uv_rect": [
-        0.0625,
+        0.03125,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -113,9 +130,9 @@
         0
       ],
       "uv_rect": [
-        0.125,
-        0.0,
         0.0625,
+        0.0,
+        0.03125,
         1.0
       ]
     },
@@ -139,9 +156,9 @@
         0
       ],
       "uv_rect": [
-        0.1875,
+        0.09375,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -165,9 +182,9 @@
         0
       ],
       "uv_rect": [
-        0.25,
+        0.125,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -191,9 +208,9 @@
         0
       ],
       "uv_rect": [
-        0.3125,
+        0.15625,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -217,9 +234,9 @@
         0
       ],
       "uv_rect": [
-        0.375,
+        0.1875,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -243,9 +260,9 @@
         0
       ],
       "uv_rect": [
-        0.4375,
+        0.21875,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -269,9 +286,9 @@
         0
       ],
       "uv_rect": [
-        0.5,
+        0.25,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -295,9 +312,9 @@
         0
       ],
       "uv_rect": [
-        0.5625,
+        0.28125,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -321,9 +338,9 @@
         0
       ],
       "uv_rect": [
-        0.625,
+        0.3125,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -347,9 +364,9 @@
         0
       ],
       "uv_rect": [
-        0.6875,
+        0.34375,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -373,9 +390,9 @@
         0
       ],
       "uv_rect": [
-        0.75,
+        0.375,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -399,9 +416,9 @@
         0
       ],
       "uv_rect": [
-        0.8125,
+        0.40625,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -425,9 +442,9 @@
         0
       ],
       "uv_rect": [
-        0.875,
+        0.4375,
         0.0,
-        0.0625,
+        0.03125,
         1.0
       ]
     },
@@ -451,9 +468,425 @@
         0
       ],
       "uv_rect": [
+        0.46875,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 16,
+      "id": "relic",
+      "src": "assets/src_sprites/fx_strip_relic.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        128,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.5,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 17,
+      "id": "feud",
+      "src": "assets/src_sprites/fx_strip_feud.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        136,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.53125,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 18,
+      "id": "talk_food",
+      "src": "assets/src_sprites/fx_strip_talk_food.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        144,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.5625,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 19,
+      "id": "talk_war",
+      "src": "assets/src_sprites/fx_strip_talk_war.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        152,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.59375,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 20,
+      "id": "talk_tech",
+      "src": "assets/src_sprites/fx_strip_talk_tech.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        160,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.625,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 21,
+      "id": "talk_fear",
+      "src": "assets/src_sprites/fx_strip_talk_fear.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        168,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.65625,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 22,
+      "id": "sleep_zzz",
+      "src": "assets/src_sprites/fx_strip_sleep_zzz.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        176,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.6875,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 23,
+      "id": "plot_peace",
+      "src": "assets/src_sprites/fx_strip_plot_peace.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        184,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.71875,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 24,
+      "id": "plot_alliance",
+      "src": "assets/src_sprites/fx_strip_plot_alliance.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        192,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.75,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 25,
+      "id": "plot_schism",
+      "src": "assets/src_sprites/fx_strip_plot_schism.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        200,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.78125,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 26,
+      "id": "plot_codex",
+      "src": "assets/src_sprites/fx_strip_plot_codex.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        208,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.8125,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 27,
+      "id": "king_crown",
+      "src": "assets/src_sprites/fx_strip_king_crown.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        216,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.84375,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 28,
+      "id": "leader_star",
+      "src": "assets/src_sprites/fx_strip_leader_star.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        224,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.875,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 29,
+      "id": "scar_divinity",
+      "src": "assets/src_sprites/fx_strip_scar_divinity.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        232,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.90625,
+        0.0,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 30,
+      "id": "trophy_gear",
+      "src": "assets/src_sprites/fx_strip_trophy_gear.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        240,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
         0.9375,
         0.0,
-        0.0625,
+        0.03125,
+        1.0
+      ]
+    },
+    {
+      "col": 31,
+      "id": "drop_capsule",
+      "src": "assets/src_sprites/fx_strip_drop_capsule.png",
+      "native_size": [
+        8,
+        8
+      ],
+      "tier": 0,
+      "cell_px": [
+        248,
+        0,
+        8,
+        8
+      ],
+      "sprite_offset_in_cell": [
+        0,
+        0
+      ],
+      "uv_rect": [
+        0.96875,
+        0.0,
+        0.03125,
         1.0
       ]
     }

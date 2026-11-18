@@ -44,20 +44,44 @@ const FOOT_TRAFFIC_ROAD_TH: int = 3
 const BORDER_CHUNK_PX: int = 32
 const BORDER_CHUNK_ZONES: int = 4
 
+const LENS_KINGDOMS: int = 0
+const LENS_CITIES: int = 1
+const LENS_WARS_ALLIANCES: int = 2
+const LENS_ARMIES_FLEET: int = 3
+const LENS_CULTURES: int = 4
+const LENS_BIOMES_CLIMATE: int = 5
+const LENS_TECH_ENERGY: int = 6
+
 var _chunk_w: int = 0
 var _chunk_h: int = 0
 var _dirty_chunk_mask: PackedByteArray
 var _dirty_chunks: PackedInt32Array
 var _dirty_chunk_count: int = 0
 var _all_borders_dirty: bool = false
+var _map_lens: int = 0
 var _city_rgb_lut: PackedByteArray
 var _city_div_lut: PackedByteArray
+var _city_group_lut: PackedInt32Array
 var _w_tiers_cache: PackedByteArray
 var _w_biomes_cache: PackedByteArray
 var _w_temp_cache: PackedFloat32Array
 var _w_rad_cache: PackedFloat32Array
 var _w_cache_owner: Node2D = null
+var _w_has_cosmic_off: bool = false
 var _patrol_scratch: Array[Vector2i] = []
+
+
+func set_map_lens(civ: Node2D, lens_id: int) -> void:
+	var clamped: int = clampi(lens_id, LENS_KINGDOMS, LENS_TECH_ENERGY)
+	if _map_lens == clamped:
+		return
+	_map_lens = clamped
+	if civ != null:
+		mark_all_borders_dirty(civ)
+
+
+func get_map_lens() -> int:
+	return _map_lens
 
 
 func _ensure_chunk_grid(civ: Node2D) -> void:
@@ -65,6 +89,8 @@ func _ensure_chunk_grid(civ: Node2D) -> void:
 	if _city_rgb_lut.size() != max_c * 3:
 		_city_rgb_lut.resize(max_c * 3)
 		_city_div_lut.resize(max_c * 3)
+	if _city_group_lut.size() != max_c:
+		_city_group_lut.resize(max_c)
 	var cw: int = maxi(1, ceili(float(civ._map_w) / float(BORDER_CHUNK_PX)))
 	var ch: int = maxi(1, ceili(float(civ._map_h) / float(BORDER_CHUNK_PX)))
 	if cw == _chunk_w and ch == _chunk_h and _dirty_chunk_mask.size() == cw * ch:
@@ -84,6 +110,7 @@ func reset_border_chunks() -> void:
 	_dirty_chunk_count = 0
 	_all_borders_dirty = false
 	_w_cache_owner = null
+	_w_has_cosmic_off = false
 	_w_tiers_cache = PackedByteArray()
 	_w_biomes_cache = PackedByteArray()
 	_w_temp_cache = PackedFloat32Array()
@@ -91,9 +118,16 @@ func reset_border_chunks() -> void:
 	_patrol_scratch.clear()
 
 
+func get_cosmic_temp_offset(civ: Node2D) -> float:
+	if civ._world != null and _w_has_cosmic_off:
+		return float(civ._world._cosmic_temp_offset)
+	return 0.0
+
+
 func _refresh_world_byte_caches(civ: Node2D) -> void:
 	if civ._world == null:
 		_w_cache_owner = null
+		_w_has_cosmic_off = false
 		_w_tiers_cache = PackedByteArray()
 		_w_biomes_cache = PackedByteArray()
 		_w_temp_cache = PackedFloat32Array()
@@ -103,6 +137,7 @@ func _refresh_world_byte_caches(civ: Node2D) -> void:
 	if _w_cache_owner == civ._world and _w_tiers_cache.size() == map_sz and _w_biomes_cache.size() == map_sz and _w_temp_cache.size() == map_sz:
 		return
 	_w_cache_owner = civ._world
+	_w_has_cosmic_off = civ._world.get("_cosmic_temp_offset") != null
 	var wt: Variant = civ._world.get("_tiers")
 	var wb: Variant = civ._world.get("_biomes")
 	var wtmp: Variant = civ._world.get("_temp")
@@ -279,15 +314,15 @@ func is_pixel_walkable(civ: Node2D, pt: Vector2i, faction_id: int = 0) -> bool:
 		return false
 	if civ._world == null:
 		return true
-	_refresh_world_byte_caches(civ)
+	if _w_cache_owner != civ._world:
+		_refresh_world_byte_caches(civ)
 	var max_t: float = 95.0 if faction_id == FACTION_ROBOT else 65.0
 	if not _w_tiers_cache.is_empty() and not _w_biomes_cache.is_empty() and not _w_temp_cache.is_empty():
 		var idx: int = py * civ._map_w + px
 		var t: int = int(_w_tiers_cache[idx])
 		if t < TIER_SAND or t > TIER_MOUNTAINS or int(_w_biomes_cache[idx]) == BIOME_LAVA:
 			return false
-		var c_off: float = float(civ._world.get("_cosmic_temp_offset"))
-		return (_w_temp_cache[idx] + c_off) <= max_t
+		return (_w_temp_cache[idx] + get_cosmic_temp_offset(civ)) <= max_t
 	if not civ._world.is_walkable(px, py):
 		return false
 	if int(civ._world.get_biome(px, py)) == BIOME_LAVA:
@@ -321,7 +356,8 @@ func can_settle_near(civ: Node2D, world_pos: Vector2, min_spacing: float = 64.0)
 func is_zone_walkable(civ: Node2D, zpt: Vector2i, faction_id: int = 0) -> bool:
 	if civ._world == null:
 		return true
-	_refresh_world_byte_caches(civ)
+	if _w_cache_owner != civ._world:
+		_refresh_world_byte_caches(civ)
 	var px0: int = maxi(4, zpt.x * civ._zone_px)
 	var py0: int = maxi(4, zpt.y * civ._zone_px)
 	var px1: int = mini(civ._map_w - 4, zpt.x * civ._zone_px + civ._zone_px)
@@ -331,7 +367,7 @@ func is_zone_walkable(civ: Node2D, zpt: Vector2i, faction_id: int = 0) -> bool:
 		var w_tiers: PackedByteArray = _w_tiers_cache
 		var w_biomes: PackedByteArray = _w_biomes_cache
 		var w_temp: PackedFloat32Array = _w_temp_cache
-		var c_off: float = float(civ._world.get("_cosmic_temp_offset"))
+		var c_off: float = get_cosmic_temp_offset(civ)
 		var max_t: float = 95.0 if faction_id == FACTION_ROBOT else 65.0
 		var mw: int = civ._map_w
 		for py in range(py0, py1, 2):
@@ -363,16 +399,42 @@ func is_zone_claimable(civ: Node2D, zpt: Vector2i, faction_id: int = 0) -> bool:
 
 
 func zone_walkable_center(civ: Node2D, zpt: Vector2i, faction_id: int = 0) -> Vector2:
-	var px0: int = zpt.x * civ._zone_px
-	var py0: int = zpt.y * civ._zone_px
-	var cx: int = clampi(px0 + 4, 4, civ._map_w - 5)
-	var cy: int = clampi(py0 + 4, 4, civ._map_h - 5)
+	var zpx: int = civ._zone_px
+	var mw: int = civ._map_w
+	var mh: int = civ._map_h
+	var px0: int = zpt.x * zpx
+	var py0: int = zpt.y * zpx
+	var cx: int = clampi(px0 + 4, 4, mw - 5)
+	var cy: int = clampi(py0 + 4, 4, mh - 5)
+	if civ._world != null:
+		if _w_cache_owner != civ._world:
+			_refresh_world_byte_caches(civ)
+		if not _w_tiers_cache.is_empty() and not _w_biomes_cache.is_empty() and not _w_temp_cache.is_empty():
+			var w_tiers: PackedByteArray = _w_tiers_cache
+			var w_biomes: PackedByteArray = _w_biomes_cache
+			var w_temp: PackedFloat32Array = _w_temp_cache
+			var c_off: float = get_cosmic_temp_offset(civ)
+			var max_t: float = 95.0 if faction_id == FACTION_ROBOT else 65.0
+			var cidx: int = cy * mw + cx
+			var ct: int = int(w_tiers[cidx])
+			if ct >= TIER_SAND and ct <= TIER_MOUNTAINS and int(w_biomes[cidx]) != BIOME_LAVA and (w_temp[cidx] + c_off) <= max_t:
+				return Vector2(float(cx) + 0.5, float(cy) + 0.5)
+			for dy in range(1, zpx, 2):
+				var ty: int = clampi(py0 + dy, 4, mh - 5)
+				var row_off: int = ty * mw
+				for dx in range(1, zpx, 2):
+					var tx: int = clampi(px0 + dx, 4, mw - 5)
+					var tidx: int = row_off + tx
+					var tt: int = int(w_tiers[tidx])
+					if tt >= TIER_SAND and tt <= TIER_MOUNTAINS and int(w_biomes[tidx]) != BIOME_LAVA and (w_temp[tidx] + c_off) <= max_t:
+						return Vector2(float(tx) + 0.5, float(ty) + 0.5)
+			return Vector2(-1.0, -1.0)
 	if is_pixel_walkable(civ, Vector2i(cx, cy), faction_id):
 		return Vector2(float(cx) + 0.5, float(cy) + 0.5)
-	for dy in range(1, civ._zone_px, 2):
-		for dx in range(1, civ._zone_px, 2):
-			var tx: int = clampi(px0 + dx, 4, civ._map_w - 5)
-			var ty: int = clampi(py0 + dy, 4, civ._map_h - 5)
+	for dy in range(1, zpx, 2):
+		for dx in range(1, zpx, 2):
+			var tx: int = clampi(px0 + dx, 4, mw - 5)
+			var ty: int = clampi(py0 + dy, 4, mh - 5)
 			if is_pixel_walkable(civ, Vector2i(tx, ty), faction_id):
 				return Vector2(float(tx) + 0.5, float(ty) + 0.5)
 	return Vector2(-1.0, -1.0)
@@ -398,17 +460,28 @@ func find_walkable_near(civ: Node2D, world_pos: Vector2, opts: Vector2i = Vector
 func is_zone_coastal(civ: Node2D, zx: int, zy: int) -> bool:
 	if civ._world == null:
 		return false
+	if _w_cache_owner != civ._world:
+		_refresh_world_byte_caches(civ)
+	var mw: int = civ._map_w
+	var mh: int = civ._map_h
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var zpx: int = civ._zone_px
+	var w_tiers: PackedByteArray = _w_tiers_cache
+	var use_cache: bool = not w_tiers.is_empty()
 	for dy in range(-2, 3):
 		var nzy: int = zy + dy
-		if nzy < 0 or nzy >= civ._zone_h:
+		if nzy < 0 or nzy >= zh:
 			continue
+		var py: int = clampi(nzy * zpx + 4, 0, mh - 1)
+		var row_off: int = py * mw
 		for dx in range(-2, 3):
 			var nzx: int = zx + dx
-			if nzx < 0 or nzx >= civ._zone_w:
+			if nzx < 0 or nzx >= zw:
 				continue
-			var px: int = clampi(nzx * civ._zone_px + 4, 0, civ._map_w - 1)
-			var py: int = clampi(nzy * civ._zone_px + 4, 0, civ._map_h - 1)
-			if int(civ._world.get_tier(px, py)) <= TIER_SHALLOW:
+			var px: int = clampi(nzx * zpx + 4, 0, mw - 1)
+			var t: int = int(w_tiers[row_off + px]) if use_cache else int(civ._world.get_tier(px, py))
+			if t <= TIER_SHALLOW:
 				return true
 	return false
 
@@ -464,6 +537,24 @@ func claim_zone(civ: Node2D, zpt: Vector2i, city_id: int) -> bool:
 	return true
 
 
+func has_cardinal_owner(civ: Node2D, zpt: Vector2i, cid: int) -> bool:
+	var zx: int = zpt.x
+	var zy: int = zpt.y
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var zidx: int = zy * zw + zx
+	if zx > 0 and z_owners[zidx - 1] == cid:
+		return true
+	if zx + 1 < zw and z_owners[zidx + 1] == cid:
+		return true
+	if zy > 0 and z_owners[zidx - zw] == cid:
+		return true
+	if zy + 1 < zh and z_owners[zidx + zw] == cid:
+		return true
+	return false
+
+
 func claim_starter_quad(civ: Node2D, center_pos: Vector2, city_id: int) -> void:
 	var f_id: int = int(civ._city_faction[city_id])
 	var zx: int = clampi(int(floor(center_pos.x / float(civ._zone_px))), 0, civ._zone_w - 1)
@@ -473,17 +564,55 @@ func claim_starter_quad(civ: Node2D, center_pos: Vector2, city_id: int) -> void:
 	var ly: int = int(floor(center_pos.y)) - zy * civ._zone_px
 	var sx: int = 1 if lx >= (civ._zone_px >> 1) else -1
 	var sy: int = 1 if ly >= (civ._zone_px >> 1) else -1
-	var offsets := [Vector2i(sx, 0), Vector2i(0, sy), Vector2i(sx, sy), Vector2i(-sx, 0), Vector2i(0, -sy)]
-	for off in offsets:
+	var cardinals := [Vector2i(sx, 0), Vector2i(0, sy), Vector2i(-sx, 0), Vector2i(0, -sy)]
+	for off in cardinals:
 		if civ._city_zones_count[city_id] >= 4:
 			break
 		var npt := Vector2i(zx + off.x, zy + off.y)
 		if is_zone_claimable(civ, npt, f_id):
 			claim_zone(civ, npt, city_id)
+	if civ._city_zones_count[city_id] < 4:
+		var diag := Vector2i(zx + sx, zy + sy)
+		if is_zone_claimable(civ, diag, f_id) and has_cardinal_owner(civ, diag, city_id):
+			claim_zone(civ, diag, city_id)
+
+
+func _count_expand_neighbors(civ: Node2D, zx: int, zy: int, city_id: int) -> Vector2i:
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var c_act: PackedByteArray = civ._city_active
+	var my_kid: int = kids[city_id]
+	var own_n: int = 0
+	var foreign_n: int = 0
+	var zidx: int = zy * zw + zx
+	var nb0: int = z_owners[zidx - 1] if zx > 0 else -1
+	var nb1: int = z_owners[zidx + 1] if zx + 1 < zw else -1
+	var nb2: int = z_owners[zidx - zw] if zy > 0 else -1
+	var nb3: int = z_owners[zidx + zw] if zy + 1 < zh else -1
+	if nb0 == city_id:
+		own_n += 1
+	elif nb0 >= 0 and c_act[nb0] != 0 and (my_kid < 0 or kids[nb0] != my_kid):
+		foreign_n += 1
+	if nb1 == city_id:
+		own_n += 1
+	elif nb1 >= 0 and c_act[nb1] != 0 and (my_kid < 0 or kids[nb1] != my_kid):
+		foreign_n += 1
+	if nb2 == city_id:
+		own_n += 1
+	elif nb2 >= 0 and c_act[nb2] != 0 and (my_kid < 0 or kids[nb2] != my_kid):
+		foreign_n += 1
+	if nb3 == city_id:
+		own_n += 1
+	elif nb3 >= 0 and c_act[nb3] != 0 and (my_kid < 0 or kids[nb3] != my_kid):
+		foreign_n += 1
+	return Vector2i(own_n, foreign_n)
 
 
 func expand_city_territory(civ: Node2D, city_id: int) -> bool:
-	_refresh_world_byte_caches(civ)
+	if _w_cache_owner != civ._world:
+		_refresh_world_byte_caches(civ)
 	var best_zx: int = -1
 	var best_zy: int = -1
 	var best_score: float = -1e9
@@ -502,6 +631,9 @@ func expand_city_territory(civ: Node2D, city_id: int) -> bool:
 	var z_owners: PackedInt32Array = civ._zone_city_id
 	var z_fert: PackedFloat32Array = civ._zone_fertility
 	var z_ore: PackedInt32Array = civ._zone_ore
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var c_act: PackedByteArray = civ._city_active
+	var my_kid: int = kids[city_id]
 
 	for zy in range(zy0, zy1 + 1):
 		var row_off: int = zy * zw
@@ -509,23 +641,36 @@ func expand_city_territory(civ: Node2D, city_id: int) -> bool:
 			var zidx: int = row_off + zx
 			if z_owners[zidx] != -1:
 				continue
-			var adj: bool = (
-				(zx > 0 and z_owners[zidx - 1] == city_id)
-				or (zx + 1 < zw and z_owners[zidx + 1] == city_id)
-				or (zy > 0 and z_owners[zidx - zw] == city_id)
-				or (zy + 1 < zh and z_owners[zidx + zw] == city_id)
-			)
-			if not adj:
+			var nb0: int = z_owners[zidx - 1] if zx > 0 else -1
+			var nb1: int = z_owners[zidx + 1] if zx + 1 < zw else -1
+			var nb2: int = z_owners[zidx - zw] if zy > 0 else -1
+			var nb3: int = z_owners[zidx + zw] if zy + 1 < zh else -1
+			var own_n: int = int(nb0 == city_id) + int(nb1 == city_id) + int(nb2 == city_id) + int(nb3 == city_id)
+			if own_n <= 0:
 				continue
+			var foreign_n: int = 0
+			if own_n == 1:
+				if nb0 >= 0 and nb0 != city_id and c_act[nb0] != 0 and (my_kid < 0 or kids[nb0] != my_kid):
+					foreign_n += 1
+				if nb1 >= 0 and nb1 != city_id and c_act[nb1] != 0 and (my_kid < 0 or kids[nb1] != my_kid):
+					foreign_n += 1
+				if nb2 >= 0 and nb2 != city_id and c_act[nb2] != 0 and (my_kid < 0 or kids[nb2] != my_kid):
+					foreign_n += 1
+				if nb3 >= 0 and nb3 != city_id and c_act[nb3] != 0 and (my_kid < 0 or kids[nb3] != my_kid):
+					foreign_n += 1
+				if foreign_n >= 3:
+					continue
 			var z_pos := Vector2((float(zx) + 0.5) * zpx, (float(zy) + 0.5) * zpx)
-			var score: float = 50.0 - z_pos.distance_to(center) * 0.45
+			var score: float = 50.0 - z_pos.distance_to(center) * 0.45 + float(own_n) * 22.0
+			if own_n >= 3:
+				score += 60.0
 			if f_id == FACTION_SPORE:
 				score += z_fert[zidx] * 26.0 + float(z_ore[zidx]) * 0.8
 			elif f_id == FACTION_ROBOT:
 				score += float(z_ore[zidx]) * 2.4 + z_fert[zidx] * 6.0
 			else:
 				score += float(z_ore[zidx]) * 1.6 + z_fert[zidx] * 14.0
-			if score <= best_score or not is_zone_claimable(civ, Vector2i(zx, zy), f_id):
+			if score <= best_score or not is_zone_walkable(civ, Vector2i(zx, zy), f_id):
 				continue
 			best_score = score
 			best_zx = zx
@@ -560,17 +705,25 @@ func refresh_city_targets(civ: Node2D, city_id: int) -> void:
 func _find_best_mine_target(civ: Node2D, city_id: int, f_id: int, center: Vector2, czx: int, czy: int) -> Vector2:
 	var best_mine: Vector2 = center
 	var best_score: float = -1e9
-	for zy in range(maxi(0, czy - 10), mini(civ._zone_h, czy + 11)):
-		var row_off: int = zy * civ._zone_w
-		for zx in range(maxi(0, czx - 10), mini(civ._zone_w, czx + 11)):
+	var zw: int = civ._zone_w
+	var zpx: float = float(civ._zone_px)
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var z_ore: PackedInt32Array = civ._zone_ore
+	var zy0: int = maxi(0, czy - 10)
+	var zy1: int = mini(civ._zone_h, czy + 11)
+	var zx0: int = maxi(0, czx - 10)
+	var zx1: int = mini(zw, czx + 11)
+	for zy in range(zy0, zy1):
+		var row_off: int = zy * zw
+		for zx in range(zx0, zx1):
 			var zidx: int = row_off + zx
-			var owner: int = civ._zone_city_id[zidx]
+			var owner: int = z_owners[zidx]
 			if owner != -1 and owner != city_id:
 				continue
-			var ore: int = civ._zone_ore[zidx]
+			var ore: int = z_ore[zidx]
 			if ore <= 0:
 				continue
-			var approx_pos := Vector2((float(zx) + 0.5) * float(civ._zone_px), (float(zy) + 0.5) * float(civ._zone_px))
+			var approx_pos := Vector2((float(zx) + 0.5) * zpx, (float(zy) + 0.5) * zpx)
 			var score: float = float(ore) * 3.0 - approx_pos.distance_to(center) * 1.1
 			if owner == city_id:
 				score += 20.0
@@ -622,7 +775,8 @@ func record_foot_step(civ: Node2D, world_pos: Vector2, city_id: int) -> void:
 		return
 	var idx: int = py * civ._map_w + px
 	if civ._world != null:
-		_refresh_world_byte_caches(civ)
+		if _w_tiers_cache.is_empty() or _w_cache_owner != civ._world:
+			_refresh_world_byte_caches(civ)
 		var t: int = int(_w_tiers_cache[idx]) if not _w_tiers_cache.is_empty() else int(civ._world.get_tier(px, py))
 		if t <= TIER_SHALLOW or t >= TIER_SUMMIT:
 			return
@@ -885,10 +1039,10 @@ func mark_all_borders_dirty(civ: Node2D) -> void:
 
 
 func compute_zoom_tint_alpha(zoom_val: float) -> int:
-	# Macro zoom (1.2x..2.4x): alpha 0.22..0.28 -> 0.25; Close diorama (3.0x..12.0x): alpha 0.03..0.05 -> 0.04
-	var t: float = clampf((zoom_val - 2.4) / 0.6, 0.0, 1.0)
-	var alpha_f: float = lerpf(0.25, 0.04, t)
-	return clampi(int(round(alpha_f * 255.0)), 8, 72)
+	# Macro zoom (<= 2.2x): alpha 0.38; Close diorama (>= 3.0x): alpha 0.04
+	var t: float = clampf((zoom_val - 2.2) / 0.8, 0.0, 1.0)
+	var alpha_f: float = lerpf(0.38, 0.04, t)
+	return clampi(int(round(alpha_f * 255.0)), 8, 104)
 
 
 func flush_dirty_borders(civ: Node2D, force: bool = true) -> void:
@@ -901,7 +1055,7 @@ func flush_dirty_borders(civ: Node2D, force: bool = true) -> void:
 	_refresh_city_color_luts(civ)
 	var hi_pace: bool = civ._sim_pace_mult >= 10.0
 	civ._border_dirty = false
-	civ._border_flush_cd = 0.65 if hi_pace else 0.25
+	civ._border_flush_cd = 0.90 if hi_pace else 0.25
 	var flushed_any: bool = false
 	if _all_borders_dirty:
 		_all_borders_dirty = false
@@ -910,7 +1064,7 @@ func flush_dirty_borders(civ: Node2D, force: bool = true) -> void:
 		_flush_border_rect(civ, 0, 0, civ._map_w, civ._map_h)
 		flushed_any = true
 	elif _dirty_chunk_count > 0:
-		var budget: int = _dirty_chunk_count if force else mini(_dirty_chunk_count, 1 if hi_pace else 4)
+		var budget: int = _dirty_chunk_count if force else mini(_dirty_chunk_count, 2 if hi_pace else 4)
 		while budget > 0 and _dirty_chunk_count > 0:
 			_dirty_chunk_count -= 1
 			budget -= 1
@@ -934,11 +1088,18 @@ func flush_dirty_borders(civ: Node2D, force: bool = true) -> void:
 
 func _refresh_city_color_luts(civ: Node2D) -> void:
 	var c_active: PackedByteArray = civ._city_active
+	var kids: PackedInt32Array = civ._city_kingdom_id
 	for cid in range(civ._max_cities):
 		if c_active[cid] == 0:
+			_city_group_lut[cid] = -1
 			continue
 		var c3: int = cid * 3
-		var bcol: Color = civ._get_city_border_color(cid)
+		var bcol: Color
+		if _map_lens == LENS_KINGDOMS:
+			_city_group_lut[cid] = kids[cid]
+			bcol = civ._get_city_border_color(cid)
+		else:
+			bcol = _resolve_city_lens_color(civ, cid)
 		var r: int = int(round(bcol.r * 255.0))
 		var g: int = int(round(bcol.g * 255.0))
 		var b: int = int(round(bcol.b * 255.0))
@@ -948,6 +1109,53 @@ func _refresh_city_color_luts(civ: Node2D) -> void:
 		_city_div_lut[c3] = int(r * 0.72)
 		_city_div_lut[c3 + 1] = int(g * 0.72)
 		_city_div_lut[c3 + 2] = int(b * 0.72)
+
+
+func _resolve_city_lens_color(civ: Node2D, cid: int) -> Color:
+	var kid: int = civ._city_kingdom_id[cid]
+	_city_group_lut[cid] = kid
+	match _map_lens:
+		LENS_CITIES:
+			_city_group_lut[cid] = cid
+			var h: float = fmod(0.08 + float(cid) * 0.61803398875, 1.0)
+			return Color.from_hsv(h, 0.82, 0.96)
+		LENS_WARS_ALLIANCES:
+			var aid: int = civ._meta.get_kingdom_alliance_id(kid) if (civ._meta != null and kid >= 0) else -1
+			_city_group_lut[cid] = (1000 + aid) if aid >= 0 else kid
+			if int(civ._city_war_state[cid]) >= 2:
+				return Color(0.98, 0.24, 0.20)
+			if aid >= 0:
+				return civ._meta.get_alliance_color(aid)
+			if int(civ._city_war_state[cid]) == 1:
+				return Color(0.96, 0.76, 0.26)
+			return Color(0.36, 0.76, 0.58)
+		LENS_ARMIES_FLEET:
+			var bcnt: int = civ.BLD_TYPE_COUNT
+			var base_b: int = cid * bcnt
+			var mil: int = (civ._city_bld_counts[base_b + 10] + civ._city_bld_counts[base_b + 11] + civ._city_bld_counts[base_b + 12]) if bcnt >= 13 else 0
+			var ships: int = civ._meta.get_city_ship_count(cid) if civ._meta != null else 0
+			if int(civ._city_war_state[cid]) >= 2 or civ._city_alerted[cid] != 0:
+				return Color(0.98, 0.36, 0.16)
+			if mil > 0 or ships > 0:
+				return Color(0.24, 0.84, 0.98)
+			return Color(0.42, 0.56, 0.74)
+		LENS_CULTURES:
+			var cul_id: int = civ._meta.get_city_culture_id(cid) if civ._meta != null else -1
+			_city_group_lut[cid] = cul_id if cul_id >= 0 else (2000 + cid)
+			if civ._meta != null and cul_id >= 0:
+				return civ._meta.get_city_culture_color(cid)
+			return civ._get_city_border_color(cid)
+		LENS_TECH_ENERGY:
+			var tier: int = clampi(int(civ._city_tech_tier[cid]), 0, 5)
+			var tier_cols := [
+				Color(0.58, 0.46, 0.34), Color(0.86, 0.58, 0.26), Color(0.28, 0.80, 0.74),
+				Color(0.32, 0.64, 0.98), Color(0.76, 0.46, 0.98), Color(0.98, 0.92, 0.46),
+			]
+			var tcol: Color = tier_cols[tier]
+			if civ._city_emp_timer[cid] > 0.0 or civ._city_energy[cid] <= 0.5:
+				tcol = tcol.lerp(Color(0.26, 0.30, 0.40), 0.55)
+			return tcol
+	return civ._get_city_border_color(cid)
 
 
 func _flush_border_rect(civ: Node2D, px0: int, py0: int, px1: int, py1: int) -> void:
@@ -1048,7 +1256,7 @@ func _chamfer_owner_grid(civ: Node2D, pw: int, ph: int) -> void:
 
 
 func _detect_edge_grid(civ: Node2D, pw: int, ph: int) -> void:
-	var kids: PackedInt32Array = civ._city_kingdom_id
+	var gluts: PackedInt32Array = _city_group_lut
 	var eff_g: PackedInt32Array = civ._tmp_eff_grid
 	var edge_g: PackedByteArray = civ._tmp_edge_grid
 	for gy in range(2, ph - 2):
@@ -1059,14 +1267,14 @@ func _detect_edge_grid(civ: Node2D, pw: int, ph: int) -> void:
 			if c < 0:
 				edge_g[gi] = 0
 				continue
-			var kc: int = kids[c]
+			var kc: int = gluts[c]
 			var cn: int = eff_g[gi - pw]
 			var cs: int = eff_g[gi + pw]
 			var cw: int = eff_g[gi - 1]
 			var ce: int = eff_g[gi + 1]
 			var is_outer: bool = (
 				cn < 0 or cs < 0 or cw < 0 or ce < 0
-				or kids[cn] != kc or kids[cs] != kc or kids[cw] != kc or kids[ce] != kc
+				or gluts[cn] != kc or gluts[cs] != kc or gluts[cw] != kc or gluts[ce] != kc
 			)
 			if is_outer:
 				edge_g[gi] = 1
@@ -1076,9 +1284,48 @@ func _detect_edge_grid(civ: Node2D, pw: int, ph: int) -> void:
 				edge_g[gi] = 0
 
 
+func _paint_biome_climate_px(civ: Node2D, p: int, idx: int, px: int, py: int) -> void:
+	var buf: PackedByteArray = civ._border_buf
+	var t: int = int(_w_tiers_cache[idx]) if not _w_tiers_cache.is_empty() else (int(civ._world.get_tier(px, py)) if civ._world != null else TIER_SOIL_LOW)
+	var b: int = int(_w_biomes_cache[idx]) if not _w_biomes_cache.is_empty() else (int(civ._world.get_biome(px, py)) if civ._world != null else BIOME_RUST)
+	var temp_v: float = float(_w_temp_cache[idx]) if idx < _w_temp_cache.size() else 0.15
+	var rad_v: float = float(_w_rad_cache[idx]) if idx < _w_rad_cache.size() else 0.0
+	var r: float = 0.45
+	var g: float = 0.45
+	var bl: float = 0.45
+	if t <= TIER_SHALLOW:
+		r = lerpf(0.14, 0.34, clampf(-temp_v, 0.0, 1.0))
+		g = lerpf(0.42, 0.78, clampf(-temp_v + 0.25, 0.0, 1.0))
+		bl = 0.92
+	else:
+		match b:
+			BIOME_LUSH:
+				r = 0.22; g = 0.84; bl = 0.42
+			BIOME_CRYSTAL:
+				r = 0.30; g = 0.88; bl = 0.96
+			BIOME_SCORCHED:
+				r = 0.86; g = 0.44; bl = 0.18
+			BIOME_LAVA:
+				r = 0.98; g = 0.24; bl = 0.10
+			_:
+				r = lerpf(0.76, 0.94, clampf(temp_v, 0.0, 1.0))
+				g = lerpf(0.56, 0.48, clampf(temp_v, 0.0, 1.0))
+				bl = lerpf(0.32, 0.78, clampf(-temp_v, 0.0, 1.0))
+	if rad_v > 0.22:
+		var rt: float = clampf((rad_v - 0.22) * 1.4, 0.0, 0.75)
+		r = lerpf(r, 0.62, rt)
+		g = lerpf(g, 0.98, rt)
+		bl = lerpf(bl, 0.24, rt)
+	buf[p] = clampi(int(round(r * 255.0)), 0, 255)
+	buf[p + 1] = clampi(int(round(g * 255.0)), 0, 255)
+	buf[p + 2] = clampi(int(round(bl * 255.0)), 0, 255)
+	buf[p + 3] = 74
+
+
 func _paint_border_region(civ: Node2D, px0: int, py0: int, px1: int, py1: int, pw: int, pad: int) -> void:
 	var tint_a: int = compute_zoom_tint_alpha(civ._zoom_val)
-	var edge_a: int = civ._k_border_line_a
+	var thick_border: bool = civ._zoom_val <= 2.4
+	var edge_a: int = mini(civ._k_border_line_a, 108) if _map_lens == LENS_BIOMES_CLIMATE else civ._k_border_line_a
 	var back_a: int = civ._k_border_back_a
 	var div_a: int = 135 if civ._zoom_val <= 2.6 else 78
 	var vein_lum: float = civ._k_conduit_vein_lum
@@ -1095,6 +1342,7 @@ func _paint_border_region(civ: Node2D, px0: int, py0: int, px1: int, py1: int, p
 	var rebels: PackedByteArray = civ._city_is_rebel
 	var w_tiers: PackedByteArray = _w_tiers_cache
 	var has_fast_tiers: bool = not w_tiers.is_empty()
+	var lens_mode: int = _map_lens
 
 	for py in range(py0, py1):
 		var gy: int = (py - py0) + pad
@@ -1109,7 +1357,7 @@ func _paint_border_region(civ: Node2D, px0: int, py0: int, px1: int, py1: int, p
 			var owner: int = eff_g[gi]
 			var edge_v: int = int(edge_g[gi])
 
-			if owner >= 0 and edge_v == 1:
+			if owner >= 0 and (edge_v == 1 or (thick_border and (edge_g[gi - pw] == 1 or edge_g[gi + pw] == 1 or edge_g[gi - 1] == 1 or edge_g[gi + 1] == 1))):
 				if rebels[owner] != 0 and ((px + py) & 3) == 0:
 					buf[p] = 255
 					buf[p + 1] = 225
@@ -1150,6 +1398,10 @@ func _paint_border_region(civ: Node2D, px0: int, py0: int, px1: int, py1: int, p
 					buf[p + 3] = 215
 					continue
 
+			if lens_mode == LENS_BIOMES_CLIMATE:
+				_paint_biome_climate_px(civ, p, idx, px, py)
+				continue
+
 			if owner >= 0:
 				var zidx: int = z_row + (px / zpx)
 				var zf: int = int(zf_arr[zidx])
@@ -1158,10 +1410,13 @@ func _paint_border_region(civ: Node2D, px0: int, py0: int, px1: int, py1: int, p
 					if _try_write_farm_px(civ, p, owner, zidx, px, py, lx, ly):
 						continue
 				var t3: int = owner * 3
+				var fill_a: int = tint_a
+				if lens_mode == LENS_TECH_ENERGY:
+					fill_a = clampi(tint_a + (38 if (zf & ZONE_FLAG_POWERED) != 0 else -12), 16, 148)
 				buf[p] = _city_rgb_lut[t3]
 				buf[p + 1] = _city_rgb_lut[t3 + 1]
 				buf[p + 2] = _city_rgb_lut[t3 + 2]
-				buf[p + 3] = tint_a
+				buf[p + 3] = fill_a
 			else:
 				buf[p] = 0
 				buf[p + 1] = 0
@@ -1279,5 +1534,209 @@ func collect_ecology_events(civ: Node2D, events_out: Array, cursor: int) -> int:
 		var py: int = clampi(int(floor(c.y)) + oy, 4, civ._map_h - 5)
 		var kind: int = ECO_ROBOT_PLATE if fid == FACTION_ROBOT else ECO_SPORE_MYCELIUM
 		events_out.append({"kind": kind, "x": px, "y": py, "val": 1.0})
+		if fid == FACTION_SPORE and int(civ._city_tech_tier[cid]) >= 5 and events_out.size() < 14:
+			var px2: int = clampi(int(floor(c.x)) - ox, 4, civ._map_w - 5)
+			var py2: int = clampi(int(floor(c.y)) - oy, 4, civ._map_h - 5)
+			events_out.append({"kind": ECO_SPORE_MYCELIUM, "x": px2, "y": py2, "val": 1.4})
 
 	return (cursor + 7) % maxi(1, b_count)
+
+
+func are_all_cities_contiguous(civ: Node2D) -> bool:
+	_refresh_world_byte_caches(civ)
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var c_active: PackedByteArray = civ._city_active
+	for zy in range(zh):
+		var row_off: int = zy * zw
+		for zx in range(zw):
+			var owner: int = z_owners[row_off + zx]
+			if owner < 0 or owner >= civ._max_cities or c_active[owner] == 0:
+				continue
+			if civ._city_zones_count[owner] <= 1:
+				continue
+			if _is_detached_enclave_zone(civ, zx, zy, owner, kids[owner]):
+				return false
+	return true
+
+
+func _is_detached_enclave_zone(civ: Node2D, zx: int, zy: int, owner: int, owner_kid: int) -> bool:
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var c_active: PackedByteArray = civ._city_active
+	var f_id: int = int(civ._city_faction[owner])
+	var foreign_nb: int = 0
+	var open_land_nb: int = 0
+	var water_or_edge: int = 0
+	var dirs := [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]
+	for d in dirs:
+		var nx: int = zx + d.x
+		var ny: int = zy + d.y
+		if nx < 0 or nx >= zw or ny < 0 or ny >= zh:
+			water_or_edge += 1
+			continue
+		var nb: int = z_owners[ny * zw + nx]
+		if nb >= 0 and nb < civ._max_cities and c_active[nb] != 0:
+			if nb == owner or (owner_kid >= 0 and kids[nb] == owner_kid):
+				return false
+			foreign_nb += 1
+		else:
+			if is_zone_walkable(civ, Vector2i(nx, ny), f_id):
+				open_land_nb += 1
+			else:
+				water_or_edge += 1
+	if foreign_nb == 0 or open_land_nb > 0:
+		return false
+	if water_or_edge == 0:
+		return true
+	return not is_zone_coastal(civ, zx, zy)
+
+
+func smooth_enclaves_for_city(civ: Node2D, target_cid: int) -> void:
+	if target_cid < 0 or target_cid >= civ._max_cities or civ._city_active[target_cid] == 0:
+		return
+	for pass_idx in range(4):
+		if civ._city_zones_count[target_cid] <= 1:
+			return
+		var allow_center_move: bool = (pass_idx >= 3)
+		if not _run_enclave_smooth_pass(civ, target_cid, allow_center_move):
+			if not allow_center_move:
+				if not _run_enclave_smooth_pass(civ, target_cid, true):
+					return
+			else:
+				return
+
+
+func _run_enclave_smooth_pass(civ: Node2D, target_cid: int, allow_center: bool) -> bool:
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var kids: PackedInt32Array = civ._city_kingdom_id
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var changed: bool = false
+	for zy in range(zh):
+		for zx in range(zw):
+			if civ._city_zones_count[target_cid] <= 1:
+				return changed
+			if z_owners[zy * zw + zx] != target_cid:
+				continue
+			if not _is_detached_enclave_zone(civ, zx, zy, target_cid, kids[target_cid]):
+				continue
+			var czx: int = clampi(int(floor(civ._city_center[target_cid].x / float(civ._zone_px))), 0, zw - 1)
+			var czy: int = clampi(int(floor(civ._city_center[target_cid].y / float(civ._zone_px))), 0, zh - 1)
+			var has_cf: bool = civ._diplomacy != null and civ._diplomacy._zone_has_living_campfire(civ, zx, zy, target_cid)
+			if (zx == czx and zy == czy) or has_cf:
+				if not allow_center or not _relocate_center_and_campfire(civ, target_cid, Vector2i(zx, zy)):
+					continue
+			var win_cid: int = _pick_surrounding_owner(civ, zx, zy, target_cid)
+			if win_cid >= 0:
+				claim_zone(civ, Vector2i(zx, zy), win_cid)
+				if civ._diplomacy != null:
+					civ._diplomacy._transfer_buildings_in_zone(civ, zx, zy, target_cid, win_cid)
+				changed = true
+	return changed
+
+
+func _relocate_center_and_campfire(civ: Node2D, target_cid: int, from_z: Vector2i) -> bool:
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var zpx: float = float(civ._zone_px)
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var best_z := Vector2i(-1, -1)
+	for zy in range(zh):
+		for zx in range(zw):
+			if (zx != from_z.x or zy != from_z.y) and z_owners[zy * zw + zx] == target_cid:
+				best_z = Vector2i(zx, zy)
+				if not _is_detached_enclave_zone(civ, zx, zy, target_cid, civ._city_kingdom_id[target_cid]):
+					break
+		if best_z.x >= 0 and not _is_detached_enclave_zone(civ, best_z.x, best_z.y, target_cid, civ._city_kingdom_id[target_cid]):
+			break
+	if best_z.x < 0:
+		return false
+	var new_pos: Vector2 = zone_walkable_center(civ, best_z, int(civ._city_faction[target_cid]))
+	if new_pos.x < 0.0:
+		new_pos = Vector2((float(best_z.x) + 0.5) * zpx, (float(best_z.y) + 0.5) * zpx)
+	var px0: float = float(from_z.x * civ._zone_px)
+	var py0: float = float(from_z.y * civ._zone_px)
+	for bi in range(civ._bld_count):
+		if civ._bld_city_id[bi] == target_cid and int(civ._bld_type[bi]) == 0:
+			var bp: Vector2 = civ._bld_pos[bi]
+			if bp.x >= px0 and bp.x < px0 + zpx and bp.y >= py0 and bp.y < py0 + zpx:
+				civ._bld_pos[bi] = new_pos
+				civ._buildings_dirty = true
+				civ._bld_footprints_dirty = true
+	civ._city_center[target_cid] = new_pos
+	var nzidx: int = best_z.y * zw + best_z.x
+	civ._zone_flags[nzidx] = (civ._zone_flags[nzidx] | ZONE_FLAG_BUILT) & ~ZONE_FLAG_FARM
+	mark_zone_dirty(civ, best_z.x, best_z.y)
+	civ._refresh_city_targets(target_cid)
+	civ._goals_dirty = true
+	return true
+
+
+func _pick_surrounding_owner(civ: Node2D, zx: int, zy: int, exclude_cid: int) -> int:
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var best_cid: int = -1
+	var best_cnt: int = 0
+	var cands := [
+		z_owners[zy * zw + zx - 1] if zx > 0 else -1,
+		z_owners[zy * zw + zx + 1] if zx + 1 < zw else -1,
+		z_owners[(zy - 1) * zw + zx] if zy > 0 else -1,
+		z_owners[(zy + 1) * zw + zx] if zy + 1 < zh else -1,
+	]
+	for c in cands:
+		if c < 0 or c == exclude_cid or civ._city_active[c] == 0:
+			continue
+		var cnt: int = 0
+		for o in cands:
+			if o == c:
+				cnt += 1
+		if cnt > best_cnt:
+			best_cnt = cnt
+			best_cid = c
+	return best_cid
+
+
+func try_spore_creep_zone(civ: Node2D, city_id: int) -> bool:
+	_refresh_world_byte_caches(civ)
+	var zw: int = civ._zone_w
+	var zh: int = civ._zone_h
+	var zpx: float = float(civ._zone_px)
+	var center: Vector2 = civ._city_center[city_id]
+	var czx: int = clampi(int(floor(center.x / zpx)), 0, zw - 1)
+	var czy: int = clampi(int(floor(center.y / zpx)), 0, zh - 1)
+	var scan_r: int = clampi(8 + civ._city_zones_count[city_id] / 3, 10, 26)
+	var z_owners: PackedInt32Array = civ._zone_city_id
+	var z_fert: PackedFloat32Array = civ._zone_fertility
+	var best_zx: int = -1
+	var best_zy: int = -1
+	var best_score: float = -1e9
+	for zy in range(maxi(0, czy - scan_r), mini(zh, czy + scan_r + 1)):
+		var row_off: int = zy * zw
+		for zx in range(maxi(0, czx - scan_r), mini(zw, czx + scan_r + 1)):
+			var zidx: int = row_off + zx
+			if z_owners[zidx] != -1 or z_fert[zidx] < 0.45:
+				continue
+			var nbs: Vector2i = _count_expand_neighbors(civ, zx, zy, city_id)
+			if nbs.x <= 0 or (nbs.x == 1 and nbs.y >= 3):
+				continue
+			if not is_zone_claimable(civ, Vector2i(zx, zy), FACTION_SPORE):
+				continue
+			var sc: float = z_fert[zidx] * 30.0 + float(nbs.x) * 18.0 - Vector2((float(zx) + 0.5) * zpx, (float(zy) + 0.5) * zpx).distance_to(center) * 0.35
+			if sc > best_score:
+				best_score = sc
+				best_zx = zx
+				best_zy = zy
+	if best_zx < 0:
+		return false
+	claim_zone(civ, Vector2i(best_zx, best_zy), city_id)
+	if civ._world != null and civ._world_has_apply_ecology_batch:
+		var px: int = clampi(best_zx * civ._zone_px + 4, 0, civ._map_w - 1)
+		var py: int = clampi(best_zy * civ._zone_px + 4, 0, civ._map_h - 1)
+		civ._world.call("apply_civ_ecology_batch", [{"kind": ECO_SPORE_MYCELIUM, "x": px, "y": py, "val": 1.2}])
+	return true

@@ -36,6 +36,7 @@ const BIOME_CRYSTAL: int = 2
 const BIOME_SCORCHED: int = 3
 const BIOME_LAVA: int = 4
 
+const TIER_SHALLOW: int = 2
 const TIER_SAND: int = 3
 const TIER_HILLS: int = 6
 const TIER_SUMMIT: int = 8
@@ -53,6 +54,25 @@ const FLORA_SPORE_POD: int = 10
 const FLORA_CRYSTAL_CLUSTER: int = 11
 const FLORA_LUSH_SAPLING: int = 12
 const FLORA_BURNING_BUSH: int = 13
+const FLORA_XENO_PALM: int = 14
+const FLORA_CRYO_CRYSTAL: int = 15
+const FLORA_ACID_WEED: int = 16
+const FLORA_SILICA_CACTUS: int = 17
+const FLORA_BIOLUM_BELL: int = 18
+const FLORA_VOID_TENDRIL: int = 19
+const FLORA_MYCELIUM_NODE: int = 20
+const FLORA_CYBER_SPIRE: int = 21
+const FLORA_MUTAGEN_BULB: int = 22
+const FLORA_MONOLITH_SHARD: int = 23
+
+const MASK_CHOP: int = (1 << FLORA_TREE_LUSH) | (1 << FLORA_FROST_PINE) | (1 << FLORA_RUST_SCRUB) | (1 << FLORA_XENO_PALM)
+const MASK_FOOD: int = (1 << FLORA_SHROOM_LUSH) | (1 << FLORA_SPORE_POD) | (1 << FLORA_BIOLUM_BELL) | (1 << FLORA_MYCELIUM_NODE)
+const MASK_MINERAL: int = (1 << FLORA_CRYSTAL_SMALL) | (1 << FLORA_CRYSTAL_TALL) | (1 << FLORA_CRYSTAL_CLUSTER) | (1 << FLORA_BOULDER) | (1 << FLORA_CRYO_CRYSTAL) | (1 << FLORA_CYBER_SPIRE) | (1 << FLORA_MONOLITH_SHARD)
+
+const ST_CRYO_MASK: int = 1 << 2
+const ST_SLEEP_MASK: int = 1 << 11
+const TR_GENIUS_BIT: int = 1 << 17
+const TR_PACIFIST_BIT: int = 1 << 27
 
 const LAYER_ROUTINE: int = 0
 const LAYER_LOGISTICS: int = 1
@@ -73,29 +93,34 @@ var _sf_group_cx: float = 0.0
 var _sf_group_cy: float = 0.0
 var _regrow_real_cd: float = 0.0
 var _regrow_pace_acc: float = 0.0
+var _u_tracked_build_pos: PackedVector2Array = PackedVector2Array()
 
 
 func _init() -> void:
 	_sf_group_slots.resize(32)
 	_sf_group_slots.fill(-1)
+	_u_tracked_build_pos.resize(720)
+	_u_tracked_build_pos.fill(Vector2(-1.0, -1.0))
 
 
 func reset_state() -> void:
 	_sf_group_count = 0
 	_regrow_real_cd = 0.0
 	_regrow_pace_acc = 0.0
+	_u_tracked_build_pos.resize(720)
+	_u_tracked_build_pos.fill(Vector2(-1.0, -1.0))
 
 
 func is_choppable_tree(col: int) -> bool:
-	return col == FLORA_TREE_LUSH or col == FLORA_FROST_PINE or col == FLORA_RUST_SCRUB
+	return col == FLORA_TREE_LUSH or col == FLORA_FROST_PINE or col == FLORA_RUST_SCRUB or col == FLORA_XENO_PALM
 
 
 func is_food_flora(col: int) -> bool:
-	return col == FLORA_SHROOM_LUSH or col == FLORA_SPORE_POD
+	return col == FLORA_SHROOM_LUSH or col == FLORA_SPORE_POD or col == FLORA_BIOLUM_BELL or col == FLORA_MYCELIUM_NODE
 
 
 func is_mineral_flora(col: int) -> bool:
-	return col == FLORA_CRYSTAL_SMALL or col == FLORA_CRYSTAL_TALL or col == FLORA_CRYSTAL_CLUSTER or col == FLORA_BOULDER
+	return col == FLORA_CRYSTAL_SMALL or col == FLORA_CRYSTAL_TALL or col == FLORA_CRYSTAL_CLUSTER or col == FLORA_BOULDER or col == FLORA_CRYO_CRYSTAL or col == FLORA_CYBER_SPIRE or col == FLORA_MONOLITH_SHARD
 
 
 func _sample_regrow_rate(up: Node2D, fp: Vector2) -> float:
@@ -119,7 +144,6 @@ func convert_tree_to_stump(up: Node2D, f: int) -> void:
 	up._flora_spring[f] = 0.72
 	up._flora_spring_vel[f] = 2.0
 	up._flora_shake[f] = 0.9
-	up._flora_shadows_dirty = true
 	up.mark_flora_anim(f)
 
 
@@ -133,6 +157,22 @@ func _mature_col_for_tile(up: Node2D, fp: Vector2) -> int:
 	var tier: int = up._get_tile_tier(px, py)
 	if biome == BIOME_CRYSTAL:
 		return FLORA_CRYSTAL_SMALL
+	if biome >= 5:
+		match biome:
+			5:
+				return FLORA_XENO_PALM
+			6:
+				return FLORA_CRYO_CRYSTAL
+			7:
+				return FLORA_ACID_WEED
+			8:
+				return FLORA_SILICA_CACTUS
+			9:
+				return FLORA_BIOLUM_BELL
+			10:
+				return FLORA_MYCELIUM_NODE
+			_:
+				return FLORA_CYBER_SPIRE
 	if tier >= TIER_HILLS:
 		return FLORA_FROST_PINE
 	if biome == BIOME_LUSH:
@@ -184,6 +224,7 @@ func _step_flora_regrowth_timers(up: Node2D, dt: float, pace_dt: float) -> void:
 	var grow_rates: PackedFloat32Array = up._flora_grow_rate
 	var f_pos: PackedVector2Array = up._flora_pos
 	var rates_sz: int = grow_rates.size()
+	var any_growing: bool = false
 	for f in range(count):
 		var g: float = up._flora_grow[f]
 		var col: int = int(up._flora_col[f])
@@ -191,22 +232,23 @@ func _step_flora_regrowth_timers(up: Node2D, dt: float, pace_dt: float) -> void:
 			if col != FLORA_LUSH_SAPLING:
 				continue
 			g = REGROW_SAPLING_T
+		any_growing = true
 		var rate: float = grow_rates[f] if (f < rates_sz and grow_rates[f] > 0.1) else 1.0
 		g += grow_mul * rate
 		if col == FLORA_TREE_ASH and g >= REGROW_SAPLING_T:
 			up._flora_col[f] = FLORA_LUSH_SAPLING
-			up._flora_spring[f] = 0.16
+			up._flora_spring[f] = 0.45
 			up._flora_spring_vel[f] = 2.8
-			up._flora_shadows_dirty = true
 			up.mark_flora_anim(f)
 		elif col == FLORA_LUSH_SAPLING and g >= REGROW_MATURE_T:
 			up._flora_col[f] = _mature_col_for_tile(up, f_pos[f])
 			g = 0.0
-			up._flora_spring[f] = 0.24
+			up._flora_spring[f] = 0.48
 			up._flora_spring_vel[f] = 3.2
-			up._flora_shadows_dirty = true
 			up.mark_flora_anim(f)
 		up._flora_grow[f] = g
+	if not any_growing:
+		_regrow_real_cd = 2.4
 
 
 func _step_flora_ambient_regrow(up: Node2D, pace_dt: float) -> void:
@@ -238,6 +280,7 @@ func _step_flora_ambient_regrow(up: Node2D, pace_dt: float) -> void:
 				up._flora_grow[nf] = REGROW_SAPLING_T
 				if nf < up._flora_grow_rate.size():
 					up._flora_grow_rate[nf] = _sample_regrow_rate(up, cand)
+				_regrow_real_cd = minf(_regrow_real_cd, 0.30)
 			break
 
 
@@ -277,9 +320,9 @@ func _step_flora_burn_and_springs(up: Node2D, dt: float, pace_dt: float) -> void
 				up._flora_burn[f] = 0.0
 				up._flora_col[f] = FLORA_TREE_ASH
 				up._flora_grow[f] = 0.001
+				_regrow_real_cd = minf(_regrow_real_cd, 0.30)
 				if f < up._flora_grow_rate.size():
 					up._flora_grow_rate[f] = _sample_regrow_rate(up, up._flora_pos[f])
-				up._flora_shadows_dirty = true
 				if up._fx != null and up._rng.randf() < 0.35:
 					up._fx.spawn_burst(up._flora_pos[f] + Vector2(0.0, -4.0), 2, Color(0.42, 0.40, 0.38, 0.72), 10.0, 0.45, -8.0)
 			else:
@@ -303,9 +346,33 @@ func _step_flora_burn_and_springs(up: Node2D, dt: float, pace_dt: float) -> void
 				sv = 0.0
 			else:
 				any_anim = true
-			up._flora_spring[f] = clampf(sp, 0.08, 1.35)
+			up._flora_spring[f] = clampf(sp, 0.42, 1.35)
 			up._flora_spring_vel[f] = sv
 	up._flora_has_anim = any_anim
+
+
+func _fast_water_hits_capped(up: Node2D, w_tiers: PackedByteArray, dims: Vector2i, a: Vector2, b: Vector2, max_hits: int) -> int:
+	if up._world == null:
+		return 0
+	var mw: int = dims.x
+	var mh: int = dims.y
+	if up._cur_frost_tiles == 0 and w_tiers.size() == mw * mh:
+		var hits: int = 0
+		var ax: float = a.x
+		var ay: float = a.y
+		var dx: float = b.x - ax
+		var dy: float = b.y - ay
+		for s in range(1, 4):
+			var t: float = float(s) * 0.25
+			var px: int = clampi(int(ax + dx * t), 0, mw - 1)
+			var py: int = clampi(int(ay + dy * t), 0, mh - 1)
+			var tier: int = int(w_tiers[py * mw + px])
+			if tier <= TIER_SHALLOW or tier >= TIER_SUMMIT:
+				hits += 1
+				if hits > max_hits:
+					return hits
+		return hits
+	return up._count_water_hits(a, b)
 
 
 func find_nearest_flora(up: Node2D, unit_idx: int, mode: int) -> int:
@@ -335,7 +402,10 @@ func find_nearest_flora(up: Node2D, unit_idx: int, mode: int) -> int:
 	var f_next: PackedInt32Array = up._flora_next
 	var f_col: PackedByteArray = up._flora_col
 	var f_pos: PackedVector2Array = up._flora_pos
+	var w_tiers: PackedByteArray = up._w_tiers
+	var dims := Vector2i(up._map_w, up._map_h)
 	var gw: int = up._grid_w
+	var kind_mask: int = MASK_MINERAL if mode == 1 else (MASK_CHOP | MASK_FOOD)
 
 	for cy in range(y0, y1 + 1):
 		var row_off: int = cy * gw
@@ -343,8 +413,8 @@ func find_nearest_flora(up: Node2D, unit_idx: int, mode: int) -> int:
 			var f: int = f_head[row_off + cx]
 			while f != -1:
 				var col: int = int(f_col[f])
-				var match_kind: bool = is_mineral_flora(col) if mode == 1 else (is_choppable_tree(col) or is_food_flora(col))
-				if match_kind:
+				var bit: int = (1 << col) if col < 32 else 0
+				if (bit & kind_mask) != 0:
 					var fp: Vector2 = f_pos[f]
 					var fdx: float = fp.x - anchor.x
 					var fdy: float = fp.y - anchor.y
@@ -352,16 +422,17 @@ func find_nearest_flora(up: Node2D, unit_idx: int, mode: int) -> int:
 					if d2 <= max_r2:
 						var spread: float = float((unit_idx * 17 + f * 31) & 15) * 18.0
 						var bonus: float = 0.0
-						if mode == 2 and is_food_flora(col):
+						if mode == 2 and (bit & MASK_FOOD) != 0:
 							bonus = -280.0
-						elif mode == 0 and is_choppable_tree(col):
+						elif mode == 0 and (bit & MASK_CHOP) != 0:
 							bonus = -90.0
-						if fac == FACTION_SPORE and is_food_flora(col):
+						if fac == FACTION_SPORE and (bit & MASK_FOOD) != 0:
 							bonus -= 140.0
 						var base_score: float = d2 + spread + bonus
 						if base_score < best_score:
-							var water_hits: int = up._count_water_hits(unit_pos, fp)
-							if water_hits < 2:
+							var max_hits: int = 0 if (base_score + 900.0 >= best_score) else 1
+							var water_hits: int = _fast_water_hits_capped(up, w_tiers, dims, unit_pos, fp, max_hits)
+							if water_hits <= max_hits:
 								var score: float = base_score + float(water_hits) * 900.0
 								if score < best_score:
 									best_score = score
@@ -463,7 +534,9 @@ func _assign_role_goal(up: Node2D, unit_idx: int, city_id: int) -> void:
 func _assign_builder_goal(up: Node2D, unit_idx: int, city_id: int) -> void:
 	var depot: Vector2 = up._u_depot_pos[unit_idx]
 	var unit_pos := Vector2(up._px[unit_idx], up._py[unit_idx])
-	var has_site: bool = (city_id < up._city_build_pos.size() and up._city_build_pos[city_id].x >= 0.0 and up._city_build_pos[city_id].distance_squared_to(depot) > 1.0)
+	var has_site: bool = (city_id >= 0 and city_id < up._city_build_pos.size() and up._city_build_pos[city_id].x >= 0.0 and up._city_build_pos[city_id].distance_squared_to(depot) > 1.0)
+	if unit_idx >= 0 and unit_idx < _u_tracked_build_pos.size():
+		_u_tracked_build_pos[unit_idx] = Vector2(-1.0, -1.0)
 	if not has_site and (unit_idx & 1) == 1:
 		up._harv_anchor = depot
 		up._harv_radius = 68.0
@@ -474,8 +547,10 @@ func _assign_builder_goal(up: Node2D, unit_idx: int, city_id: int) -> void:
 			up._u_task[unit_idx] = TASK_MOVE_GOAL
 			return
 	var bgoal: Vector2 = depot
-	if city_id < up._city_build_pos.size() and up._city_build_pos[city_id].x >= 0.0:
+	if city_id >= 0 and city_id < up._city_build_pos.size() and up._city_build_pos[city_id].x >= 0.0:
 		bgoal = up._city_build_pos[city_id]
+		if unit_idx >= 0 and unit_idx < _u_tracked_build_pos.size():
+			_u_tracked_build_pos[unit_idx] = bgoal
 	if not up._is_walkable_pos(bgoal) or up._count_water_hits(unit_pos, bgoal) >= 2:
 		var near_b: Vector2 = up._find_walkable_near(bgoal, 8.0)
 		if up._is_walkable_pos(near_b) and up._count_water_hits(unit_pos, near_b) < 2:
@@ -632,6 +707,13 @@ func _finish_harvest_cycle(up: Node2D, unit_idx: int, cid: int) -> void:
 				res_type = RES_ORE if ((unit_idx + up._tick_idx) & 1) == 0 else RES_ENERGY
 				res_amt = 1.35
 
+	var tm: int = up._u_trait_mask[unit_idx] if unit_idx < up._u_trait_mask.size() else 0
+	if (tm & (TR_GENIUS_BIT | TR_PACIFIST_BIT)) != 0:
+		res_amt *= 1.20
+	if res_type == RES_FOOD and up._traits_fauna != null:
+		var food_kind: int = 0 if (fcol == FLORA_SHROOM_LUSH or fcol == FLORA_MYCELIUM_NODE) else (2 if fcol == FLORA_SPORE_POD else (4 if fcol == FLORA_BIOLUM_BELL else -1))
+		res_amt = up._traits_fauna.on_food_eaten(up, unit_idx, food_kind, res_amt)
+
 	up._u_carry_type[unit_idx] = res_type
 	up._u_carry_amt[unit_idx] = res_amt
 	up._u_flora_idx[unit_idx] = -1
@@ -651,6 +733,8 @@ func complete_harvest(up: Node2D, unit_idx: int, cid: int) -> void:
 
 
 func step_worker(up: Node2D, unit_idx: int, safe_dt: float) -> Vector2:
+	if unit_idx < up._u_status_mask.size() and (up._u_status_mask[unit_idx] & (ST_CRYO_MASK | ST_SLEEP_MASK)) != 0:
+		return Vector2.ZERO
 	var cid: int = up._u_city_id[unit_idx]
 	if cid < up._city_depot_pos.size() and up._city_depot_pos[cid].x >= 0.0:
 		up._u_depot_pos[unit_idx] = up._city_depot_pos[cid]
@@ -709,8 +793,9 @@ func _step_worker_move_goal(up: Node2D, unit_idx: int, safe_dt: float) -> Vector
 			up._u_flora_idx[unit_idx] = -1
 			up._u_task[unit_idx] = TASK_IDLE
 			return Vector2.ZERO
-	if role == ROLE_BUILDER and up._u_alert_layer[unit_idx] != LAYER_LOGISTICS and cid < up._city_build_pos.size() and up._city_build_pos[cid].x >= 0.0:
-		if up._city_build_pos[cid].distance_squared_to(up._u_target_pos[unit_idx]) > 144.0:
+	if role == ROLE_BUILDER and up._u_alert_layer[unit_idx] != LAYER_LOGISTICS and cid >= 0 and cid < up._city_build_pos.size() and up._city_build_pos[cid].x >= 0.0 and up._city_build_pos[cid].distance_squared_to(up._u_depot_pos[unit_idx]) > 1.0:
+		var tracked_bp: Vector2 = _u_tracked_build_pos[unit_idx] if (unit_idx >= 0 and unit_idx < _u_tracked_build_pos.size()) else up._u_target_pos[unit_idx]
+		if tracked_bp.x < 0.0 or up._city_build_pos[cid].distance_squared_to(tracked_bp) > 4.0:
 			assign_worker_goal(up, unit_idx, cid)
 	var tgt_pos: Vector2 = up._u_target_pos[unit_idx]
 	var dx_g: float = tgt_pos.x - pos.x
@@ -737,7 +822,11 @@ func _step_worker_move_goal(up: Node2D, unit_idx: int, safe_dt: float) -> Vector
 				up._work_fx_budget -= 1
 				up._spawn_work_chips(tgt_pos, role)
 			return Vector2.ZERO
-	if up._u_stuck_timer[unit_idx] > 3.6:
+	if role == ROLE_BUILDER and tracked_f < 0 and up._u_stuck_timer[unit_idx] > 2.4:
+		up._u_target_pos[unit_idx] = up._find_walkable_offset(up._u_depot_pos[unit_idx], 4.0, 12.0, false)
+		up._u_stuck_timer[unit_idx] = 0.0
+		tgt_pos = up._u_target_pos[unit_idx]
+	elif up._u_stuck_timer[unit_idx] > 3.6:
 		up._u_flora_idx[unit_idx] = -1
 		up._u_task[unit_idx] = TASK_IDLE
 		return Vector2.ZERO
@@ -763,6 +852,8 @@ func _step_worker_haul_depot(up: Node2D, unit_idx: int, safe_dt: float) -> Vecto
 			up._deposit_to_civ(cid, carry_type, up._u_carry_amt[unit_idx])
 			up._record_memory(unit_idx, MEM_GATHERED)
 			if carry_type == RES_FOOD and cid < up._city_hunger_cache.size() and up._city_hunger_cache[cid] >= 0.45:
+				if up._traits_fauna != null:
+					up._traits_fauna.on_food_eaten(up, unit_idx, 1, 0.0)
 				if up._fx != null and up._fx.has_method("spawn_reaction_strip") and up._strip_fx_budget > 0 and up._rng.randf() < 0.30:
 					up._strip_fx_budget -= 1
 					up._fx.call("spawn_reaction_strip", Vector2(px_f, py_f - 7.0), STRIP_FOOD)
@@ -812,11 +903,13 @@ func _gather_same_faction_settlers(up: Node2D, seed_idx: int, fac: int) -> void:
 
 
 func step_self_founding(up: Node2D, safe_dt: float) -> void:
+	if (up._tick_idx & 3) != 0:
+		return
 	if not up._law_self_founding or up._civ == null or up._unit_count <= 0:
 		return
 	if not up._has_can_settle_near or not up._has_try_self_found:
 		return
-	var eff_dt: float = safe_dt * clampf(up._sim_pace_mult, 0.05, 80.0)
+	var eff_dt: float = (safe_dt * 4.0) * clampf(up._sim_pace_mult, 0.05, 80.0)
 	var timer_sz: int = up._u_settle_timer.size()
 	var inf_sz: int = up._u_infected_timer.size()
 	var founded_any: bool = false
@@ -835,7 +928,7 @@ func step_self_founding(up: Node2D, safe_dt: float) -> void:
 			up._u_settle_timer[i] = 0.0
 			continue
 		var pos := Vector2(up._px[i], up._py[i])
-		if up._u_settle_timer[i] <= 0.0 or ((i + up._tick_idx) & 3) == 0:
+		if up._u_settle_timer[i] <= 0.0 or ((i + (up._tick_idx >> 2)) & 3) == 0:
 			if not bool(up._civ.call("can_settle_near", pos)):
 				up._u_settle_timer[i] = 0.0
 				continue

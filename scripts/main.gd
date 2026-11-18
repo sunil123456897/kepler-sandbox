@@ -2,6 +2,8 @@ extends Node2D
 
 const WorldTerrainScript = preload("res://scripts/world_terrain.gd")
 const HudWorldLawsScript = preload("res://scripts/hud_world_laws.gd")
+const HudWindowsScript = preload("res://scripts/hud_windows.gd")
+const WorldDropsScript = preload("res://scripts/world_drops.gd")
 const BRUSH_CANAL: int = WorldTerrainScript.BrushMode.LOWER_CANAL
 const BRUSH_ORBITAL_STRIKE: int = 6
 const BRUSH_COLONY: int = 100
@@ -14,14 +16,23 @@ const BRUSH_DIPLO_SPARK: int = 106
 const BRUSH_AI_GLITCH: int = 107
 const BRUSH_XENO_VIRUS: int = 108
 const BRUSH_BIO_SEEDER: int = 109
+const BRUSH_SETTLERS: int = 110
 
 const SAVE_MAGIC: int = 0x4B45504C
-const SAVE_VERSION: int = 5
+const SAVE_VERSION: int = 7
 const DEFAULT_SAVE_PATH := "user://kepler_slot1.dat"
+const FX_STRIPS_PNG_PATH := "res://assets/atlases/fx_strips_atlas.png"
+const FX_STRIPS_FRAME_W: float = 8.0
+const MAX_STROKE_STEPS_PER_FRAME: int = 8
+const PLOT_STRIP_COLS: Array[int] = [12, 13, 14, 23, 24, 24, 24, 25, 26, 5, 11, 26]
 
 const STRIP_PACT: int = 8
 const STRIP_WAR: int = 9
 const STRIP_REBEL: int = 10
+const STRIP_PLOT_WAR: int = 12
+const STRIP_PLOT_PACT: int = 13
+const STRIP_PLOT_REBEL: int = 14
+const MAX_WATCHLIST_PINS: int = 4
 
 const POWER_TAB_EARTH: int = 0
 const POWER_TAB_WEATHER: int = 1
@@ -92,6 +103,7 @@ const TUNING_KNOBS := {
 	"BLESS_REPEAT_SEC": 0.18,
 	"STORM_REPEAT_SEC": 0.18,
 	"EVO_REPEAT_SEC": 0.22,
+	"SETTLER_REPEAT_SEC": 0.16,
 	"VORTEX_RADIUS_MULT": 2.8,
 	"VORTEX_STRENGTH": 125.0,
 	"BRUSH_SFX_COOLDOWN_SEC": 0.09,
@@ -102,14 +114,13 @@ const TUNING_KNOBS := {
 }
 
 @onready var _world_env: WorldEnvironment = $WorldEnvironment
-@onready var _canvas_modulate: CanvasModulate = $CanvasModulate
 @onready var _world: Node2D = $WorldTerrain
 @onready var _civ: Node2D = $CivSim
 @onready var _physics: Node2D = $UnitPhysics
 @onready var _combat: Node2D = $CombatAndBeams
 @onready var _fx: Node2D = $FxAudio
+@onready var _world_border_mask: Node2D = $WorldBorderMask
 @onready var _world_overlay: Node2D = $WorldOverlay
-@onready var _reticle: Node2D = $BrushReticle
 @onready var _camera: Camera2D = $Camera2D
 @onready var _macro_badges: Control = $HUD/MacroBadges
 
@@ -119,12 +130,7 @@ const TUNING_KNOBS := {
 @onready var _cities_label: Label = $HUD/TopBar/TopRow/CitiesLabel
 @onready var _tech_label: Label = $HUD/TopBar/TopRow/TechLabel
 @onready var _wars_label: Label = $HUD/TopBar/TopRow/WarsLabel
-@onready var _flora_label: Label = $HUD/TopBar/TopRow/FloraLabel
-@onready var _temp_label: Label = $HUD/TopBar/TopRow/TempLabel
-@onready var _btn_light_day: Button = $HUD/TopBar/TopRow/LightRow/BtnLightDay
-@onready var _btn_light_dusk: Button = $HUD/TopBar/TopRow/LightRow/BtnLightDusk
-@onready var _btn_light_night: Button = $HUD/TopBar/TopRow/LightRow/BtnLightNight
-@onready var _btn_light_cycle: Button = $HUD/TopBar/TopRow/LightRow/BtnLightCycle
+@onready var _btn_light_mode: Button = $HUD/TopBar/TopRow/BtnLightMode
 @onready var _btn_speed_0: Button = $HUD/TopBar/TopRow/SpeedRow/BtnSpeed0
 @onready var _btn_speed_1: Button = $HUD/TopBar/TopRow/SpeedRow/BtnSpeed1
 @onready var _btn_speed_3: Button = $HUD/TopBar/TopRow/SpeedRow/BtnSpeed3
@@ -134,10 +140,20 @@ const TUNING_KNOBS := {
 @onready var _fps_label: Label = $HUD/TopBar/TopRow/FpsLabel
 @onready var _btn_cosmic_age: Button = $HUD/TopBar/TopRow/BtnCosmicAge
 @onready var _btn_laws: Button = $HUD/TopBar/TopRow/BtnLaws
+@onready var _sep_pins: VSeparator = $HUD/TopBar/TopRow/SepPins
+@onready var _pin_row: HBoxContainer = $HUD/TopBar/TopRow/PinRow
+@onready var _pin_buttons: Array[Button] = [
+	$HUD/TopBar/TopRow/PinRow/BtnPin0,
+	$HUD/TopBar/TopRow/PinRow/BtnPin1,
+	$HUD/TopBar/TopRow/PinRow/BtnPin2,
+	$HUD/TopBar/TopRow/PinRow/BtnPin3,
+]
 
 @onready var _inspector_panel: PanelContainer = $HUD/InspectorPanel
 @onready var _entity_header_label: Label = $HUD/InspectorPanel/InspectorBox/EntityHeaderLabel
 @onready var _entity_detail_label: Label = $HUD/InspectorPanel/InspectorBox/EntityDetailLabel
+@onready var _bar_track: ColorRect = $HUD/InspectorPanel/InspectorBox/BarTrack
+@onready var _bar_fill: ColorRect = $HUD/InspectorPanel/InspectorBox/BarTrack/BarFill
 @onready var _entity_extra_label: Label = $HUD/InspectorPanel/InspectorBox/EntityExtraLabel
 @onready var _memory_label: Label = $HUD/InspectorPanel/InspectorBox/MemoryLabel
 @onready var _btn_possess: Button = $HUD/InspectorPanel/InspectorBox/BtnPossess
@@ -145,42 +161,42 @@ const TUNING_KNOBS := {
 @onready var _metrics_label: Label = $HUD/InspectorPanel/InspectorBox/MetricsLabel
 
 @onready var _bottom_dock: PanelContainer = $HUD/BottomDock
-@onready var _btn_tab_earth: Button = $HUD/BottomDock/DockRow/TabsRow/BtnTabEarth
-@onready var _btn_tab_weather: Button = $HUD/BottomDock/DockRow/TabsRow/BtnTabWeather
-@onready var _btn_tab_war: Button = $HUD/BottomDock/DockRow/TabsRow/BtnTabWar
-@onready var _btn_tab_evo: Button = $HUD/BottomDock/DockRow/TabsRow/BtnTabEvo
-@onready var _group_earth: HBoxContainer = $HUD/BottomDock/DockRow/GroupEarth
-@onready var _group_weather: HBoxContainer = $HUD/BottomDock/DockRow/GroupWeather
-@onready var _group_war: HBoxContainer = $HUD/BottomDock/DockRow/GroupWar
-@onready var _group_evo: HBoxContainer = $HUD/BottomDock/DockRow/GroupEvo
+@onready var _btn_tab_earth: Button = $HUD/BottomDock/DockCols/RowTop/TabsRow/BtnTabEarth
+@onready var _btn_tab_weather: Button = $HUD/BottomDock/DockCols/RowTop/TabsRow/BtnTabWeather
+@onready var _btn_tab_war: Button = $HUD/BottomDock/DockCols/RowTop/TabsRow/BtnTabWar
+@onready var _btn_tab_evo: Button = $HUD/BottomDock/DockCols/RowTop/TabsRow/BtnTabEvo
+@onready var _group_earth: HBoxContainer = $HUD/BottomDock/DockCols/RowBottom/GroupEarth
+@onready var _group_weather: HBoxContainer = $HUD/BottomDock/DockCols/RowBottom/GroupWeather
+@onready var _group_war: HBoxContainer = $HUD/BottomDock/DockCols/RowBottom/GroupWar
+@onready var _group_evo: HBoxContainer = $HUD/BottomDock/DockCols/RowBottom/GroupEvo
 
-@onready var _btn_terraform: Button = $HUD/BottomDock/DockRow/GroupEarth/BtnTerraform
-@onready var _btn_canal: Button = $HUD/BottomDock/DockRow/GroupEarth/BtnCanal
-@onready var _btn_crystal: Button = $HUD/BottomDock/DockRow/GroupEarth/BtnCrystal
-@onready var _btn_lava: Button = $HUD/BottomDock/DockRow/GroupEarth/BtnLava
-@onready var _btn_rain: Button = $HUD/BottomDock/DockRow/GroupWeather/BtnRain
-@onready var _btn_firestorm: Button = $HUD/BottomDock/DockRow/GroupWeather/BtnFirestorm
-@onready var _btn_ion_storm: Button = $HUD/BottomDock/DockRow/GroupWeather/BtnIonStorm
-@onready var _btn_diplo: Button = $HUD/BottomDock/DockRow/GroupWar/BtnDiplo
-@onready var _btn_orbital_strike: Button = $HUD/BottomDock/DockRow/GroupWar/BtnOrbitalStrike
-@onready var _btn_meteor: Button = $HUD/BottomDock/DockRow/GroupWar/BtnMeteor
-@onready var _btn_vortex: Button = $HUD/BottomDock/DockRow/GroupWar/BtnVortex
-@onready var _btn_ai_glitch: Button = $HUD/BottomDock/DockRow/GroupEvo/BtnAiGlitch
-@onready var _btn_xeno_virus: Button = $HUD/BottomDock/DockRow/GroupEvo/BtnXenoVirus
-@onready var _btn_bio_seeder: Button = $HUD/BottomDock/DockRow/GroupEvo/BtnBioSeeder
+@onready var _btn_terraform: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEarth/BtnTerraform
+@onready var _btn_canal: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEarth/BtnCanal
+@onready var _btn_crystal: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEarth/BtnCrystal
+@onready var _btn_lava: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEarth/BtnLava
+@onready var _btn_rain: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWeather/BtnRain
+@onready var _btn_firestorm: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWeather/BtnFirestorm
+@onready var _btn_ion_storm: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWeather/BtnIonStorm
+@onready var _btn_diplo: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWar/BtnDiplo
+@onready var _btn_orbital_strike: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWar/BtnOrbitalStrike
+@onready var _btn_meteor: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWar/BtnMeteor
+@onready var _btn_vortex: Button = $HUD/BottomDock/DockCols/RowBottom/GroupWar/BtnVortex
+@onready var _btn_ai_glitch: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEvo/BtnAiGlitch
+@onready var _btn_xeno_virus: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEvo/BtnXenoVirus
+@onready var _btn_bio_seeder: Button = $HUD/BottomDock/DockCols/RowBottom/GroupEvo/BtnBioSeeder
 
-@onready var _btn_colony: Button = $HUD/BottomDock/DockRow/BtnColony
-@onready var _btn_fac_human: Button = $HUD/BottomDock/DockRow/FactionRow/BtnFactionHuman
-@onready var _btn_fac_robot: Button = $HUD/BottomDock/DockRow/FactionRow/BtnFactionRobot
-@onready var _btn_fac_spore: Button = $HUD/BottomDock/DockRow/FactionRow/BtnFactionSpore
-@onready var _btn_size_4: Button = $HUD/BottomDock/DockRow/SizeRow/BtnSize4
-@onready var _btn_size_8: Button = $HUD/BottomDock/DockRow/SizeRow/BtnSize8
-@onready var _btn_size_16: Button = $HUD/BottomDock/DockRow/SizeRow/BtnSize16
-@onready var _btn_size_28: Button = $HUD/BottomDock/DockRow/SizeRow/BtnSize28
-@onready var _btn_size_48: Button = $HUD/BottomDock/DockRow/SizeRow/BtnSize48
-@onready var _btn_bless: Button = $HUD/BottomDock/DockRow/BtnBless
-@onready var _btn_inspect: Button = $HUD/BottomDock/DockRow/BtnInspect
-@onready var _btn_regen: Button = $HUD/BottomDock/DockRow/BtnRegen
+@onready var _btn_colony: Button = $HUD/BottomDock/DockCols/RowBottom/BtnColony
+@onready var _btn_fac_human: Button = $HUD/BottomDock/DockCols/RowTop/FactionRow/BtnFactionHuman
+@onready var _btn_fac_robot: Button = $HUD/BottomDock/DockCols/RowTop/FactionRow/BtnFactionRobot
+@onready var _btn_fac_spore: Button = $HUD/BottomDock/DockCols/RowTop/FactionRow/BtnFactionSpore
+@onready var _btn_size_4: Button = $HUD/BottomDock/DockCols/RowTop/SizeRow/BtnSize4
+@onready var _btn_size_8: Button = $HUD/BottomDock/DockCols/RowTop/SizeRow/BtnSize8
+@onready var _btn_size_16: Button = $HUD/BottomDock/DockCols/RowTop/SizeRow/BtnSize16
+@onready var _btn_size_28: Button = $HUD/BottomDock/DockCols/RowTop/SizeRow/BtnSize28
+@onready var _btn_size_48: Button = $HUD/BottomDock/DockCols/RowTop/SizeRow/BtnSize48
+@onready var _btn_bless: Button = $HUD/BottomDock/DockCols/RowBottom/BtnBless
+@onready var _btn_inspect: Button = $HUD/BottomDock/DockCols/RowBottom/BtnInspect
+@onready var _btn_regen: Button = $HUD/BottomDock/DockCols/RowBottom/BtnRegen
 
 var _current_brush: int = WorldTerrainScript.BrushMode.TERRAFORM_LIFE
 var _active_power_tab: int = POWER_TAB_EARTH
@@ -198,10 +214,17 @@ var _target_zoom: float = float(TUNING_KNOBS["ZOOM_DEFAULT"])
 var _cam_base_pos: Vector2 = Vector2(320.0, 180.0)
 var _cam_focus_active: bool = false
 var _cam_focus_target: Vector2 = Vector2(320.0, 180.0)
-var _panning_rmb: bool = false
+var _zoom_to_cursor_active: bool = false
+var _zoom_anchor_world: Vector2 = Vector2(320.0, 180.0)
+var _zoom_anchor_screen_off: Vector2 = Vector2.ZERO
+var _panning_drag: bool = false
+var _pan_drag_button: int = -1
+var _space_held: bool = false
+var _space_used_for_pan: bool = false
 var _painting_lmb: bool = false
 var _has_mouse_hover: bool = false
 var _hover_world_pos: Vector2 = Vector2(320.0, 180.0)
+var _prev_vortex_world_pos: Vector2 = Vector2(320.0, 180.0)
 
 var _locked_unit_uid: int = -1
 var _locked_city_id: int = -1
@@ -210,7 +233,13 @@ var _follow_locked_unit: bool = false
 var _last_inspect_unit_uid: int = -1
 var _possessing_uid: int = -1
 var _possess_pulse_queued: bool = false
+var _possess_action_queued: bool = false
+var _possess_alt_queued: bool = false
+var _possess_aim_pos: Vector2 = Vector2.ZERO
 var _possess_cooldown: float = 0.0
+var _regen_confirm_timer: float = 0.0
+var _fps_visible: bool = false
+var _watchlist_pins: Array[Dictionary] = []
 
 var _cosmic_age_id: int = 0
 var _cosmic_age_tint: Color = Color.WHITE
@@ -228,6 +257,7 @@ var _meteor_cooldown: float = 0.0
 var _bless_cooldown: float = 0.0
 var _storm_cooldown: float = 0.0
 var _evo_cooldown: float = 0.0
+var _settler_cooldown: float = 0.0
 var _terrain_hold_cooldown: float = 0.0
 var _vortex_terrain_cooldown: float = 0.0
 var _sfx_cooldown: float = 0.0
@@ -241,6 +271,7 @@ var _smoke_mode: bool = false
 var _smoke_civ_mode: bool = false
 var _smoke_combat_mode: bool = false
 var _smoke_worldbox_pace_mode: bool = false
+var _smoke_parity_mode: bool = false
 var _screenshot_path: String = ""
 var _zoom_shot_path: String = ""
 var _shot_civ_path: String = ""
@@ -251,6 +282,22 @@ var _capturing_now: bool = false
 var _showcase_anchor: Vector2 = Vector2(320.0, 180.0)
 var _combat_shot_ctx: Dictionary = {}
 var _world_laws_ui: RefCounted = null
+var _hud_windows: RefCounted = null
+var _brush_shape: int = 0
+var _architect_mood_id: int = 0
+var _architect_palette: Dictionary = {}
+var _ocean_clear_color: Color = Color("#0D2147")
+var _fx_strips_tex: Texture2D = null
+var _last_brush_world_pos: Vector2 = Vector2.ZERO
+var _has_last_brush_pos: bool = false
+var _drop_cooldown: float = 0.0
+var _magnet_hold_active: bool = false
+var _magnet_prev_pos: Vector2 = Vector2.ZERO
+var _magnet_vel: Vector2 = Vector2.ZERO
+var _flick_dragging: bool = false
+var _flick_start_pos: Vector2 = Vector2.ZERO
+var _hud_sel_sig: String = ""
+var _hud_sel_timer: float = 0.0
 
 var _style_panel: StyleBoxFlat
 var _style_btn_normal: StyleBoxFlat
@@ -272,7 +319,7 @@ var _cosmic_age_styles: Array[StyleBoxFlat] = []
 
 
 func _ready() -> void:
-	RenderingServer.set_default_clear_color(Color("#080E18"))
+	_refresh_ocean_clear_color()
 	get_viewport().use_hdr_2d = true
 
 	_shake_noise.seed = 4421
@@ -283,9 +330,10 @@ func _ready() -> void:
 	_apply_hud_theme()
 	_wire_ui()
 	_setup_world_laws_ui()
+	_setup_hud_windows()
+	_load_fx_strips_atlas()
 
 	_world_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_reticle.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_camera.ignore_rotation = false
 	_cam_base_pos = Vector2(float(_world.map_w) * 0.5, float(_world.map_h) * 0.5)
 	_camera.position = _cam_base_pos.round()
@@ -293,10 +341,13 @@ func _ready() -> void:
 	if _fx != null and _fx.has_method("set_camera_center_x"):
 		_fx.set_camera_center_x(_cam_base_pos.x)
 
-	_reticle.draw.connect(_on_reticle_draw)
 	_world_overlay.draw.connect(_on_world_overlay_draw)
+	if _world_border_mask != null:
+		_world_border_mask.draw.connect(_on_world_border_mask_draw)
 	_macro_badges.draw.connect(_on_macro_badges_draw)
 
+	if _world.has_method("set_fx_audio"):
+		_world.set_fx_audio(_fx)
 	if _world.has_signal("region_changed"):
 		_world.region_changed.connect(_on_world_region_changed)
 	if _world.has_signal("cosmic_age_changed"):
@@ -319,7 +370,7 @@ func _ready() -> void:
 		_broadcast_world_laws(_world_laws_ui.get_laws())
 
 	_select_power_tab(POWER_TAB_EARTH, false)
-	_select_brush(WorldTerrainScript.BrushMode.TERRAFORM_LIFE)
+	_select_brush(BRUSH_INSPECT)
 	_select_faction(0)
 	_select_brush_size(int(TUNING_KNOBS["BRUSH_SIZE_M"]))
 	_set_sim_speed(1.0)
@@ -337,12 +388,19 @@ func _ready() -> void:
 		call_deferred("_run_headless_smoke_combat")
 	elif _smoke_worldbox_pace_mode:
 		call_deferred("_run_headless_smoke_worldbox_pace")
+	elif _smoke_parity_mode:
+		call_deferred("_run_headless_smoke_parity")
 	elif _is_capture_mode():
 		_prepare_capture_mode()
 
 
 func _exit_tree() -> void:
 	_combat_shot_ctx.clear()
+	_architect_palette.clear()
+	_fx_strips_tex = null
+	if _hud_windows != null:
+		_hud_windows.dispose()
+		_hud_windows = null
 	if _world_laws_ui != null:
 		_world_laws_ui.dispose()
 		_world_laws_ui = null
@@ -435,7 +493,7 @@ func _apply_hud_theme() -> void:
 
 	var text_main := Color("#E2ECF5")
 	var text_accent := Color("#7CE7FF")
-	for lbl in [_colonists_label, _cities_label, _tech_label, _wars_label, _flora_label, _temp_label, _fps_label]:
+	for lbl in [_colonists_label, _cities_label, _tech_label, _wars_label, _fps_label]:
 		lbl.add_theme_font_size_override("font_size", 11)
 		lbl.add_theme_color_override("font_color", text_main)
 	_planet_label.add_theme_font_size_override("font_size", 11)
@@ -450,7 +508,7 @@ func _apply_hud_theme() -> void:
 	_memory_label.add_theme_color_override("font_color", Color("#A8B8C8"))
 
 	var all_buttons: Array[Button] = [
-		_btn_light_day, _btn_light_dusk, _btn_light_night, _btn_light_cycle,
+		_btn_light_mode,
 		_btn_speed_0, _btn_speed_1, _btn_speed_3, _btn_speed_5, _btn_speed_20, _btn_cosmic_age,
 		_btn_possess,
 		_btn_terraform, _btn_canal, _btn_crystal, _btn_lava,
@@ -469,15 +527,19 @@ func _apply_hud_theme() -> void:
 		btn.add_theme_stylebox_override("normal", _style_btn_normal)
 		btn.add_theme_stylebox_override("hover", _style_btn_hover)
 		var pressed_box := _style_btn_pressed_cyan
-		if btn in [_btn_lava, _btn_meteor, _btn_firestorm, _btn_light_dusk]:
+		if btn in [_btn_lava, _btn_meteor, _btn_firestorm]:
 			pressed_box = _style_btn_pressed_warm
 		elif btn in [_btn_fac_robot, _btn_diplo]:
 			pressed_box = _style_btn_pressed_robot
 		elif btn in [_btn_fac_spore, _btn_xeno_virus]:
 			pressed_box = _style_btn_pressed_spore
-		elif btn in [_btn_bless, _btn_light_day, _btn_bio_seeder, _btn_orbital_strike]:
+		elif btn in [_btn_bless, _btn_bio_seeder, _btn_orbital_strike]:
 			pressed_box = _style_btn_pressed_gold
 		btn.add_theme_stylebox_override("pressed", pressed_box)
+	for pbtn in _pin_buttons:
+		pbtn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		pbtn.add_theme_font_size_override("font_size", 9)
+		pbtn.add_theme_color_override("font_color", Color("#0D1520"))
 
 	for tbtn in [_btn_tab_earth, _btn_tab_weather, _btn_tab_war, _btn_tab_evo]:
 		tbtn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -513,7 +575,7 @@ func _lock_dock_group_widths() -> void:
 	for grp in groups:
 		grp.custom_minimum_size.x = 0.0
 		max_w = maxf(max_w, grp.get_combined_minimum_size().x)
-	max_w = clampf(max_w, 224.0, 280.0)
+	max_w = clampf(max_w, 196.0, 248.0)
 	for grp in groups:
 		grp.custom_minimum_size.x = max_w
 		grp.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -528,6 +590,8 @@ func _sync_hud_layouts() -> void:
 	_sync_inspector_layout()
 	if _world_laws_ui != null:
 		_world_laws_ui.sync_anchors(_top_bar, _inspector_panel)
+	if _hud_windows != null:
+		_hud_windows.sync_layouts()
 
 
 func _sync_inspector_layout() -> void:
@@ -545,6 +609,110 @@ func _setup_world_laws_ui() -> void:
 	_btn_laws.pressed.connect(_on_laws_button_pressed)
 	_world_laws_ui.laws_changed.connect(_on_world_laws_changed)
 	_world_laws_ui.chronicle_focus_requested.connect(_on_chronicle_focus_requested)
+	if _world_laws_ui.has_signal("chronicle_event_logged"):
+		_world_laws_ui.chronicle_event_logged.connect(_on_chronicle_event_logged)
+
+
+func _load_fx_strips_atlas() -> void:
+	if ResourceLoader.exists(FX_STRIPS_PNG_PATH):
+		_fx_strips_tex = load(FX_STRIPS_PNG_PATH) as Texture2D
+
+
+func _setup_hud_windows() -> void:
+	_hud_windows = HudWindowsScript.new()
+	_hud_windows.setup($HUD, {
+		"main": self,
+		"world": _world,
+		"civ": _civ,
+		"physics": _physics,
+		"fx": _fx,
+		"laws_ui": _world_laws_ui,
+		"bottom_dock": _bottom_dock,
+		"top_bar": _top_bar,
+	})
+	_hud_windows.tool_requested.connect(_on_hud_tool_requested)
+	_hud_windows.shape_changed.connect(_on_hud_shape_changed)
+	_hud_windows.lens_changed.connect(_on_hud_lens_changed)
+	_hud_windows.template_regen_requested.connect(_on_hud_template_regen_requested)
+	_hud_windows.speed_requested.connect(_on_hud_speed_requested)
+	_hud_windows.selection_cleared.connect(_on_hud_selection_cleared)
+	_hud_windows.follow_requested.connect(_on_hud_follow_requested)
+	_hud_windows.possess_requested.connect(_on_hud_possess_requested)
+	_hud_windows.pin_requested.connect(_on_hud_pin_requested)
+	_hud_windows.architect_mood_changed.connect(_on_hud_architect_mood_changed)
+	_architect_palette = _hud_windows.get_architect_mood_info()
+
+
+func _on_chronicle_event_logged(ev_kind: String) -> void:
+	if _hud_windows != null:
+		_hud_windows.notify_chronicle_event(ev_kind)
+
+
+func _on_hud_tool_requested(tool_id: int) -> void:
+	_select_brush(tool_id)
+
+
+func _on_hud_shape_changed(shape_id: int) -> void:
+	_brush_shape = clampi(shape_id, 0, 3)
+	_world_overlay.queue_redraw()
+
+
+func _on_hud_lens_changed(lens_id: int) -> void:
+	if _civ != null and _civ.has_method("set_map_lens"):
+		_civ.set_map_lens(lens_id)
+	_world_overlay.queue_redraw()
+	_macro_badges.queue_redraw()
+
+
+func _on_hud_template_regen_requested(template_id: int) -> void:
+	_regenerate_world_with_template(template_id)
+
+
+func _on_hud_speed_requested(speed_val: float) -> void:
+	_set_sim_speed(speed_val)
+
+
+func _on_hud_selection_cleared() -> void:
+	_clear_inspector_lock()
+	_hud_sel_sig = ""
+	_update_hud_telemetry()
+	_world_overlay.queue_redraw()
+
+
+func _on_hud_follow_requested(kind: String, entity_id: int, world_pos: Vector2) -> void:
+	if kind == "unit" and entity_id >= 0:
+		_locked_unit_uid = entity_id
+		_locked_city_id = -1
+		_follow_locked_unit = true
+		_cam_focus_active = false
+	elif kind == "city" and entity_id >= 0:
+		_locked_unit_uid = -1
+		_locked_city_id = entity_id
+		_locked_city_pos = world_pos
+		_follow_locked_unit = false
+		_cam_focus_target = _clamp_to_world(world_pos, 16.0)
+		_cam_focus_active = true
+	_hud_sel_sig = ""
+	_update_hud_telemetry()
+	_world_overlay.queue_redraw()
+
+
+func _on_hud_possess_requested(unit_uid: int) -> void:
+	if _possessing_uid >= 0 and (unit_uid < 0 or unit_uid == _possessing_uid):
+		_exit_possession()
+		_update_hud_telemetry()
+	elif unit_uid >= 0:
+		_enter_possession(unit_uid)
+
+
+func _on_hud_pin_requested() -> void:
+	_pin_current_selection()
+
+
+func _on_hud_architect_mood_changed(mood_id: int, palette: Dictionary) -> void:
+	_architect_mood_id = mood_id
+	_architect_palette = palette.duplicate(true)
+	_world_overlay.queue_redraw()
 
 
 func _apply_sim_pace(mult: float) -> void:
@@ -580,10 +748,10 @@ func _on_chronicle_focus_requested(world_pos: Vector2) -> void:
 
 
 func _wire_ui() -> void:
-	_btn_light_day.pressed.connect(func() -> void: _on_light_clicked(LightMode.DAY))
-	_btn_light_dusk.pressed.connect(func() -> void: _on_light_clicked(LightMode.DUSK))
-	_btn_light_night.pressed.connect(func() -> void: _on_light_clicked(LightMode.NIGHT))
-	_btn_light_cycle.pressed.connect(func() -> void: _on_light_clicked(LightMode.CYCLE))
+	_btn_light_mode.pressed.connect(_on_light_mode_cycled)
+	for idx in range(_pin_buttons.size()):
+		var slot_idx := idx
+		_pin_buttons[idx].pressed.connect(func() -> void: _focus_watchlist_slot(slot_idx))
 
 	_btn_speed_0.pressed.connect(func() -> void: _on_speed_clicked(0.0))
 	_btn_speed_1.pressed.connect(func() -> void: _on_speed_clicked(1.0))
@@ -640,8 +808,8 @@ func _on_world_region_changed(rect: Rect2i) -> void:
 		_physics.sync_flora_region(rect)
 
 
-func _on_light_clicked(mode: int) -> void:
-	_set_light_mode(mode)
+func _on_light_mode_cycled() -> void:
+	_set_light_mode((_light_mode + 1) % 4)
 	_fx.play_sfx("ui")
 
 
@@ -651,13 +819,22 @@ func _on_speed_clicked(speed: float) -> void:
 
 
 func _on_brush_clicked(mode: int) -> void:
-	_select_brush(mode)
+	if mode == _current_brush and mode != BRUSH_INSPECT:
+		_select_brush(BRUSH_INSPECT)
+	else:
+		_select_brush(mode)
 	_fx.play_sfx("ui")
 
 
 func _on_faction_clicked(faction_id: int) -> void:
-	_select_faction(faction_id)
-	_select_brush(BRUSH_COLONY)
+	var target_fac := posmod(faction_id, FACTION_RETICLE_COLORS.size())
+	if _current_brush == BRUSH_SETTLERS and _selected_faction == target_fac:
+		_select_brush(BRUSH_INSPECT)
+	elif _current_brush == BRUSH_COLONY and _selected_faction != target_fac:
+		_select_faction(target_fac)
+	else:
+		_select_faction(target_fac)
+		_select_brush(BRUSH_SETTLERS)
 	_fx.play_sfx("ui")
 
 
@@ -666,15 +843,44 @@ func _on_size_clicked(radius: int) -> void:
 	_fx.play_sfx("ui")
 
 
+func _reset_regen_confirm() -> void:
+	_regen_confirm_timer = 0.0
+	if _btn_regen != null:
+		_btn_regen.text = "Новый мир"
+		_btn_regen.add_theme_stylebox_override("normal", _style_btn_normal)
+
+
 func _on_regen_pressed() -> void:
+	if _regen_confirm_timer <= 0.0:
+		_regen_confirm_timer = 3.0
+		_btn_regen.text = "Точно?"
+		_btn_regen.add_theme_stylebox_override("normal", _style_btn_pressed_warm)
+		_fx.play_sfx("ui")
+		return
+	_regenerate_world_with_template(-1)
+
+
+func _regenerate_world_with_template(template_id: int) -> void:
+	_reset_regen_confirm()
 	_seed_counter += 1
 	_trauma = 0.0
 	_hit_stop_timer = 0.0
+	_has_last_brush_pos = false
+	_magnet_hold_active = false
+	_flick_dragging = false
 	_exit_possession()
 	_clear_inspector_lock()
-	_world.generate_planet(_seed_counter)
+	_watchlist_pins.clear()
+	_sync_pin_buttons()
+	if template_id >= 0 and _world.has_method("generate_planet_with_template"):
+		_world.generate_planet_with_template(_seed_counter, template_id)
+	else:
+		_world.generate_planet(_seed_counter)
 	_sync_cosmic_age_state()
 	_apply_orbital_lighting(_orbital_phase, _night_mix)
+	_update_hud_telemetry()
+	_world_overlay.queue_redraw()
+	_macro_badges.queue_redraw()
 	_fx.play_sfx("ui")
 
 
@@ -711,7 +917,10 @@ func _sync_cosmic_age_state() -> void:
 			_cosmic_age_tint,
 			_cosmic_age_tint_strength
 		)
+	if _fx != null and _fx.has_method("set_ambient_age"):
+		_fx.set_ambient_age(_cosmic_age_id)
 	_refresh_cosmic_age_ui(info)
+	_refresh_ocean_clear_color()
 
 
 func _refresh_cosmic_age_ui(info: Dictionary = {}) -> void:
@@ -755,13 +964,14 @@ func _enter_possession(uid: int) -> void:
 	_follow_locked_unit = true
 	_painting_lmb = false
 	_possess_pulse_queued = false
+	_possess_action_queued = false
+	_possess_alt_queued = false
 	_btn_possess.visible = true
 	_btn_possess.button_pressed = true
 	_btn_possess.text = "Выйти [Esc]"
 	if _physics.has_method("set_possessed_unit"):
 		_physics.set_possessed_unit(uid, Vector2.ZERO, false)
 	_fx.play_sfx("ui")
-	_reticle.queue_redraw()
 	_world_overlay.queue_redraw()
 	_update_hud_telemetry()
 
@@ -771,11 +981,11 @@ func _exit_possession() -> void:
 		_physics.set_possessed_unit(-1, Vector2.ZERO, false)
 	_possessing_uid = -1
 	_possess_pulse_queued = false
+	_possess_action_queued = false
+	_possess_alt_queued = false
 	if _btn_possess != null:
 		_btn_possess.button_pressed = false
 		_btn_possess.text = "Взять управление [P]"
-	if _reticle != null:
-		_reticle.queue_redraw()
 	if _world_overlay != null:
 		_world_overlay.queue_redraw()
 
@@ -792,23 +1002,27 @@ func _on_impact_trauma(trauma: float, hit_stop_sec: float) -> void:
 
 func _set_light_mode(mode: int) -> void:
 	_light_mode = clampi(mode, LightMode.DAY, LightMode.CYCLE)
-	_btn_light_day.button_pressed = (_light_mode == LightMode.DAY)
-	_btn_light_dusk.button_pressed = (_light_mode == LightMode.DUSK)
-	_btn_light_night.button_pressed = (_light_mode == LightMode.NIGHT)
-	_btn_light_cycle.button_pressed = (_light_mode == LightMode.CYCLE)
 	match _light_mode:
 		LightMode.DAY:
 			_orbital_phase = 0.0
 			_night_mix = 0.0
+			_btn_light_mode.text = "День"
+			_btn_light_mode.add_theme_stylebox_override("normal", _style_btn_normal)
 		LightMode.DUSK:
 			_orbital_phase = 0.27
 			_night_mix = 0.48
+			_btn_light_mode.text = "Закат"
+			_btn_light_mode.add_theme_stylebox_override("normal", _style_btn_pressed_warm)
 		LightMode.NIGHT:
 			_orbital_phase = 0.46
 			_night_mix = 0.80
+			_btn_light_mode.text = "Ночь"
+			_btn_light_mode.add_theme_stylebox_override("normal", _style_btn_pressed_cyan)
 		LightMode.CYCLE:
 			var raw_nm := 0.5 - 0.5 * cos(_orbital_phase * TAU)
 			_night_mix = pow(clampf(raw_nm, 0.0, 1.0), 1.35) * 0.84
+			_btn_light_mode.text = "Цикл"
+			_btn_light_mode.add_theme_stylebox_override("normal", _style_btn_pressed_gold)
 	_apply_orbital_lighting(_orbital_phase, _night_mix)
 
 
@@ -832,32 +1046,95 @@ func _apply_orbital_lighting(phase: float, night_mix: float) -> void:
 	if _physics != null and _physics.has_method("set_day_phase"):
 		_physics.set_day_phase(phase, nm)
 
-	if _canvas_modulate != null:
-		var day_c := Color(1.0, 1.0, 1.0, 1.0)
-		var dusk_c := Color(1.0, 0.93, 0.86, 1.0)
-		var night_c := Color(0.84, 0.88, 0.98, 1.0)
-		var mid_c := day_c.lerp(dusk_c, dusk * 0.65)
-		_canvas_modulate.color = mid_c.lerp(night_c, nm)
-
 	if _world_env != null and _world_env.environment != null:
 		var env: Environment = _world_env.environment
 		env.glow_intensity = lerpf(0.85, 0.98, maxf(nm, dusk * 0.5))
 		env.glow_bloom = lerpf(0.14, 0.21, maxf(nm, dusk * 0.6))
+	_refresh_ocean_clear_color()
+
+
+func _compute_ocean_clear_color() -> Color:
+	var abyss: Color = WorldTerrainScript.COL_DEEP_ABYSS
+	var r := abyss.r * 0.96
+	var g := abyss.g * 0.98
+	var b := abyss.b * 1.02
+	var at_str := clampf(_cosmic_age_tint_strength, 0.0, 1.0)
+	if at_str > 0.001:
+		r = lerpf(r, r * maxf(_cosmic_age_tint.r, 0.0), at_str)
+		g = lerpf(g, g * maxf(_cosmic_age_tint.g, 0.0), at_str)
+		b = lerpf(b, b * maxf(_cosmic_age_tint.b, 0.0), at_str)
+	r = minf(r, 0.95)
+	g = minf(g, 0.95)
+	b = minf(b, 0.95)
+	var nm := clampf(_night_mix, 0.0, 1.0)
+	var dusk := sin(nm * PI)
+	if nm > 0.001 or dusk > 0.001:
+		var dr := r * 1.10
+		var dg := g * 0.79
+		var db := b * 0.65
+		var nr := maxf(r * 0.28, 0.030)
+		var ng := maxf(g * 0.36, 0.042)
+		var nb := maxf(b * 0.62, 0.072)
+		var orb := lerpf(1.0, 0.92 + 0.08 * sin(_orbital_phase * TAU), maxf(nm, dusk))
+		r = minf(lerpf(lerpf(r, dr, dusk * 0.46), nr, nm) * orb, 0.95)
+		g = minf(lerpf(lerpf(g, dg, dusk * 0.46), ng, nm) * orb, 0.95)
+		b = minf(lerpf(lerpf(b, db, dusk * 0.46), nb, nm) * orb, 0.95)
+	return Color(r, g, b, 1.0)
+
+
+func _refresh_ocean_clear_color() -> void:
+	_ocean_clear_color = _compute_ocean_clear_color()
+	RenderingServer.set_default_clear_color(_ocean_clear_color)
+	if _world_border_mask != null:
+		_world_border_mask.queue_redraw()
+
+
+func _on_world_border_mask_draw() -> void:
+	if _world_border_mask == null or _world == null:
+		return
+	var mw := float(_world.map_w)
+	var mh := float(_world.map_h)
+	var m := 2048.0
+	_world_border_mask.draw_rect(Rect2(-m, -m, mw + m * 2.0, m), _ocean_clear_color, true)
+	_world_border_mask.draw_rect(Rect2(-m, mh, mw + m * 2.0, m), _ocean_clear_color, true)
+	_world_border_mask.draw_rect(Rect2(-m, 0.0, m, mh), _ocean_clear_color, true)
+	_world_border_mask.draw_rect(Rect2(mw, 0.0, m, mh), _ocean_clear_color, true)
 
 
 func _set_sim_speed(speed: float) -> void:
 	_sim_speed = speed
 	if speed > 0.0:
 		_last_nonzero_speed = speed
+	var target_pace := 2.0 if speed >= 35.0 else 1.0
+	if not is_equal_approx(_sim_pace_mult, target_pace):
+		_apply_sim_pace(target_pace)
 	_btn_speed_0.button_pressed = is_zero_approx(speed)
 	_btn_speed_1.button_pressed = is_equal_approx(speed, 1.0)
 	_btn_speed_3.button_pressed = is_equal_approx(speed, 3.0)
 	_btn_speed_5.button_pressed = is_equal_approx(speed, 5.0)
 	_btn_speed_20.button_pressed = is_equal_approx(speed, 20.0)
+	if _hud_windows != null:
+		_hud_windows.sync_sim_speed(speed)
+
+
+func _is_power_tab_group_visible(tab_id: int) -> bool:
+	match tab_id:
+		POWER_TAB_EARTH:
+			return _group_earth != null and _group_earth.visible
+		POWER_TAB_WEATHER:
+			return _group_weather != null and _group_weather.visible
+		POWER_TAB_WAR:
+			return _group_war != null and _group_war.visible
+		POWER_TAB_EVO:
+			return _group_evo != null and _group_evo.visible
+	return false
 
 
 func _on_tab_clicked(tab_id: int) -> void:
-	_select_power_tab(tab_id, true)
+	if tab_id == _active_power_tab and _is_power_tab_group_visible(tab_id) and _tab_for_brush(_current_brush) == tab_id:
+		_select_brush(BRUSH_INSPECT)
+	else:
+		_select_power_tab(tab_id, false)
 	_fx.play_sfx("ui")
 
 
@@ -912,37 +1189,48 @@ func _select_active_tab_slot(slot_idx: int) -> void:
 		_fx.play_sfx("ui")
 
 
+func _sync_faction_buttons() -> void:
+	var fac_active := (_current_brush == BRUSH_SETTLERS or _current_brush == BRUSH_COLONY)
+	_btn_fac_human.set_pressed_no_signal(fac_active and _selected_faction == 0)
+	_btn_fac_robot.set_pressed_no_signal(fac_active and _selected_faction == 1)
+	_btn_fac_spore.set_pressed_no_signal(fac_active and _selected_faction == 2)
+
+
 func _select_brush(mode: int) -> void:
 	_current_brush = mode
+	_magnet_hold_active = false
+	_flick_dragging = false
+	_has_last_brush_pos = false
 	var owner_tab := _tab_for_brush(mode)
 	if owner_tab >= 0 and owner_tab != _active_power_tab:
 		_select_power_tab(owner_tab, false)
-	_btn_terraform.button_pressed = (mode == WorldTerrainScript.BrushMode.TERRAFORM_LIFE)
-	_btn_canal.button_pressed = (mode == BRUSH_CANAL)
-	_btn_crystal.button_pressed = (mode == WorldTerrainScript.BrushMode.CRYSTAL_FLORA)
-	_btn_lava.button_pressed = (mode == WorldTerrainScript.BrushMode.LAVA_VOLCANO)
-	_btn_rain.button_pressed = (mode == BRUSH_STORM_RAIN)
-	_btn_firestorm.button_pressed = (mode == BRUSH_STORM_FIRE)
-	_btn_ion_storm.button_pressed = (mode == BRUSH_STORM_ION)
-	_btn_diplo.button_pressed = (mode == BRUSH_DIPLO_SPARK)
-	_btn_orbital_strike.button_pressed = (mode == BRUSH_ORBITAL_STRIKE)
-	_btn_meteor.button_pressed = (mode == WorldTerrainScript.BrushMode.METEOR_CRATER)
-	_btn_vortex.button_pressed = (mode == WorldTerrainScript.BrushMode.VORTEX_PULL)
-	_btn_ai_glitch.button_pressed = (mode == BRUSH_AI_GLITCH)
-	_btn_xeno_virus.button_pressed = (mode == BRUSH_XENO_VIRUS)
-	_btn_bio_seeder.button_pressed = (mode == BRUSH_BIO_SEEDER)
-	_btn_colony.button_pressed = (mode == BRUSH_COLONY)
-	_btn_bless.button_pressed = (mode == BRUSH_BLESS)
-	_btn_inspect.button_pressed = (mode == BRUSH_INSPECT)
-	_reticle.queue_redraw()
+	_btn_terraform.set_pressed_no_signal(mode == WorldTerrainScript.BrushMode.TERRAFORM_LIFE)
+	_btn_canal.set_pressed_no_signal(mode == BRUSH_CANAL)
+	_btn_crystal.set_pressed_no_signal(mode == WorldTerrainScript.BrushMode.CRYSTAL_FLORA)
+	_btn_lava.set_pressed_no_signal(mode == WorldTerrainScript.BrushMode.LAVA_VOLCANO)
+	_btn_rain.set_pressed_no_signal(mode == BRUSH_STORM_RAIN)
+	_btn_firestorm.set_pressed_no_signal(mode == BRUSH_STORM_FIRE)
+	_btn_ion_storm.set_pressed_no_signal(mode == BRUSH_STORM_ION)
+	_btn_diplo.set_pressed_no_signal(mode == BRUSH_DIPLO_SPARK)
+	_btn_orbital_strike.set_pressed_no_signal(mode == BRUSH_ORBITAL_STRIKE)
+	_btn_meteor.set_pressed_no_signal(mode == WorldTerrainScript.BrushMode.METEOR_CRATER)
+	_btn_vortex.set_pressed_no_signal(mode == WorldTerrainScript.BrushMode.VORTEX_PULL)
+	_btn_ai_glitch.set_pressed_no_signal(mode == BRUSH_AI_GLITCH)
+	_btn_xeno_virus.set_pressed_no_signal(mode == BRUSH_XENO_VIRUS)
+	_btn_bio_seeder.set_pressed_no_signal(mode == BRUSH_BIO_SEEDER)
+	_btn_colony.set_pressed_no_signal(mode == BRUSH_COLONY)
+	_btn_bless.set_pressed_no_signal(mode == BRUSH_BLESS)
+	_btn_inspect.set_pressed_no_signal(mode == BRUSH_INSPECT)
+	_sync_faction_buttons()
+	if _hud_windows != null:
+		_hud_windows.sync_active_tool(mode)
+	_world_overlay.queue_redraw()
 
 
 func _select_faction(faction_id: int) -> void:
 	_selected_faction = posmod(faction_id, FACTION_RETICLE_COLORS.size())
-	_btn_fac_human.button_pressed = (_selected_faction == 0)
-	_btn_fac_robot.button_pressed = (_selected_faction == 1)
-	_btn_fac_spore.button_pressed = (_selected_faction == 2)
-	_reticle.queue_redraw()
+	_sync_faction_buttons()
+	_world_overlay.queue_redraw()
 
 
 func _select_brush_size(radius: int) -> void:
@@ -952,7 +1240,7 @@ func _select_brush_size(radius: int) -> void:
 	_btn_size_16.button_pressed = (radius == int(TUNING_KNOBS["BRUSH_SIZE_M"]))
 	_btn_size_28.button_pressed = (radius == int(TUNING_KNOBS["BRUSH_SIZE_L"]))
 	_btn_size_48.button_pressed = (radius == int(TUNING_KNOBS["BRUSH_SIZE_XL"]))
-	_reticle.queue_redraw()
+	_world_overlay.queue_redraw()
 
 
 func _clear_inspector_lock() -> void:
@@ -984,6 +1272,8 @@ func _parse_cli_args() -> void:
 			_smoke_combat_mode = true
 		elif arg == "--smoke-worldbox-pace":
 			_smoke_worldbox_pace_mode = true
+		elif arg == "--smoke-parity":
+			_smoke_parity_mode = true
 		elif arg.begins_with("--screenshot="):
 			_screenshot_path = _extract_cli_value(arg, "--screenshot=")
 		elif arg.begins_with("--shot-macro="):
@@ -1021,6 +1311,8 @@ func _is_capture_mode() -> bool:
 
 
 func pack_world_state() -> Dictionary:
+	var world_blob: PackedByteArray = _world.export_raw_state() if (_world != null and _world.has_method("export_raw_state")) else PackedByteArray()
+	var phys_blob: PackedByteArray = _physics.pack_state() if (_physics != null and _physics.has_method("pack_state")) else PackedByteArray()
 	return {
 		"magic": SAVE_MAGIC,
 		"version": SAVE_VERSION,
@@ -1033,29 +1325,46 @@ func pack_world_state() -> Dictionary:
 		"active_power_tab": _active_power_tab,
 		"current_brush": _current_brush,
 		"brush_radius": _brush_radius,
+		"brush_shape": _brush_shape,
+		"map_lens": _civ.get_map_lens() if _civ != null and _civ.has_method("get_map_lens") else 0,
+		"architect_mood": _architect_mood_id,
+		"sim_pace_mult": _sim_pace_mult,
 		"camera_pos": _cam_base_pos,
 		"target_zoom": _target_zoom,
 		"world_laws": _world_laws_ui.get_laws() if _world_laws_ui != null else {},
+		"world_blob": world_blob,
+		"physics_blob": phys_blob,
 		"civ_blob": _civ.pack_state() if _civ != null and _civ.has_method("pack_state") else PackedByteArray(),
 		"combat_blob": _combat.pack_state() if _combat != null and _combat.has_method("pack_state") else PackedByteArray(),
+		"possessing_uid": _possessing_uid,
+		"locked_unit_uid": _locked_unit_uid,
+		"locked_city_id": _locked_city_id,
+		"locked_city_pos": _locked_city_pos,
+		"watchlist_pins": _watchlist_pins.duplicate(true),
 	}
 
 
 func unpack_world_state(snapshot: Dictionary) -> bool:
 	if int(snapshot.get("magic", 0)) != SAVE_MAGIC:
 		return false
-	if int(snapshot.get("version", 0)) != SAVE_VERSION:
+	var ver: int = int(snapshot.get("version", 0))
+	if ver < 5 or ver > SAVE_VERSION:
 		return false
 	var civ_blob: PackedByteArray = snapshot.get("civ_blob", PackedByteArray())
 	var combat_blob: PackedByteArray = snapshot.get("combat_blob", PackedByteArray())
 	if civ_blob.is_empty() or combat_blob.is_empty():
 		return false
 
+	var world_blob: PackedByteArray = snapshot.get("world_blob", PackedByteArray())
+	var phys_blob: PackedByteArray = snapshot.get("physics_blob", PackedByteArray())
 	var saved_seed: int = int(snapshot.get("seed", _seed_counter))
-	if saved_seed != _seed_counter:
-		_seed_counter = saved_seed
+	var prev_seed := _seed_counter
+	_seed_counter = saved_seed
+	if not world_blob.is_empty() and _world != null and _world.has_method("import_raw_state"):
+		if not _world.import_raw_state(world_blob):
+			return false
+	elif saved_seed != prev_seed:
 		_world.generate_planet(_seed_counter)
-		_physics.rebuild_population(int(TUNING_KNOBS["POPULATION_COUNT"]))
 
 	if _world.has_method("set_cosmic_age"):
 		_world.set_cosmic_age(int(snapshot.get("cosmic_age", 0)), false)
@@ -1064,14 +1373,32 @@ func unpack_world_state(snapshot: Dictionary) -> bool:
 	if _civ != null and _civ.has_method("unpack_state"):
 		if not _civ.unpack_state(civ_blob):
 			return false
+	if not phys_blob.is_empty() and _physics != null and _physics.has_method("unpack_state"):
+		if not _physics.unpack_state(phys_blob):
+			return false
+		if _physics.has_method("sync_light_goals"):
+			_physics.sync_light_goals(_civ)
+	elif saved_seed != prev_seed:
+		_physics.rebuild_population(int(TUNING_KNOBS["POPULATION_COUNT"]))
 	if _combat != null and _combat.has_method("unpack_state"):
 		if not _combat.unpack_state(combat_blob):
 			return false
 
+	_restore_hud_and_pins_from_snapshot(snapshot)
+	return true
+
+
+func _restore_hud_and_pins_from_snapshot(snapshot: Dictionary) -> void:
 	_select_faction(int(snapshot.get("selected_faction", 0)))
 	_select_power_tab(int(snapshot.get("active_power_tab", POWER_TAB_EARTH)), false)
-	_select_brush(int(snapshot.get("current_brush", WorldTerrainScript.BrushMode.TERRAFORM_LIFE)))
+	_select_brush(int(snapshot.get("current_brush", BRUSH_INSPECT)))
 	_select_brush_size(int(snapshot.get("brush_radius", int(TUNING_KNOBS["BRUSH_SIZE_M"]))))
+	_brush_shape = clampi(int(snapshot.get("brush_shape", _brush_shape)), 0, 3)
+	_architect_mood_id = clampi(int(snapshot.get("architect_mood", _architect_mood_id)), 0, 8)
+	if _civ != null and _civ.has_method("set_map_lens"):
+		_civ.set_map_lens(int(snapshot.get("map_lens", 0)))
+	if snapshot.has("sim_pace_mult"):
+		_apply_sim_pace(float(snapshot.get("sim_pace_mult", _sim_pace_mult)))
 	_set_light_mode(int(snapshot.get("light_mode", LightMode.DAY)))
 	_orbital_phase = float(snapshot.get("orbital_phase", _orbital_phase))
 	_set_sim_speed(float(snapshot.get("sim_speed", 1.0)))
@@ -1086,11 +1413,25 @@ func unpack_world_state(snapshot: Dictionary) -> bool:
 		float(TUNING_KNOBS["ZOOM_MIN"]),
 		float(TUNING_KNOBS["ZOOM_MAX"])
 	)
+	_possessing_uid = int(snapshot.get("possessing_uid", -1))
+	if _possessing_uid >= 0 and not bool(_physics.inspect_unit_by_id(_possessing_uid).get("found", false)):
+		_possessing_uid = -1
+	_locked_unit_uid = int(snapshot.get("locked_unit_uid", -1))
+	_locked_city_id = int(snapshot.get("locked_city_id", -1))
+	var lc_pos: Variant = snapshot.get("locked_city_pos", Vector2.ZERO)
+	_locked_city_pos = lc_pos if lc_pos is Vector2 else Vector2.ZERO
+	_follow_locked_unit = (_locked_unit_uid >= 0)
+	_watchlist_pins.clear()
+	var raw_pins: Variant = snapshot.get("watchlist_pins", [])
+	if raw_pins is Array:
+		for item in raw_pins:
+			if item is Dictionary and _watchlist_pins.size() < MAX_WATCHLIST_PINS:
+				_watchlist_pins.append((item as Dictionary).duplicate())
+	_sync_pin_buttons()
 	_update_hud_telemetry()
 	_sync_hud_layouts()
 	_world_overlay.queue_redraw()
 	_macro_badges.queue_redraw()
-	return true
 
 
 func save_world_to_file(path: String = DEFAULT_SAVE_PATH) -> bool:
@@ -1115,7 +1456,7 @@ func load_world_from_file(path: String = DEFAULT_SAVE_PATH) -> bool:
 	var magic := int(f.get_32())
 	var version := int(f.get_32())
 	var byte_len := int(f.get_32())
-	if magic != SAVE_MAGIC or version != SAVE_VERSION or byte_len <= 0 or byte_len > 16777216:
+	if magic != SAVE_MAGIC or version < 5 or version > SAVE_VERSION or byte_len <= 0 or byte_len > 16777216:
 		f.close()
 		return false
 	var payload := f.get_buffer(byte_len)
@@ -1777,13 +2118,13 @@ func _wb_count_upgraded_biodomes(tent_positions: Array[Vector2]) -> int:
 
 
 func _wb_sample_ecology(center: Vector2) -> Dictionary:
-	var cx: int = clampi(int(round(center.x)), 20, int(_world.map_w) - 21)
-	var cy: int = clampi(int(round(center.y)), 20, int(_world.map_h) - 21)
+	var cx: int = clampi(int(round(center.x)), 29, int(_world.map_w) - 30)
+	var cy: int = clampi(int(round(center.y)), 29, int(_world.map_h) - 30)
 	var temp_sum := 0.0
 	var moist_sum := 0.0
 	var lush_cnt := 0
-	for dy in range(-18, 19, 3):
-		for dx in range(-18, 19, 3):
+	for dy in range(-28, 29, 2):
+		for dx in range(-28, 29, 2):
 			var px := cx + dx
 			var py := cy + dy
 			temp_sum += float(_world.get_temp(px, py))
@@ -1793,12 +2134,11 @@ func _wb_sample_ecology(center: Vector2) -> Dictionary:
 	return {"temp_sum": temp_sum, "moist_sum": moist_sum, "lush_cnt": lush_cnt}
 
 
-func _wb_calc_eco_delta(before: Dictionary, after: Dictionary, civ_stats: Dictionary) -> float:
+func _wb_calc_eco_delta(before: Dictionary, after: Dictionary) -> float:
 	var dt := absf(float(after.get("temp_sum", 0.0)) - float(before.get("temp_sum", 0.0)))
 	var dm := absf(float(after.get("moist_sum", 0.0)) - float(before.get("moist_sum", 0.0))) * 100.0
 	var dl := float(absi(int(after.get("lush_cnt", 0)) - int(before.get("lush_cnt", 0)))) * 5.0
-	var ev := float(int(civ_stats.get("ecology_events_sent", 0)))
-	return dt + dm + dl + ev
+	return dt + dm + dl
 
 
 func _wb_count_kingdom_cities(kingdom_id: int, civ_stats: Dictionary) -> int:
@@ -1873,6 +2213,94 @@ func _wb_run_skirmish_check(first_cid: int, first_pos: Vector2) -> Dictionary:
 	}
 
 
+func _wb_check_t1_science_cap(city_pos: Vector2) -> bool:
+	var c_info: Dictionary = _civ.inspect_city_at(city_pos)
+	if not bool(c_info.get("found", false)):
+		return true
+	if int(c_info.get("tech_tier", 0)) == 1:
+		return float(c_info.get("science", 0.0)) <= 140.0
+	return true
+
+
+func _wb_verify_plots_and_save(first_pos: Vector2) -> Dictionary:
+	if _civ.has_method("pop_chronicle_events"):
+		_civ.pop_chronicle_events()
+	var started_plot: bool = _civ.has_method("start_test_plot") and bool(_civ.start_test_plot(0))
+	var plot_evs: Array = _civ.pop_chronicle_events() if _civ.has_method("pop_chronicle_events") else []
+	var plot_chronicle_ok: int = 1 if (started_plot and not plot_evs.is_empty()) else 0
+
+	var civ_blob: PackedByteArray = _civ.pack_state()
+	_civ.reset_civ()
+	var civ_restored: bool = bool(_civ.unpack_state(civ_blob))
+	var plot_save_ok: int = 1 if (civ_restored and _civ.has_method("get_active_plot_count") and int(_civ.get_active_plot_count()) >= 1) else 0
+
+	var probe_pos := _find_safe_far_land(first_pos, first_pos, 42.0)
+	var px := clampi(int(probe_pos.x), 16, int(_world.map_w) - 17)
+	var py := clampi(int(probe_pos.y), 16, int(_world.map_h) - 17)
+	_world.apply_brush(probe_pos, WorldTerrainScript.BrushMode.METEOR_CRATER, 6)
+	_world.step_environment(0.05)
+
+	var saved_tier := int(_world.get_tier(px, py))
+	var saved_biome := int(_world.get_biome(px, py))
+	var saved_temp := float(_world.get_temp(px, py))
+	var saved_units := int(_physics.get_unit_count())
+	var saved_u_pos: Vector2 = _physics.get_first_unit_pos()
+
+	var full_snap := pack_world_state()
+	_world.apply_brush(probe_pos, WorldTerrainScript.BrushMode.TERRAFORM_LIFE, 8)
+	_physics.rebuild_population(2)
+	_civ.reset_civ()
+	var full_restored: bool = unpack_world_state(full_snap)
+
+	var plot_after := int(_civ.get_active_plot_count()) if _civ.has_method("get_active_plot_count") else 0
+	var terrain_ok: bool = (
+		int(_world.get_tier(px, py)) == saved_tier
+		and int(_world.get_biome(px, py)) == saved_biome
+		and absf(float(_world.get_temp(px, py)) - saved_temp) < 1.5
+	)
+	var u_pos_after: Vector2 = _physics.get_first_unit_pos()
+	var units_ok: bool = (
+		saved_units >= 4
+		and int(_physics.get_unit_count()) == saved_units
+		and u_pos_after.distance_to(saved_u_pos) < 0.25
+	)
+	var full_save_ok: int = 1 if (full_restored and terrain_ok and units_ok and plot_after >= 1) else 0
+	var hud_brush_ok: int = _wb_verify_hud_brush_flow(first_pos)
+	return {
+		"plot_chronicle_ok": plot_chronicle_ok,
+		"plot_save_ok": plot_save_ok,
+		"full_save_ok": full_save_ok,
+		"hud_brush_ok": hud_brush_ok,
+	}
+
+
+func _wb_verify_hud_brush_flow(land_pos: Vector2) -> int:
+	if _btn_terraform == null or _btn_fac_human == null or _btn_bio_seeder == null or _btn_inspect == null:
+		return 0
+	var save_brush := _current_brush
+	var save_tab := _active_power_tab
+	var save_fac := _selected_faction
+	if _current_brush == WorldTerrainScript.BrushMode.TERRAFORM_LIFE:
+		_select_brush(BRUSH_INSPECT)
+	_btn_terraform.pressed.emit()
+	var step1_ok: bool = (_current_brush == WorldTerrainScript.BrushMode.TERRAFORM_LIFE and not _btn_fac_human.button_pressed)
+	_btn_terraform.pressed.emit()
+	var step2_ok: bool = (_current_brush == BRUSH_INSPECT and not _btn_terraform.button_pressed)
+	_btn_bio_seeder.pressed.emit()
+	var step3a_ok: bool = (_current_brush == BRUSH_BIO_SEEDER)
+	_btn_fac_human.pressed.emit()
+	var step3b_ok: bool = (_current_brush == BRUSH_SETTLERS and _btn_fac_human.button_pressed and not _btn_bio_seeder.button_pressed)
+	var u_before: int = _physics.get_unit_count()
+	_apply_active_brush(land_pos, true)
+	var step4_ok: bool = (_physics.get_unit_count() >= u_before + 1)
+	_btn_fac_human.pressed.emit()
+	var step5_ok: bool = (_current_brush == BRUSH_INSPECT and not _btn_fac_human.button_pressed and _btn_inspect.button_pressed)
+	_select_power_tab(save_tab, false)
+	_select_faction(save_fac)
+	_select_brush(save_brush)
+	return 1 if (step1_ok and step2_ok and step3a_ok and step3b_ok and step4_ok and step5_ok) else 0
+
+
 func _run_headless_smoke_worldbox_pace() -> void:
 	_world.generate_planet(int(TUNING_KNOBS["CIV_SMOKE_SEED"]))
 	_physics.rebuild_population(0)
@@ -1886,6 +2314,7 @@ func _run_headless_smoke_worldbox_pace() -> void:
 	var first_cid := -1
 	var first_kid := -1
 	var first_pos := anchor
+	var t1_sci_capped := 1
 
 	for tick_i in range(600):
 		_wb_run_step_ticks(1)
@@ -1897,6 +2326,8 @@ func _run_headless_smoke_worldbox_pace() -> void:
 				var c_found: Dictionary = _civ.inspect_city_at(first_pos)
 				first_cid = int(c_found.get("city_id", 0))
 				first_kid = int(c_found.get("kingdom_id", -1))
+		if first_cid >= 0 and not _wb_check_t1_science_cap(first_pos):
+			t1_sci_capped = 0
 
 	var st30: Dictionary = _civ.get_civ_stats()
 	var c30: Dictionary = _civ.inspect_city_at(first_pos)
@@ -1909,13 +2340,17 @@ func _run_headless_smoke_worldbox_pace() -> void:
 	_apply_sim_pace(70.0)
 	for tick_w in range(800):
 		_wb_run_step_ticks(1)
+		if not _wb_check_t1_science_cap(first_pos):
+			t1_sci_capped = 0
 		if tick_w >= 80 and (tick_w % 10 == 0):
 			var st_w: Dictionary = _civ.get_civ_stats()
 			var t_w := maxi(int(st_w.get("max_tech_tier", 0)), int(st_w.get("tech_tier", 0)))
 			var bd_w := maxi(int(st_w.get("biodomes", 0)), _wb_collect_building_positions(5).size())
 			var kc_w := _wb_count_kingdom_cities(first_kid, st_w)
-			var eco_w := _wb_calc_eco_delta(eco_before, _wb_sample_ecology(first_pos), st_w)
-			if t_w >= 3 and bd_w >= 1 and kc_w >= 2 and eco_w > 0.1 and _wb_count_upgraded_biodomes(tent_positions) >= 1:
+			var eco_w := _wb_calc_eco_delta(eco_before, _wb_sample_ecology(first_pos))
+			var eco_evs_w := int(st_w.get("ecology_events_sent", 0))
+			var notables_w := int(st_w.get("notables_count", 0))
+			if t_w >= 3 and bd_w >= 1 and kc_w >= 2 and eco_w > 0.1 and eco_evs_w >= 1 and notables_w >= 1 and _wb_count_upgraded_biodomes(tent_positions) >= 1:
 				break
 
 	var st_end: Dictionary = _civ.get_civ_stats()
@@ -1923,26 +2358,40 @@ func _run_headless_smoke_worldbox_pace() -> void:
 	var biodomes := maxi(int(st_end.get("biodomes", 0)), _wb_collect_building_positions(5).size())
 	var upgraded_in_place := _wb_count_upgraded_biodomes(tent_positions)
 	var kingdom_cities := _wb_count_kingdom_cities(first_kid, st_end)
-	var eco_delta := _wb_calc_eco_delta(eco_before, _wb_sample_ecology(first_pos), st_end)
+	var eco_delta := _wb_calc_eco_delta(eco_before, _wb_sample_ecology(first_pos))
 	var war_res := _wb_run_skirmish_check(first_cid, first_pos)
 	var unit_shots := int(war_res["shots"])
 	var max_shot_dist := float(war_res["max_dist"])
+
+	var st_post: Dictionary = _civ.get_civ_stats()
+	var eco_events := int(st_post.get("ecology_events_sent", 0))
+	var notables_ok := 1 if int(st_post.get("notables_count", 0)) >= 1 else 0
+	var contiguous_ok := 1 if (_civ.has_method("are_all_cities_contiguous") and _civ.are_all_cities_contiguous()) else 0
+	var sv_res := _wb_verify_plots_and_save(first_pos)
+	var plot_chronicle_ok := int(sv_res["plot_chronicle_ok"])
+	var plot_save_ok := int(sv_res["plot_save_ok"])
+	var full_save_ok := int(sv_res["full_save_ok"])
+	var hud_brush_ok := int(sv_res.get("hud_brush_ok", 0))
 
 	var ok := (
 		spawned == 4 and founded_sec > 0.0 and founded_sec <= 15.0
 		and tier_at_30s == 0 and tents_at_30s >= 1 and roads_at_30s >= 1
 		and max_tier >= 3 and biodomes >= 1 and upgraded_in_place >= 1
-		and kingdom_cities >= 2 and eco_delta > 0.1
+		and kingdom_cities >= 2 and eco_delta > 0.1 and eco_events >= 1
 		and unit_shots >= 1 and max_shot_dist > 0.0 and max_shot_dist <= 36.0
+		and contiguous_ok == 1 and plot_chronicle_ok == 1 and plot_save_ok == 1
+		and t1_sci_capped == 1 and notables_ok == 1 and full_save_ok == 1 and hud_brush_ok == 1
 	)
 	var tail := (
 		"spawned=%d founded_sec=%.2f tier_at_30s=%d tents_at_30s=%d roads_at_30s=%d "
-		+ "max_tier=%d biodomes=%d upgraded_in_place=%d kingdom_cities=%d eco_delta=%.2f "
-		+ "unit_shots=%d max_shot_dist=%.2f"
+		+ "max_tier=%d biodomes=%d upgraded_in_place=%d kingdom_cities=%d eco_delta=%.2f eco_events=%d "
+		+ "unit_shots=%d max_shot_dist=%.2f contiguous_ok=%d plot_chronicle_ok=%d plot_save_ok=%d "
+		+ "t1_sci_capped=%d notables_ok=%d full_save_ok=%d hud_brush_ok=%d"
 	) % [
 		spawned, founded_sec, tier_at_30s, tents_at_30s, roads_at_30s,
-		max_tier, biodomes, upgraded_in_place, kingdom_cities, eco_delta,
-		unit_shots, max_shot_dist
+		max_tier, biodomes, upgraded_in_place, kingdom_cities, eco_delta, eco_events,
+		unit_shots, max_shot_dist, contiguous_ok, plot_chronicle_ok, plot_save_ok,
+		t1_sci_capped, notables_ok, full_save_ok, hud_brush_ok
 	]
 	if not ok:
 		var fail_msg := "SMOKE_WORLDBOX_PACE_FAIL " + tail
@@ -1954,6 +2403,168 @@ func _run_headless_smoke_worldbox_pace() -> void:
 	get_tree().quit(0)
 
 
+func _sp_find_land_anchor(avoid_pos: Vector2 = Vector2(-1.0, -1.0), min_dist: float = 0.0) -> Vector2:
+	var min_d2 := min_dist * min_dist
+	for py in range(24, int(_world.map_h) - 24, 6):
+		for px in range(24, int(_world.map_w) - 24, 6):
+			if not _is_dry_patch(px, py, 5):
+				continue
+			var p := Vector2(float(px) + 0.5, float(py) + 0.5)
+			if avoid_pos.x >= 0.0 and p.distance_squared_to(avoid_pos) < min_d2:
+				continue
+			if avoid_pos.x >= 0.0:
+				return p
+			for k in range(8):
+				var ang := float(k) * (TAU / 8.0)
+				var wx := clampi(px + int(round(cos(ang) * 20.0)), 4, int(_world.map_w) - 5)
+				var wy := clampi(py + int(round(sin(ang) * 20.0)), 4, int(_world.map_h) - 5)
+				if _world.is_water(wx, wy):
+					return p
+	return _find_element_point(false)
+
+
+func _sp_verify_world_drops_fauna(land_a: Vector2, land_b: Vector2) -> Dictionary:
+	var ext: Dictionary = _world.get_world_extended_stats()
+	var template_ok := 1 if int(ext.get("template_id", -1)) == WorldTerrainScript.MapTemplate.ARCHIPELAGO else 0
+	_world.apply_shaped_brush(land_a, 6, Vector2i(WorldTerrainScript.BrushMode.BIOME_XENO_JUNGLE, WorldTerrainScript.BrushShape.SQUARE))
+	var xeno_ok := 0
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			if _world.get_biome(int(land_a.x) + dx, int(land_a.y) + dy) == WorldTerrainScript.Biome.XENO_JUNGLE:
+				xeno_ok = 1
+	_world.add_creep_node(land_b, WorldTerrainScript.Biome.CREEP_MYCELIUM)
+	var creep_nodes: int = int(_world.get_creep_node_count())
+	_world.spawn_sky_drops(land_a, 14.0, WorldDropsScript.DropKind.SEED_BIOLUM_OASIS)
+	var drops_obj: Variant = _world.get("_drops")
+	for _i in range(60):
+		_world.step_environment(0.05)
+		if drops_obj != null and int(drops_obj.get_landed_total()) >= 1:
+			break
+	var drops_landed: int = int(drops_obj.get_landed_total()) if drops_obj != null else 0
+	var fauna_before: int = int(_physics.get_fauna_count())
+	_physics.spawn_fauna(land_a, 0, 4)
+	var fauna_cnt: int = int(_physics.get_fauna_count()) - fauna_before
+	var trait_hits: int = int(_physics.apply_trait_rain(land_a, 24.0, 1))
+	var uplifted: int = int(_physics.apply_monolith_uplift(land_a, 24.0))
+	return {
+		"template_ok": template_ok,
+		"drops_landed": drops_landed,
+		"xeno_ok": xeno_ok,
+		"creep_nodes": creep_nodes,
+		"fauna_cnt": fauna_cnt,
+		"trait_hits": trait_hits,
+		"uplifted": uplifted,
+	}
+
+
+func _sp_verify_civ_combat_ui(land_a: Vector2, land_b: Vector2) -> Dictionary:
+	var cid_a: int = _civ.spawn_colony(land_a, 0)
+	var cid_b: int = _civ.spawn_colony(land_b, 1)
+	_apply_sim_pace(18.0)
+	var ferry_ok: bool = bool(_civ.request_troop_ferry(cid_a, land_b))
+	for _t in range(28):
+		_world.step_environment(0.05)
+		_physics.step_physics(0.05)
+		_civ.step_civ(0.05)
+		_fx.step_fx(0.05)
+	var plot_ok: bool = bool(_civ.force_diplomatic_plot(0, cid_a, cid_b))
+	for _p in range(2):
+		_world.step_environment(0.05)
+		_civ.step_civ(0.05)
+	_apply_sim_pace(1.0)
+	_combat.spawn_ballistic_projectile(Rect2(land_a, land_b), Vector2(0.0, 14.0), 0)
+	_combat.step_combat(0.05)
+	var projectiles: int = int(_combat.get_projectile_count())
+	var ships: int = int(_civ.get_ship_count())
+	var plots: int = int(_civ.get_active_plot_count())
+	var hist_len: int = (_civ.get_history_series(0, "pop") as PackedFloat32Array).size()
+	var lenses_ok := 1
+	for lid in range(7):
+		_civ.set_map_lens(lid)
+		if _civ.get_map_lens() != lid:
+			lenses_ok = 0
+	var windows_ok := 1 if _hud_windows != null else 0
+	if _hud_windows != null:
+		for wid in range(6):
+			_hud_windows.open_window(wid)
+			if not _hud_windows.has_open_modal():
+				windows_ok = 0
+			_hud_windows.close_window()
+	return {
+		"ferry_ok": 1 if ferry_ok else 0,
+		"plot_ok": 1 if plot_ok else 0,
+		"projectiles": projectiles,
+		"ships": ships,
+		"plots": plots,
+		"hist_len": hist_len,
+		"lenses_ok": lenses_ok,
+		"windows_ok": windows_ok,
+	}
+
+
+func _run_headless_smoke_parity() -> void:
+	_world.generate_planet_with_template(20261114, WorldTerrainScript.MapTemplate.ARCHIPELAGO)
+	_physics.rebuild_population(0)
+	var land_a := _sp_find_land_anchor()
+	var land_b := _sp_find_land_anchor(land_a, 72.0)
+	var ccu := _sp_verify_civ_combat_ui(land_a, land_b)
+	var wdf := _sp_verify_world_drops_fauna(land_a, land_b)
+	_brush_shape = WorldTerrainScript.BrushShape.DIAMOND
+	_civ.set_map_lens(3)
+
+	var save_path := "user://smoke_parity_check.dat"
+	var wrote_ok := save_world_to_file(save_path)
+	_world.generate_planet(991122)
+	_civ.set_map_lens(0)
+	var loaded_ok := load_world_from_file(save_path)
+	if FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+	var save_ok := 1 if (
+		wrote_ok and loaded_ok
+		and int(_world.get_world_extended_stats().get("template_id", -1)) == WorldTerrainScript.MapTemplate.ARCHIPELAGO
+		and _world.get_creep_node_count() >= 1
+		and _civ.get_ship_count() >= 1
+		and _civ.get_active_plot_count() >= 1
+		and _civ.get_map_lens() == 3
+		and _brush_shape == WorldTerrainScript.BrushShape.DIAMOND
+	) else 0
+
+	var ok := (
+		int(wdf["template_ok"]) == 1 and int(wdf["drops_landed"]) >= 1
+		and int(wdf["xeno_ok"]) == 1 and int(wdf["creep_nodes"]) >= 1
+		and int(wdf["fauna_cnt"]) >= 2 and int(wdf["uplifted"]) >= 1
+		and int(ccu["projectiles"]) >= 1 and int(ccu["ships"]) >= 1
+		and int(ccu["plots"]) >= 1 and int(ccu["hist_len"]) >= 2
+		and int(ccu["lenses_ok"]) == 1 and int(ccu["windows_ok"]) == 1
+		and save_ok == 1
+	)
+	var tail := (
+		"template_ok=%d drops_landed=%d xeno_ok=%d creep_nodes=%d fauna=%d traits=%d uplifted=%d "
+		+ "projectiles=%d ships=%d plots=%d hist_len=%d lenses_ok=%d windows_ok=%d save_ok=%d"
+	) % [
+		int(wdf["template_ok"]), int(wdf["drops_landed"]), int(wdf["xeno_ok"]),
+		int(wdf["creep_nodes"]), int(wdf["fauna_cnt"]), int(wdf["trait_hits"]),
+		int(wdf["uplifted"]), int(ccu["projectiles"]), int(ccu["ships"]),
+		int(ccu["plots"]), int(ccu["hist_len"]), int(ccu["lenses_ok"]),
+		int(ccu["windows_ok"]), save_ok
+	]
+	if not ok:
+		var fail_msg := "SMOKE_PARITY_FAIL " + tail
+		push_error(fail_msg)
+		print(fail_msg)
+		get_tree().quit(1)
+		return
+	print("SMOKE_PARITY_PASS " + tail)
+	get_tree().quit(0)
+
+
+func _pump_chronicle_from_civ() -> void:
+	if _world_laws_ui != null and _civ != null and _civ.has_method("pop_chronicle_events"):
+		var evs: Array = _civ.pop_chronicle_events()
+		if not evs.is_empty():
+			_world_laws_ui.push_chronicle_events(evs)
+
+
 func _prepare_combat_capture_mode() -> void:
 	_physics.rebuild_population(0)
 	_apply_sim_pace(18.0)
@@ -1963,6 +2574,7 @@ func _prepare_combat_capture_mode() -> void:
 	var east_robot: Vector2 = ctx["east_robot"]
 	var gate_east: Vector2 = ctx["gate_east"]
 	var rebel_pos: Vector2 = ctx["rebel_pos"]
+	_pump_chronicle_from_civ()
 
 	for tick_idx in range(140):
 		_world.step_environment(0.05)
@@ -1973,6 +2585,12 @@ func _prepare_combat_capture_mode() -> void:
 		_fx.step_fx(0.05)
 		if tick_idx == 88 and _civ.has_method("apply_ai_glitch"):
 			_civ.apply_ai_glitch(rebel_pos, 22.0)
+		_pump_chronicle_from_civ()
+
+	if _civ.has_method("get_active_plot_count") and int(_civ.get_active_plot_count()) == 0:
+		if _civ.has_method("start_test_plot"):
+			_civ.start_test_plot(0)
+	_pump_chronicle_from_civ()
 
 	var pts: Array[Vector2] = [east_ally, gate_east, east_robot, rebel_pos]
 	var min_pt := pts[0]
@@ -2064,6 +2682,7 @@ func _prepare_civ_capture_mode(is_night: bool) -> void:
 		push_warning("Shot-civ fallback: spawn_colony 1 returned -1 at %s" % str(a1))
 	if cid2 < 0:
 		push_warning("Shot-civ fallback: spawn_colony 2 returned -1 at %s" % str(a2))
+	_pump_chronicle_from_civ()
 
 	var min_ticks: int = int(TUNING_KNOBS["CIV_SHOT_TICKS"])
 	var max_ticks: int = 920 if is_night else 540
@@ -2074,6 +2693,7 @@ func _prepare_civ_capture_mode(is_night: bool) -> void:
 		_physics.step_physics(0.05)
 		_civ.step_civ(0.05)
 		_fx.step_fx(0.05)
+		_pump_chronicle_from_civ()
 		if _world.has_method("step_cosmic_age"):
 			var age_res: Dictionary = _world.step_cosmic_age(0.05)
 			if bool(age_res.get("changed", false)):
@@ -2132,6 +2752,7 @@ func _prepare_civ_capture_mode(is_night: bool) -> void:
 		_civ.set_zoom_lod(_target_zoom)
 	for _s in range(6):
 		_civ.step_civ(0.05)
+	_pump_chronicle_from_civ()
 	_camera.zoom = Vector2(_target_zoom, _target_zoom)
 	_camera.position = _cam_base_pos.round()
 	_hover_world_pos = focus_pos
@@ -2154,9 +2775,12 @@ func _prepare_civ_capture_mode(is_night: bool) -> void:
 func _prepare_capture_mode() -> void:
 	_sep_fps.visible = false
 	_fps_label.visible = false
-	_reticle.visible = false
+	var show_chronicle := (_shot_combat_path != "" or _shot_night_path != "" or _shot_civ_path != "")
 	if _world_laws_ui != null:
-		_world_laws_ui.hide_all_for_capture()
+		if show_chronicle:
+			_world_laws_ui.hide_laws_for_capture()
+		else:
+			_world_laws_ui.hide_all_for_capture()
 
 	if _shot_combat_path != "":
 		_prepare_combat_capture_mode()
@@ -2493,7 +3117,7 @@ func _clamp_to_world(pos: Vector2, margin: float) -> Vector2:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _is_capture_mode():
+	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _smoke_parity_mode or _is_capture_mode():
 		return
 	if event is InputEventKey:
 		_handle_key_input(event as InputEventKey)
@@ -2501,73 +3125,86 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_mouse_input(event)
 
 
+const KEY_BRUSH_HOTKEYS: Dictionary = {
+	KEY_1: WorldTerrainScript.BrushMode.TERRAFORM_LIFE,
+	KEY_2: WorldTerrainScript.BrushMode.CRYSTAL_FLORA,
+	KEY_3: WorldTerrainScript.BrushMode.LAVA_VOLCANO,
+	KEY_4: WorldTerrainScript.BrushMode.METEOR_CRATER,
+	KEY_5: WorldTerrainScript.BrushMode.VORTEX_PULL,
+	KEY_6: BRUSH_COLONY,
+	KEY_7: BRUSH_BLESS,
+	KEY_8: BRUSH_INSPECT,
+	KEY_I: BRUSH_INSPECT,
+	KEY_9: BRUSH_ORBITAL_STRIKE,
+	KEY_0: BRUSH_DIPLO_SPARK,
+}
+
+
 func _handle_key_input(kev: InputEventKey) -> void:
-	if not kev.pressed or kev.echo:
+	if not kev.pressed:
 		if kev.keycode == KEY_SHIFT:
-			_reticle.queue_redraw()
+			_world_overlay.queue_redraw()
+		elif kev.keycode == KEY_SPACE:
+			if _space_held and _possessing_uid < 0 and not _space_used_for_pan:
+				_set_sim_speed(0.0 if _sim_speed > 0.0 else _last_nonzero_speed)
+				_fx.play_sfx("ui")
+			_space_held = false
+			_space_used_for_pan = false
+		return
+	if kev.echo:
+		return
+	if _hud_windows != null and _hud_windows.has_open_modal() and kev.keycode != KEY_ESCAPE:
+		return
+	if _fx != null and _fx.has_method("activate_audio"):
+		_fx.activate_audio()
+	if kev.alt_pressed and kev.keycode in [KEY_1, KEY_2, KEY_3, KEY_4]:
+		_select_active_tab_slot(int(kev.keycode - KEY_1))
+		return
+	if KEY_BRUSH_HOTKEYS.has(kev.keycode):
+		_select_brush(int(KEY_BRUSH_HOTKEYS[kev.keycode]))
+		_fx.play_sfx("ui")
 		return
 	match kev.keycode:
 		KEY_Q:
-			_select_power_tab(posmod(_active_power_tab - 1, 4), true)
-			_fx.play_sfx("ui")
+			_select_power_tab(posmod(_active_power_tab - 1, 4), false)
+			_fx.play_sfx("ui_tab")
 		KEY_E:
-			_select_power_tab(posmod(_active_power_tab + 1, 4), true)
-			_fx.play_sfx("ui")
+			if _possessing_uid >= 0:
+				_possess_alt_queued = true
+			else:
+				_select_power_tab(posmod(_active_power_tab + 1, 4), false)
+				_fx.play_sfx("ui_tab")
 		KEY_TAB:
-			var dir_tab := -1 if kev.shift_pressed else 1
-			_select_power_tab(posmod(_active_power_tab + dir_tab, 4), true)
-			_fx.play_sfx("ui")
-		KEY_1:
-			if kev.alt_pressed:
-				_select_active_tab_slot(0)
+			if _world_laws_ui != null and _world_laws_ui.has_method("toggle_chronicle_collapsed"):
+				_world_laws_ui.toggle_chronicle_collapsed()
+				_fx.play_sfx("ui_tab")
 			else:
-				_select_brush(WorldTerrainScript.BrushMode.TERRAFORM_LIFE)
-				_fx.play_sfx("ui")
-		KEY_2:
-			if kev.alt_pressed:
-				_select_active_tab_slot(1)
+				var dir_tab := -1 if kev.shift_pressed else 1
+				_select_power_tab(posmod(_active_power_tab + dir_tab, 4), false)
+				_fx.play_sfx("ui_tab")
+		KEY_F1:
+			_focus_watchlist_slot(0)
+		KEY_F2:
+			_focus_watchlist_slot(1)
+		KEY_F3:
+			if kev.shift_pressed or _watchlist_pins.size() < 3:
+				_toggle_fps_display()
 			else:
-				_select_brush(WorldTerrainScript.BrushMode.CRYSTAL_FLORA)
-				_fx.play_sfx("ui")
-		KEY_3:
-			if kev.alt_pressed:
-				_select_active_tab_slot(2)
-			else:
-				_select_brush(WorldTerrainScript.BrushMode.LAVA_VOLCANO)
-				_fx.play_sfx("ui")
-		KEY_4:
-			if kev.alt_pressed:
-				_select_active_tab_slot(3)
-			else:
-				_select_brush(WorldTerrainScript.BrushMode.METEOR_CRATER)
-				_fx.play_sfx("ui")
-		KEY_5:
-			_select_brush(WorldTerrainScript.BrushMode.VORTEX_PULL)
-			_fx.play_sfx("ui")
-		KEY_6:
-			_select_brush(BRUSH_COLONY)
-			_fx.play_sfx("ui")
-		KEY_7:
-			_select_brush(BRUSH_BLESS)
-			_fx.play_sfx("ui")
-		KEY_8, KEY_I:
-			_select_brush(BRUSH_INSPECT)
-			_fx.play_sfx("ui")
-		KEY_9:
-			_select_brush(BRUSH_ORBITAL_STRIKE)
-			_fx.play_sfx("ui")
-		KEY_0:
-			_select_brush(BRUSH_DIPLO_SPARK)
-			_fx.play_sfx("ui")
+				_focus_watchlist_slot(2)
+		KEY_F4:
+			_focus_watchlist_slot(3)
 		KEY_F5:
 			if save_world_to_file():
-				_fx.play_sfx("ui")
+				_fx.play_sfx("ui_pin")
 		KEY_F9:
 			if load_world_from_file():
-				_fx.play_sfx("ui")
+				_fx.play_sfx("ui_pin")
+		KEY_B:
+			_pin_current_selection()
 		KEY_F:
 			_select_faction(_selected_faction + 1)
-			_select_brush(BRUSH_COLONY)
+			if _current_brush != BRUSH_COLONY and _current_brush != BRUSH_SETTLERS:
+				_select_brush(BRUSH_SETTLERS)
 			_fx.play_sfx("ui")
 		KEY_G:
 			_on_cosmic_age_clicked()
@@ -2577,26 +3214,32 @@ func _handle_key_input(kev: InputEventKey) -> void:
 			_set_light_mode((_light_mode + 1) % 4)
 			_fx.play_sfx("ui")
 		KEY_ESCAPE:
-			if _world_laws_ui != null and _world_laws_ui.is_laws_panel_open():
+			if _hud_windows != null and _hud_windows.handle_escape():
+				_fx.play_sfx("ui")
+				return
+			if _regen_confirm_timer > 0.0:
+				_reset_regen_confirm()
+			elif _world_laws_ui != null and _world_laws_ui.is_laws_panel_open():
 				_world_laws_ui.set_laws_panel_open(false)
 			elif _possessing_uid >= 0:
 				_exit_possession()
 				_update_hud_telemetry()
 			else:
 				_clear_inspector_lock()
+				if _current_brush != BRUSH_INSPECT:
+					_select_brush(BRUSH_INSPECT)
 			_fx.play_sfx("ui")
 		KEY_BRACKETLEFT:
 			_step_brush_size(-1)
 		KEY_BRACKETRIGHT:
 			_step_brush_size(1)
 		KEY_SPACE:
+			_space_held = true
+			_space_used_for_pan = false
 			if _possessing_uid >= 0:
 				_possess_pulse_queued = true
 				if _sim_speed <= 0.0:
 					_set_sim_speed(_last_nonzero_speed)
-			else:
-				_set_sim_speed(0.0 if _sim_speed > 0.0 else _last_nonzero_speed)
-				_fx.play_sfx("ui")
 
 
 func _toggle_possession_hotkey() -> void:
@@ -2618,7 +3261,165 @@ func _toggle_possession_hotkey() -> void:
 		_fx.play_sfx("ui")
 
 
-func _step_zoom_level(dir: int) -> void:
+func _toggle_fps_display() -> void:
+	_fps_visible = not _fps_visible
+	_sep_fps.visible = _fps_visible
+	_fps_label.visible = _fps_visible
+	_sync_hud_layouts()
+	_fx.play_sfx("ui")
+
+
+func pin_watchlist_uid(uid: int) -> bool:
+	if uid < 0 or _physics == null:
+		return false
+	for i in range(_watchlist_pins.size()):
+		if str(_watchlist_pins[i].get("kind", "")) == "unit" and int(_watchlist_pins[i].get("uid", -1)) == uid:
+			_watchlist_pins.remove_at(i)
+			if _civ != null and _civ.has_method("pin_notable"):
+				_civ.pin_notable(uid, false)
+			_sync_pin_buttons()
+			return true
+	var u_info: Dictionary = _physics.inspect_unit_by_id(uid)
+	if not bool(u_info.get("found", false)):
+		return false
+	var fac := int(u_info.get("faction", 0))
+	var col: Color = FACTION_RETICLE_COLORS[fac] if (fac >= 0 and fac < FACTION_RETICLE_COLORS.size()) else Color("#7CE7FF")
+	var pos: Vector2 = u_info.get("pos", _cam_base_pos)
+	var label := str(u_info.get("notable_name", u_info.get("role_name", "Герой")))
+	if _watchlist_pins.size() >= MAX_WATCHLIST_PINS:
+		_watchlist_pins.remove_at(0)
+	_watchlist_pins.append({
+		"kind": "unit", "uid": uid, "cid": -1,
+		"pos": pos, "color": col, "label": label, "dead": false,
+	})
+	if _civ != null and _civ.has_method("pin_notable"):
+		_civ.pin_notable(uid, true)
+	_sync_pin_buttons()
+	return true
+
+
+func _pin_current_selection() -> void:
+	var uid := _possessing_uid if _possessing_uid >= 0 else (_locked_unit_uid if _locked_unit_uid >= 0 else _last_inspect_unit_uid)
+	if uid < 0 and _has_mouse_hover:
+		var u_probe: Dictionary = _physics.inspect_unit_at(_hover_world_pos)
+		if bool(u_probe.get("found", false)):
+			var upos: Vector2 = u_probe.get("pos", _hover_world_pos)
+			if upos.distance_to(_hover_world_pos) <= 12.0:
+				uid = int(u_probe.get("uid", -1))
+	if uid >= 0 and pin_watchlist_uid(uid):
+		_fx.play_sfx("ui_pin")
+		return
+	var cid := _locked_city_id
+	var c_pos := _locked_city_pos
+	var c_info: Dictionary = _civ.inspect_city_at(c_pos if cid >= 0 else _hover_world_pos)
+	if bool(c_info.get("found", false)):
+		cid = int(c_info.get("city_id", -1))
+		c_pos = c_info.get("center", _hover_world_pos)
+		for i in range(_watchlist_pins.size()):
+			if str(_watchlist_pins[i].get("kind", "")) == "city" and int(_watchlist_pins[i].get("cid", -1)) == cid:
+				_watchlist_pins.remove_at(i)
+				_sync_pin_buttons()
+				_fx.play_sfx("ui_pin")
+				return
+		var fac := clampi(int(c_info.get("faction", 0)), 0, 2)
+		if _watchlist_pins.size() >= MAX_WATCHLIST_PINS:
+			_watchlist_pins.remove_at(0)
+		_watchlist_pins.append({
+			"kind": "city", "uid": -1, "cid": cid,
+			"pos": c_pos, "color": FACTION_RETICLE_COLORS[fac], "label": str(c_info.get("name", "Город")), "dead": false,
+		})
+		_sync_pin_buttons()
+		_fx.play_sfx("ui_pin")
+		return
+	_fx.play_sfx("ui_denied")
+
+
+func _focus_watchlist_slot(slot_idx: int) -> void:
+	if slot_idx < 0 or slot_idx >= _watchlist_pins.size():
+		_fx.play_sfx("ui_denied")
+		return
+	var pin: Dictionary = _watchlist_pins[slot_idx]
+	_zoom_to_cursor_active = false
+	if str(pin.get("kind", "")) == "unit":
+		var uid := int(pin.get("uid", -1))
+		var u_info: Dictionary = _physics.inspect_unit_by_id(uid)
+		if bool(u_info.get("found", false)):
+			var pos: Vector2 = u_info.get("pos", pin.get("pos", _cam_base_pos))
+			pin["pos"] = pos
+			pin["dead"] = false
+			_locked_unit_uid = uid
+			_locked_city_id = -1
+			_follow_locked_unit = true
+			_cam_focus_target = _clamp_to_world(pos, 16.0)
+			_cam_focus_active = true
+			_fx.play_sfx("ui", pos.x)
+		else:
+			pin["dead"] = true
+			_follow_locked_unit = false
+			var fall_pos: Vector2 = pin.get("pos", _cam_base_pos)
+			_cam_focus_target = _clamp_to_world(fall_pos, 16.0)
+			_cam_focus_active = true
+			_fx.play_sfx("ui_denied", fall_pos.x)
+	else:
+		var cid := int(pin.get("cid", -1))
+		var c_pos: Vector2 = pin.get("pos", _cam_base_pos)
+		_follow_locked_unit = false
+		_locked_unit_uid = -1
+		_locked_city_id = cid
+		_locked_city_pos = c_pos
+		_cam_focus_target = _clamp_to_world(c_pos, 16.0)
+		_cam_focus_active = true
+		_fx.play_sfx("ui", c_pos.x)
+	_sync_pin_buttons()
+	_update_hud_telemetry()
+
+
+func _refresh_watchlist_pins() -> void:
+	if _watchlist_pins.is_empty():
+		return
+	var dirty := false
+	for pin in _watchlist_pins:
+		if str(pin.get("kind", "")) != "unit" or bool(pin.get("dead", false)):
+			continue
+		var uid := int(pin.get("uid", -1))
+		var u_info: Dictionary = _physics.inspect_unit_by_id(uid)
+		if bool(u_info.get("found", false)):
+			pin["pos"] = u_info.get("pos", pin.get("pos", _cam_base_pos))
+		else:
+			pin["dead"] = true
+			dirty = true
+	if dirty:
+		_sync_pin_buttons()
+
+
+func _sync_pin_buttons() -> void:
+	var any_pins := not _watchlist_pins.is_empty()
+	if _sep_pins != null:
+		_sep_pins.visible = any_pins
+	if _pin_row != null:
+		_pin_row.visible = any_pins
+	for i in range(_pin_buttons.size()):
+		var btn := _pin_buttons[i]
+		if i >= _watchlist_pins.size():
+			btn.visible = false
+			continue
+		var pin: Dictionary = _watchlist_pins[i]
+		var dead := bool(pin.get("dead", false))
+		var base_col: Color = pin.get("color", Color("#7CE7FF"))
+		var fill_col := Color("#4B5563") if dead else base_col
+		var rim_col := Color("#D94A4A") if dead else base_col.lightened(0.35)
+		var st := _make_box_style(fill_col, rim_col, 2, 1.0, 0.0)
+		btn.add_theme_stylebox_override("normal", st)
+		btn.add_theme_stylebox_override("hover", st)
+		btn.add_theme_stylebox_override("pressed", st)
+		btn.text = ""
+		var status_str := "Погиб (место падения): " if dead else ""
+		btn.tooltip_text = "[F%d] %s%s" % [i + 1, status_str, str(pin.get("label", "Закладка"))]
+		btn.visible = true
+	_sync_hud_layouts()
+
+
+func _step_zoom_level(dir: int, to_cursor: bool = false) -> void:
 	var best_idx := 0
 	var best_err := 999.0
 	for i in range(ZOOM_STOPS.size()):
@@ -2627,44 +3428,105 @@ func _step_zoom_level(dir: int) -> void:
 			best_err = err
 			best_idx = i
 	var next_idx := clampi(best_idx + dir, 0, ZOOM_STOPS.size() - 1)
+	if to_cursor and next_idx != best_idx:
+		var vp := get_viewport()
+		var mouse_off := vp.get_mouse_position() - vp.get_visible_rect().size * 0.5
+		var cur_z := maxf(_camera.zoom.x, 0.25)
+		_zoom_anchor_world = _cam_base_pos + mouse_off / cur_z
+		_zoom_anchor_screen_off = mouse_off
+		_zoom_to_cursor_active = true
+		_follow_locked_unit = false
+		_cam_focus_active = false
 	_target_zoom = ZOOM_STOPS[next_idx]
 
 
 func _handle_mouse_input(event: InputEvent) -> void:
+	if _hud_windows != null and _hud_windows.has_open_modal():
+		_painting_lmb = false
+		_magnet_hold_active = false
+		_flick_dragging = false
+		return
 	if event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_step_zoom_level(1)
-		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_step_zoom_level(-1)
-		elif mb.button_index == MOUSE_BUTTON_RIGHT:
-			_panning_rmb = mb.pressed
-			if mb.pressed:
-				_follow_locked_unit = false
-				_cam_focus_active = false
-		elif mb.button_index == MOUSE_BUTTON_LEFT:
-			if _possessing_uid >= 0:
-				_painting_lmb = false
-				if mb.pressed:
-					_possess_pulse_queued = true
-			else:
-				_painting_lmb = mb.pressed
-				if mb.pressed:
-					_hover_world_pos = get_global_mouse_position()
-					_has_mouse_hover = true
-					_apply_active_brush(_hover_world_pos, true)
+		_handle_mouse_button(event as InputEventMouseButton)
 	elif event is InputEventMouseMotion:
-		_hover_world_pos = get_global_mouse_position()
-		_has_mouse_hover = true
-		_reticle.queue_redraw()
-		if _panning_rmb:
-			var mm := event as InputEventMouseMotion
+		_handle_mouse_motion(event as InputEventMouseMotion)
+
+
+func _handle_mouse_button(mb: InputEventMouseButton) -> void:
+	if mb.pressed and _fx != null and _fx.has_method("activate_audio"):
+		_fx.activate_audio()
+	if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+		_step_zoom_level(1, true)
+	elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+		_step_zoom_level(-1, true)
+	elif mb.button_index == MOUSE_BUTTON_RIGHT or mb.button_index == MOUSE_BUTTON_MIDDLE:
+		_panning_drag = mb.pressed
+		_pan_drag_button = mb.button_index if mb.pressed else -1
+		if mb.pressed:
 			_follow_locked_unit = false
 			_cam_focus_active = false
-			_cam_base_pos -= mm.relative / maxf(_camera.zoom.x, 0.1)
-			_clamp_camera_base()
-		elif _possessing_uid < 0 and _painting_lmb and _current_brush != WorldTerrainScript.BrushMode.VORTEX_PULL and _current_brush != BRUSH_COLONY and _current_brush != BRUSH_INSPECT and _current_brush != BRUSH_DIPLO_SPARK:
-			_apply_active_brush(_hover_world_pos, false)
+			_zoom_to_cursor_active = false
+	elif mb.button_index == MOUSE_BUTTON_LEFT:
+		if not mb.pressed and _panning_drag and _pan_drag_button == MOUSE_BUTTON_LEFT:
+			_panning_drag = false
+			_pan_drag_button = -1
+		elif mb.pressed and _space_held:
+			_panning_drag = true
+			_pan_drag_button = MOUSE_BUTTON_LEFT
+			_space_used_for_pan = true
+			_painting_lmb = false
+			_follow_locked_unit = false
+			_cam_focus_active = false
+			_zoom_to_cursor_active = false
+		elif _possessing_uid >= 0:
+			_painting_lmb = false
+			if mb.pressed:
+				_possess_aim_pos = get_global_mouse_position()
+				_possess_action_queued = true
+		else:
+			_handle_tool_lmb_event(mb.pressed)
+
+
+func _handle_tool_lmb_event(pressed: bool) -> void:
+	_painting_lmb = pressed
+	_hover_world_pos = get_global_mouse_position()
+	_has_mouse_hover = true
+	if pressed:
+		_prev_vortex_world_pos = _hover_world_pos
+		_last_brush_world_pos = _hover_world_pos
+		_has_last_brush_pos = true
+		if _current_brush == HudWindowsScript.TOOL_MAGNET:
+			_magnet_hold_active = true
+			_magnet_prev_pos = _hover_world_pos
+			_magnet_vel = Vector2.ZERO
+			_physics.apply_magnet_step(_hover_world_pos, float(_brush_radius), Vector3(0.0, 0.0, 1.0))
+			_fx.play_sfx("ui", _hover_world_pos.x)
+		elif _current_brush == HudWindowsScript.TOOL_FLICK:
+			_flick_dragging = true
+			_flick_start_pos = _hover_world_pos
+		else:
+			_apply_active_brush(_hover_world_pos, true)
+	else:
+		_has_last_brush_pos = false
+		_finish_magnet_or_flick_release(_hover_world_pos)
+
+
+func _handle_mouse_motion(mm: InputEventMouseMotion) -> void:
+	_hover_world_pos = get_global_mouse_position()
+	_has_mouse_hover = true
+	_world_overlay.queue_redraw()
+	if _panning_drag:
+		_follow_locked_unit = false
+		_cam_focus_active = false
+		_zoom_to_cursor_active = false
+		_cam_base_pos -= mm.relative / maxf(_camera.zoom.x, 0.1)
+		_clamp_camera_base()
+	elif _possessing_uid < 0 and _painting_lmb:
+		if _current_brush == HudWindowsScript.TOOL_MAGNET or _current_brush == HudWindowsScript.TOOL_FLICK:
+			return
+		if _current_brush == WorldTerrainScript.BrushMode.VORTEX_PULL or _current_brush == BRUSH_COLONY or _current_brush == BRUSH_INSPECT or _current_brush == BRUSH_DIPLO_SPARK:
+			return
+		_apply_lerp_brush_stroke(_hover_world_pos)
 
 
 func _step_brush_size(dir: int) -> void:
@@ -2759,6 +3621,186 @@ func _execute_orbital_or_meteor(world_pos: Vector2, radius: int, is_orbital_beam
 		_civ.on_terrain_damaged(world_pos, rad_f)
 
 
+func _apply_lerp_brush_stroke(target_pos: Vector2) -> void:
+	if not _has_last_brush_pos:
+		_last_brush_world_pos = target_pos
+		_has_last_brush_pos = true
+		_apply_active_brush(target_pos, false)
+		return
+	var dist := _last_brush_world_pos.distance_to(target_pos)
+	var step_px := float(maxi(1, _brush_radius / 2))
+	if dist < 0.75:
+		_apply_active_brush(target_pos, false)
+		_last_brush_world_pos = target_pos
+		return
+	var n_steps := clampi(int(ceil(dist / step_px)), 1, MAX_STROKE_STEPS_PER_FRAME)
+	for i in range(1, n_steps + 1):
+		var pt := _last_brush_world_pos.lerp(target_pos, float(i) / float(n_steps))
+		_apply_active_brush(pt, false)
+	_last_brush_world_pos = target_pos
+
+
+func _finish_magnet_or_flick_release(release_pos: Vector2) -> void:
+	if _magnet_hold_active:
+		_magnet_hold_active = false
+		var release_imp := _magnet_vel.limit_length(180.0)
+		var thrown: int = int(_physics.apply_magnet_step(release_pos, float(_brush_radius), Vector3(release_imp.x, release_imp.y, 0.0)))
+		if thrown > 0:
+			_fx.spawn_shockwave(release_pos, float(maxi(_brush_radius, 8)), Color("#7CE7FF"), 0.24)
+			_fx.play_sfx("skirmish", release_pos.x)
+		_magnet_vel = Vector2.ZERO
+	if _flick_dragging:
+		_flick_dragging = false
+		var drag := release_pos - _flick_start_pos
+		var imp := drag * 5.0 if drag.length_squared() >= 2.0 else Vector2(85.0, 0.0)
+		var hit_cnt: int = int(_physics.apply_kinetic_flick(_flick_start_pos, float(_brush_radius), imp))
+		if hit_cnt > 0:
+			_on_impact_trauma(0.18, 0.02)
+			_fx.play_sfx("skirmish", _flick_start_pos.x)
+	_world_overlay.queue_redraw()
+
+
+func _apply_biome_brush(world_pos: Vector2, is_initial_press: bool) -> void:
+	var mode_id := -1
+	var drop_kind := WorldDropsScript.DropKind.SEED_LUSH
+	var creep_biome := -1
+	match _current_brush:
+		HudWindowsScript.TOOL_BIOME_LUSH:
+			mode_id = WorldTerrainScript.BrushMode.TERRAFORM_LIFE
+			drop_kind = WorldDropsScript.DropKind.SEED_LUSH
+		HudWindowsScript.TOOL_BIOME_SCORCHED:
+			drop_kind = WorldDropsScript.DropKind.SEED_RUST
+			if Input.is_key_pressed(KEY_SHIFT) and (is_initial_press or _drop_cooldown <= 0.0):
+				_world.apply_elemental_storm(world_pos, float(_brush_radius), "firestorm")
+		HudWindowsScript.TOOL_BIOME_XENO:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_XENO_JUNGLE
+			drop_kind = WorldDropsScript.DropKind.SEED_XENO_JUNGLE
+		HudWindowsScript.TOOL_BIOME_CRYO:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_CRYO_TUNDRA
+			drop_kind = WorldDropsScript.DropKind.SEED_CRYO_TUNDRA
+		HudWindowsScript.TOOL_BIOME_ACID:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_ACID_WASTE
+			drop_kind = WorldDropsScript.DropKind.SEED_ACID_WASTE
+		HudWindowsScript.TOOL_BIOME_DUNES:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_SILICA_DUNES
+			drop_kind = WorldDropsScript.DropKind.SEED_SILICA_DUNES
+		HudWindowsScript.TOOL_BIOME_OASIS:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_BIOLUM_OASIS
+			drop_kind = WorldDropsScript.DropKind.SEED_BIOLUM_OASIS
+		HudWindowsScript.TOOL_BIOME_CREEP_MYC:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_CREEP_MYCELIUM
+			drop_kind = WorldDropsScript.DropKind.SEED_CREEP_MYCELIUM
+			creep_biome = WorldTerrainScript.Biome.CREEP_MYCELIUM
+		HudWindowsScript.TOOL_BIOME_CREEP_CYBER:
+			mode_id = WorldTerrainScript.BrushMode.BIOME_CREEP_CYBER
+			drop_kind = WorldDropsScript.DropKind.SEED_CREEP_CYBER
+			creep_biome = WorldTerrainScript.Biome.CREEP_CYBER
+	if mode_id >= 0:
+		_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(mode_id, _brush_shape))
+	if creep_biome >= 0 and (is_initial_press or _drop_cooldown <= 0.0):
+		_world.add_creep_node(world_pos, creep_biome)
+	if is_initial_press or _drop_cooldown <= 0.0:
+		_drop_cooldown = 0.16
+		_world.spawn_sky_drops(world_pos, float(_brush_radius), drop_kind)
+		_play_brush_sfx("terraform", world_pos.x)
+
+
+func _apply_fauna_brush(world_pos: Vector2, is_initial_press: bool) -> void:
+	var is_boss := _current_brush >= HudWindowsScript.TOOL_BOSS_LEVIATHAN and _current_brush <= HudWindowsScript.TOOL_BOSS_COLOSSUS
+	if is_boss and not is_initial_press and _evo_cooldown > 0.0:
+		return
+	if not is_boss and not is_initial_press and _settler_cooldown > 0.0:
+		return
+	_evo_cooldown = 0.38 if is_boss else _evo_cooldown
+	_settler_cooldown = float(TUNING_KNOBS["SETTLER_REPEAT_SEC"]) if not is_boss else _settler_cooldown
+	var kind_id: int = int(_hud_windows.get_selected_fauna_kind()) if _hud_windows != null else 0
+	var cnt := 1 if (is_boss or _brush_radius <= 8 or not is_initial_press) else (2 if _brush_radius <= 16 else 3)
+	var added: int = int(_physics.spawn_fauna(world_pos, kind_id, cnt))
+	if added > 0:
+		var col := Color("#FF5B6B") if is_boss else Color("#68F078")
+		_fx.spawn_burst(world_pos, mini(added * 3, 10), col, 18.0, 0.35, -8.0)
+		_play_brush_sfx("laser_heavy" if is_boss else "build_pop", world_pos.x)
+		_update_hud_telemetry()
+	elif is_initial_press:
+		_fx.play_sfx("ui_denied", world_pos.x)
+
+
+func _apply_creator_brush(world_pos: Vector2, is_initial_press: bool) -> void:
+	match _current_brush:
+		HudWindowsScript.TOOL_TRAIT_RAIN:
+			if not is_initial_press and _drop_cooldown > 0.0:
+				return
+			_drop_cooldown = 0.22
+			_world.spawn_sky_drops(world_pos, float(_brush_radius), WorldDropsScript.DropKind.TRAIT_RAIN)
+			var tid: int = int(_hud_windows.get_selected_trait_rain_id()) if _hud_windows != null else 0
+			_physics.apply_trait_rain(world_pos, float(_brush_radius), tid)
+			_play_brush_sfx("crystal", world_pos.x)
+		HudWindowsScript.TOOL_GEAR_RAIN:
+			if not is_initial_press and _drop_cooldown > 0.0:
+				return
+			_drop_cooldown = 0.22
+			_world.spawn_sky_drops(world_pos, float(_brush_radius), WorldDropsScript.DropKind.GEAR_RAIN)
+			var tier_hint: int = int(_hud_windows.get_selected_gear_tier()) if _hud_windows != null else -1
+			_physics.apply_gear_rain(world_pos, float(_brush_radius), tier_hint)
+			_play_brush_sfx("build_pop", world_pos.x)
+		HudWindowsScript.TOOL_MONOLITH:
+			if not is_initial_press and _evo_cooldown > 0.0:
+				return
+			_evo_cooldown = 0.35
+			var made: int = int(_physics.apply_monolith_uplift(world_pos, float(_brush_radius)))
+			_fx.spawn_shockwave(world_pos, float(maxi(_brush_radius, 12)), Color("#9D7BFF"), 0.35)
+			_fx.play_sfx("crystal" if made > 0 else "ui", world_pos.x)
+		HudWindowsScript.TOOL_GREY_GOO:
+			_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(WorldTerrainScript.BrushMode.PLACE_GREY_GOO, _brush_shape))
+			if is_initial_press or _drop_cooldown <= 0.0:
+				_drop_cooldown = 0.25
+				_world.spawn_sky_drops(world_pos, float(_brush_radius), WorldDropsScript.DropKind.GREY_GOO)
+				_play_brush_sfx("emp_glitch", world_pos.x)
+		HudWindowsScript.TOOL_CONWAY:
+			_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(WorldTerrainScript.BrushMode.PLACE_CONWAY, _brush_shape))
+			if is_initial_press or _drop_cooldown <= 0.0:
+				_drop_cooldown = 0.25
+				_world.spawn_sky_drops(world_pos, float(_brush_radius), WorldDropsScript.DropKind.CONWAY)
+				_play_brush_sfx("crystal", world_pos.x)
+		HudWindowsScript.TOOL_BOMB:
+			if Input.is_key_pressed(KEY_SHIFT):
+				if is_initial_press:
+					_world.trigger_world_disaster(world_pos, WorldTerrainScript.DisasterKind.CHAIN_BOMB)
+			else:
+				_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(WorldTerrainScript.BrushMode.PLACE_BOMB, _brush_shape))
+				if is_initial_press:
+					_world.spawn_sky_drops(world_pos, float(_brush_radius), WorldDropsScript.DropKind.PLASMA_BOMB)
+		HudWindowsScript.TOOL_TORNADO:
+			if is_initial_press or _storm_cooldown <= 0.0:
+				_storm_cooldown = 0.40
+				_world.trigger_world_disaster(world_pos, WorldTerrainScript.DisasterKind.TORNADO)
+		HudWindowsScript.TOOL_EARTHQUAKE:
+			if is_initial_press or _meteor_cooldown <= 0.0:
+				_meteor_cooldown = 0.35
+				if _world.trigger_world_disaster(world_pos, WorldTerrainScript.DisasterKind.EARTHQUAKE):
+					_on_impact_trauma(0.28, 0.02)
+		HudWindowsScript.TOOL_GEYSER:
+			if is_initial_press or _storm_cooldown <= 0.0:
+				_storm_cooldown = 0.35
+				var gk := WorldTerrainScript.DisasterKind.GEYSER_ACID if Input.is_key_pressed(KEY_SHIFT) else WorldTerrainScript.DisasterKind.GEYSER_STEAM
+				_world.trigger_world_disaster(world_pos, gk)
+		HudWindowsScript.TOOL_WALL:
+			var wm := WorldTerrainScript.BrushMode.WALL_ENERGY if Input.is_key_pressed(KEY_SHIFT) else WorldTerrainScript.BrushMode.WALL_ROCK
+			_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(wm, _brush_shape))
+			if is_initial_press or _sfx_cooldown <= 0.0:
+				_play_brush_sfx("build_pop", world_pos.x)
+		HudWindowsScript.TOOL_DRAIN:
+			_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(WorldTerrainScript.BrushMode.SPONGE_DRAIN, _brush_shape))
+			if is_initial_press or _sfx_cooldown <= 0.0:
+				_play_brush_sfx("terraform", world_pos.x)
+		HudWindowsScript.TOOL_ERASER:
+			_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(WorldTerrainScript.BrushMode.ERASER, _brush_shape))
+			_civ.on_terrain_damaged(world_pos, float(_brush_radius))
+			_physics.apply_external_damage(world_pos, float(_brush_radius), {"damage": 9999.0, "knockback": 0.0})
+			if is_initial_press or _sfx_cooldown <= 0.0:
+				_play_brush_sfx("emp_glitch", world_pos.x)
+
+
 func _apply_active_brush(world_pos: Vector2, is_initial_press: bool) -> void:
 	if _possessing_uid >= 0:
 		return
@@ -2766,6 +3808,10 @@ func _apply_active_brush(world_pos: Vector2, is_initial_press: bool) -> void:
 	if _current_brush == BRUSH_INSPECT:
 		if is_initial_press:
 			_handle_inspector_click(world_pos)
+		return
+
+	if _current_brush == BRUSH_SETTLERS:
+		_apply_settlers_brush(world_pos, is_initial_press)
 		return
 
 	if _current_brush == BRUSH_COLONY:
@@ -2784,6 +3830,18 @@ func _apply_active_brush(world_pos: Vector2, is_initial_press: bool) -> void:
 
 	if _current_brush == BRUSH_AI_GLITCH or _current_brush == BRUSH_XENO_VIRUS or _current_brush == BRUSH_BIO_SEEDER:
 		_apply_evo_brush(world_pos, is_initial_press)
+		return
+
+	if _current_brush >= HudWindowsScript.TOOL_BIOME_LUSH and _current_brush <= HudWindowsScript.TOOL_BIOME_CREEP_CYBER:
+		_apply_biome_brush(world_pos, is_initial_press)
+		return
+
+	if _current_brush >= HudWindowsScript.TOOL_FAUNA_HERBIVORE and _current_brush <= HudWindowsScript.TOOL_BOSS_COLOSSUS:
+		_apply_fauna_brush(world_pos, is_initial_press)
+		return
+
+	if _current_brush >= HudWindowsScript.TOOL_TRAIT_RAIN and _current_brush <= HudWindowsScript.TOOL_ERASER:
+		_apply_creator_brush(world_pos, is_initial_press)
 		return
 
 	if _current_brush == BRUSH_BLESS:
@@ -2819,24 +3877,24 @@ func _apply_active_brush(world_pos: Vector2, is_initial_press: bool) -> void:
 	if digging_canal:
 		brush_mode = WorldTerrainScript.BrushMode.LOWER_CANAL
 
-	_world.apply_brush(world_pos, brush_mode, _brush_radius)
+	_world.apply_shaped_brush(world_pos, _brush_radius, Vector2i(brush_mode, _brush_shape))
 	if brush_mode == WorldTerrainScript.BrushMode.LAVA_VOLCANO:
 		_civ.on_terrain_damaged(world_pos, float(_brush_radius))
 		if is_initial_press or _sfx_cooldown <= 0.0:
 			_fx.spawn_burst(world_pos, 8, Color(1.0, 0.48, 0.16, 1.0), 20.0, 0.44, -8.0)
-			_play_brush_sfx("lava")
+			_play_brush_sfx("lava", world_pos.x)
 	elif digging_canal:
 		if is_initial_press or _sfx_cooldown <= 0.0:
 			_fx.spawn_burst(world_pos, 6, Color(0.42, 0.84, 1.0, 0.95), 18.0, 0.36, 16.0)
-			_play_brush_sfx("terraform")
+			_play_brush_sfx("terraform", world_pos.x)
 	elif brush_mode == WorldTerrainScript.BrushMode.TERRAFORM_LIFE:
 		if is_initial_press or _sfx_cooldown <= 0.0:
 			_fx.spawn_burst(world_pos, 8, Color(0.45, 1.35, 0.60, 1.0), 20.0, 0.42, -8.0)
-			_play_brush_sfx("terraform")
+			_play_brush_sfx("terraform", world_pos.x)
 	elif brush_mode == WorldTerrainScript.BrushMode.CRYSTAL_FLORA:
 		if is_initial_press or _sfx_cooldown <= 0.0:
 			_fx.spawn_burst(world_pos, 10, Color(0.35, 1.85, 2.25, 1.0), 24.0, 0.48, -10.0)
-			_play_brush_sfx("crystal")
+			_play_brush_sfx("crystal", world_pos.x)
 
 
 func _apply_diplo_brush(world_pos: Vector2) -> void:
@@ -2853,12 +3911,12 @@ func _apply_diplo_brush(world_pos: Vector2) -> void:
 			if (is_rebel or is_war or is_pact) and _fx.has_method("spawn_reaction_strip"):
 				_fx.spawn_reaction_strip(world_pos + Vector2(0.0, -14.0), strip_id)
 			_fx.spawn_shockwave(world_pos, 18.0, wave_col, 0.28)
-			_fx.play_sfx("emp_glitch" if is_rebel else "ui")
+			_fx.play_sfx("emp_glitch" if is_rebel else "ui", world_pos.x)
 			_world_overlay.queue_redraw()
 			_update_hud_telemetry()
 			return
 	_fx.spawn_burst(world_pos, 3, Color(0.68, 0.80, 0.92, 0.65), 10.0, 0.20, 0.0)
-	_fx.play_sfx("ui")
+	_fx.play_sfx("ui_denied", world_pos.x)
 
 
 func _apply_storm_brush(world_pos: Vector2, is_initial_press: bool) -> void:
@@ -2866,19 +3924,24 @@ func _apply_storm_brush(world_pos: Vector2, is_initial_press: bool) -> void:
 		return
 	_storm_cooldown = float(TUNING_KNOBS["STORM_REPEAT_SEC"])
 	var storm_kind := "rainburst"
+	var drop_kind := WorldDropsScript.DropKind.RAIN
 	var burst_col := Color(0.45, 0.86, 1.0, 0.95)
 	if _current_brush == BRUSH_STORM_FIRE:
 		storm_kind = "firestorm"
+		drop_kind = WorldDropsScript.DropKind.FIRE
 		burst_col = Color(1.0, 0.56, 0.22, 0.95)
 	elif _current_brush == BRUSH_STORM_ION:
 		storm_kind = "ion_storm"
+		drop_kind = WorldDropsScript.DropKind.PLASMA_ARC
 		burst_col = Color(0.32, 0.95, 1.0, 1.0)
 		_fx.spawn_shockwave(world_pos, float(_brush_radius), Color("#46F2FF"), 0.26)
 	if _world.has_method("apply_elemental_storm"):
 		_world.apply_elemental_storm(world_pos, float(_brush_radius), storm_kind)
+	if _world.has_method("spawn_sky_drops"):
+		_world.spawn_sky_drops(world_pos, float(_brush_radius), drop_kind)
 	if is_initial_press or _sfx_cooldown <= 0.0:
 		_fx.spawn_burst(world_pos, 8, burst_col, 22.0, 0.42, 8.0)
-		_play_brush_sfx("storm")
+		_play_brush_sfx("storm", world_pos.x)
 
 
 func _apply_evo_brush(world_pos: Vector2, is_initial_press: bool) -> void:
@@ -2893,59 +3956,119 @@ func _apply_evo_brush(world_pos: Vector2, is_initial_press: bool) -> void:
 		var u_hits: int = int(_physics.apply_ai_glitch_units(world_pos, float(_brush_radius))) if _physics.has_method("apply_ai_glitch_units") else 0
 		if civ_hits + u_hits > 0:
 			_fx.spawn_shockwave(world_pos, float(_brush_radius), Color("#FF466E"), 0.28)
-			_play_brush_sfx("emp_glitch")
+			_play_brush_sfx("emp_glitch", world_pos.x)
 			_world_overlay.queue_redraw()
 		elif is_initial_press:
 			_fx.spawn_burst(world_pos, 3, Color(0.38, 0.72, 0.88, 0.65), 10.0, 0.22, 0.0)
-			_fx.play_sfx("ui")
+			_fx.play_sfx("ui", world_pos.x)
 	elif _current_brush == BRUSH_XENO_VIRUS:
 		var v_hits: int = int(_physics.apply_xeno_virus(world_pos, float(_brush_radius))) if _physics.has_method("apply_xeno_virus") else 0
 		if v_hits > 0:
-			_play_brush_sfx("mutate")
+			_play_brush_sfx("mutate", world_pos.x)
 		elif is_initial_press:
 			_fx.spawn_burst(world_pos, 3, Color(0.66, 0.42, 0.88, 0.65), 10.0, 0.22, -4.0)
-			_fx.play_sfx("ui")
+			_fx.play_sfx("ui", world_pos.x)
 	else:
 		_world.apply_brush(world_pos, WorldTerrainScript.BrushMode.TERRAFORM_LIFE, _brush_radius)
 		var seeded: int = int(_physics.plant_bio_seeder(world_pos, float(_brush_radius))) if _physics.has_method("plant_bio_seeder") else 0
 		if seeded > 0:
-			_play_brush_sfx("terraform")
+			_play_brush_sfx("terraform", world_pos.x)
 		elif is_initial_press:
 			_fx.spawn_burst(world_pos, 3, Color("#68F078"), 10.0, 0.22, -4.0)
-			_fx.play_sfx("ui")
+			_fx.play_sfx("ui", world_pos.x)
 	_update_hud_telemetry()
 
 
-func _apply_colony_brush(world_pos: Vector2) -> void:
-	if Input.is_key_pressed(KEY_SHIFT):
-		var city_id: int = _civ.spawn_colony(world_pos, _selected_faction)
-		if city_id >= 0:
-			_fx.emit_build_pop(world_pos)
-			_update_hud_telemetry()
-			_reticle.queue_redraw()
-		else:
-			_fx.play_sfx("ui")
+func _is_settler_land_near(world_pos: Vector2, max_r: float) -> bool:
+	var px: int = clampi(int(floor(world_pos.x)), 4, int(_world.map_w) - 5)
+	var py: int = clampi(int(floor(world_pos.y)), 4, int(_world.map_h) - 5)
+	if _world.is_walkable(px, py) and int(_world.get_biome(px, py)) != WorldTerrainScript.Biome.LAVA:
+		return true
+	var r2: float = clampf(max_r * 0.6, 4.0, 12.0)
+	for rad in [4.0, r2]:
+		for k in range(8):
+			var ang: float = float(k) * (TAU / 8.0)
+			var tx: int = clampi(int(floor(world_pos.x + cos(ang) * rad)), 4, int(_world.map_w) - 5)
+			var ty: int = clampi(int(floor(world_pos.y + sin(ang) * rad)), 4, int(_world.map_h) - 5)
+			if _world.is_walkable(tx, ty) and int(_world.get_biome(tx, ty)) != WorldTerrainScript.Biome.LAVA:
+				return true
+	return false
+
+
+func _apply_settlers_brush(world_pos: Vector2, is_initial_press: bool) -> void:
+	if not is_initial_press and _settler_cooldown > 0.0:
 		return
-	var count := 1 if _brush_radius <= 4 else (4 if _brush_radius <= 8 else 8)
+	_settler_cooldown = float(TUNING_KNOBS["SETTLER_REPEAT_SEC"])
+	if not _is_settler_land_near(world_pos, float(_brush_radius)):
+		if is_initial_press:
+			_fx.play_sfx("ui_denied", world_pos.x)
+		return
+	var count := 1 if _brush_radius <= 4 else (2 if _brush_radius <= 8 else (4 if _brush_radius <= 16 else (6 if _brush_radius <= 28 else 8)))
+	if not is_initial_press:
+		count = maxi(1, count / 2)
 	var spawned: int = int(_physics.spawn_free_settlers(world_pos, _selected_faction, count)) if _physics.has_method("spawn_free_settlers") else 0
 	if spawned > 0:
 		var f_col: Color = FACTION_RETICLE_COLORS[posmod(_selected_faction, FACTION_RETICLE_COLORS.size())]
 		_fx.spawn_burst(world_pos, mini(spawned + 2, 8), f_col, 14.0, 0.30, -6.0)
-		_fx.play_sfx("build_pop", world_pos.x)
+		if is_initial_press:
+			_fx.play_sfx("build_pop", world_pos.x)
+		else:
+			_play_brush_sfx("build_pop", world_pos.x)
 		_update_hud_telemetry()
-		_reticle.queue_redraw()
-	else:
-		_fx.play_sfx("ui")
+		_world_overlay.queue_redraw()
+	elif is_initial_press:
+		_fx.play_sfx("ui_denied", world_pos.x)
 
 
-func _play_brush_sfx(kind: String) -> void:
+func _apply_colony_brush(world_pos: Vector2) -> void:
+	if Input.is_key_pressed(KEY_SHIFT):
+		var count := 1 if _brush_radius <= 4 else (4 if _brush_radius <= 8 else 8)
+		var spawned: int = int(_physics.spawn_free_settlers(world_pos, _selected_faction, count)) if _physics.has_method("spawn_free_settlers") else 0
+		if spawned > 0:
+			var f_col: Color = FACTION_RETICLE_COLORS[posmod(_selected_faction, FACTION_RETICLE_COLORS.size())]
+			_fx.spawn_burst(world_pos, mini(spawned + 2, 8), f_col, 14.0, 0.30, -6.0)
+			_fx.play_sfx("build_pop", world_pos.x)
+			_update_hud_telemetry()
+			_world_overlay.queue_redraw()
+		else:
+			_fx.play_sfx("ui_denied", world_pos.x)
+		return
+
+	var city_id: int = _civ.spawn_colony(world_pos, _selected_faction)
+	if city_id >= 0:
+		_fx.emit_build_pop(world_pos)
+		_pump_chronicle_from_civ()
+		_update_hud_telemetry()
+		_world_overlay.queue_redraw()
+		return
+	var c_info: Dictionary = _civ.inspect_city_at(world_pos)
+	if bool(c_info.get("found", false)) and int(c_info.get("faction", -1)) == _selected_faction:
+		var added := int(_physics.spawn_colony_units(int(c_info.get("city_id", -1)), world_pos, 4))
+		if added > 0:
+			_fx.emit_build_pop(world_pos)
+			_update_hud_telemetry()
+			_world_overlay.queue_redraw()
+			return
+	if _is_settler_land_near(world_pos, float(_brush_radius)) and _physics.has_method("spawn_free_settlers"):
+		var fb_spawned: int = int(_physics.spawn_free_settlers(world_pos, _selected_faction, 4))
+		if fb_spawned > 0:
+			var fb_col: Color = FACTION_RETICLE_COLORS[posmod(_selected_faction, FACTION_RETICLE_COLORS.size())]
+			_fx.spawn_burst(world_pos, mini(fb_spawned + 2, 8), fb_col, 14.0, 0.30, -6.0)
+			_fx.play_sfx("build_pop", world_pos.x)
+			_update_hud_telemetry()
+			_world_overlay.queue_redraw()
+			return
+	_fx.play_sfx("ui_denied", world_pos.x)
+
+
+func _play_brush_sfx(kind: String, world_x: float = -1.0) -> void:
 	if _sfx_cooldown <= 0.0:
-		_fx.play_sfx(kind)
+		_fx.play_sfx(kind, world_x)
 		_sfx_cooldown = float(TUNING_KNOBS["BRUSH_SFX_COOLDOWN_SEC"])
 
 
 func _process(delta: float) -> void:
-	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _capturing_now:
+	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _smoke_parity_mode or _capturing_now:
 		return
 
 	_elapsed_time += delta
@@ -2954,10 +4077,17 @@ func _process(delta: float) -> void:
 	_bless_cooldown = maxf(0.0, _bless_cooldown - delta)
 	_storm_cooldown = maxf(0.0, _storm_cooldown - delta)
 	_evo_cooldown = maxf(0.0, _evo_cooldown - delta)
+	_settler_cooldown = maxf(0.0, _settler_cooldown - delta)
 	_terrain_hold_cooldown = maxf(0.0, _terrain_hold_cooldown - delta)
 	_vortex_terrain_cooldown = maxf(0.0, _vortex_terrain_cooldown - delta)
 	_sfx_cooldown = maxf(0.0, _sfx_cooldown - delta)
 	_possess_cooldown = maxf(0.0, _possess_cooldown - delta)
+	_drop_cooldown = maxf(0.0, _drop_cooldown - delta)
+	_hud_sel_timer = maxf(0.0, _hud_sel_timer - delta)
+	if _regen_confirm_timer > 0.0:
+		_regen_confirm_timer -= delta
+		if _regen_confirm_timer <= 0.0:
+			_reset_regen_confirm()
 
 	if _is_capture_mode():
 		_process_capture_sequence(delta)
@@ -2971,11 +4101,10 @@ func _process(delta: float) -> void:
 	_step_simulation_substeps(delta)
 
 	if _world_laws_ui != null:
-		if _civ != null and _civ.has_method("pop_chronicle_events"):
-			var evs: Array = _civ.pop_chronicle_events()
-			if not evs.is_empty():
-				_world_laws_ui.push_chronicle_events(evs)
+		_pump_chronicle_from_civ()
 		_world_laws_ui.step_ui(delta)
+	if _hud_windows != null:
+		_hud_windows.refresh_live(delta)
 
 	var cur_spd := _hover_world_pos.distance_to(_prev_hover_world_pos) / maxf(delta, 0.001)
 	_prev_hover_world_pos = _hover_world_pos
@@ -2986,6 +4115,9 @@ func _process(delta: float) -> void:
 		_civ.set_zoom_lod(z)
 	if _physics.has_method("set_zoom_lod"):
 		_physics.set_zoom_lod(z)
+	if _fx.has_method("set_camera_audio_context"):
+		var half_ext := (get_viewport_rect().size * 0.5) / maxf(z, 0.1)
+		_fx.set_camera_audio_context(Rect2(_cam_base_pos - half_ext, half_ext * 2.0), z, _sim_speed)
 	if _fx.has_method("set_audio_telemetry"):
 		_fx.set_audio_telemetry(z, _cursor_speed_ema)
 	if _fx.has_method("set_camera_center_x"):
@@ -2994,12 +4126,11 @@ func _process(delta: float) -> void:
 	_update_lightmap_frame()
 	_update_fps_ema(delta)
 	_update_hud_telemetry()
+	_refresh_watchlist_pins()
 	_world_overlay.queue_redraw()
 	_macro_badges.visible = (z <= 2.6)
 	if _macro_badges.visible:
 		_macro_badges.queue_redraw()
-	if _has_mouse_hover:
-		_reticle.queue_redraw()
 
 
 func _process_active_input_tools(delta: float) -> void:
@@ -3012,19 +4143,45 @@ func _process_active_input_tools(delta: float) -> void:
 			_possess_cooldown = 0.22
 		var p_res: Dictionary = _physics.set_possessed_unit(_possessing_uid, p_dir, fire_pulse)
 		if not bool(p_res.get("active", false)):
+			_on_impact_trauma(0.45, 0.04)
 			_exit_possession()
-		elif fire_pulse:
-			_fx.play_sfx("skirmish")
-			_fx.spawn_shockwave(p_res.get("pos", _cam_base_pos), 16.0, Color("#45E9FF"), 0.25)
+		else:
+			var u_pos: Vector2 = p_res.get("pos", _cam_base_pos)
+			if fire_pulse:
+				_fx.play_sfx("skirmish", u_pos.x)
+				_fx.spawn_shockwave(u_pos, 16.0, Color("#45E9FF"), 0.25)
+			if _possess_action_queued:
+				_possess_action_queued = false
+				if _physics.has_method("avatar_action"):
+					_physics.avatar_action(_possess_aim_pos, false)
+					_pump_chronicle_from_civ()
+			if _possess_alt_queued:
+				_possess_alt_queued = false
+				if _physics.has_method("avatar_action"):
+					var alt_pos := get_global_mouse_position() if _has_mouse_hover else u_pos
+					_physics.avatar_action(alt_pos, true)
+					_pump_chronicle_from_civ()
 	elif _possessing_uid < 0 and _painting_lmb:
 		var mouse_world := get_global_mouse_position()
 		_hover_world_pos = mouse_world
 		if _current_brush == WorldTerrainScript.BrushMode.VORTEX_PULL:
 			var vortex_dt := maxf(delta * maxf(_sim_speed, 1.0), 0.016)
 			_physics.apply_vortex(mouse_world, float(_brush_radius) * float(TUNING_KNOBS["VORTEX_RADIUS_MULT"]), float(TUNING_KNOBS["VORTEX_STRENGTH"]), vortex_dt)
+			var drag_vel := (mouse_world - _prev_vortex_world_pos) / maxf(delta, 0.008)
+			_prev_vortex_world_pos = mouse_world
 			if _vortex_terrain_cooldown <= 0.0:
-				_vortex_terrain_cooldown = 0.12
-				_world.apply_brush(mouse_world, WorldTerrainScript.BrushMode.VORTEX_PULL, _brush_radius)
+				_vortex_terrain_cooldown = 0.066
+				if _world.has_method("apply_vortex_catalyst"):
+					_world.apply_vortex_catalyst(mouse_world, drag_vel, Input.is_key_pressed(KEY_SHIFT))
+				else:
+					_world.apply_brush(mouse_world, WorldTerrainScript.BrushMode.VORTEX_PULL, _brush_radius)
+		elif _current_brush == HudWindowsScript.TOOL_MAGNET and _magnet_hold_active:
+			_magnet_vel = (mouse_world - _magnet_prev_pos) / maxf(delta, 0.008)
+			_magnet_prev_pos = mouse_world
+			if get_viewport().gui_get_hovered_control() == null:
+				_physics.apply_magnet_step(mouse_world, float(_brush_radius), Vector3(_magnet_vel.x, _magnet_vel.y, 1.0))
+		elif _current_brush == HudWindowsScript.TOOL_FLICK:
+			pass
 		elif _current_brush != BRUSH_COLONY and _current_brush != BRUSH_INSPECT and _current_brush != BRUSH_DIPLO_SPARK:
 			if get_viewport().gui_get_hovered_control() == null:
 				var is_terrain_paint := (
@@ -3032,12 +4189,16 @@ func _process_active_input_tools(delta: float) -> void:
 					or _current_brush == BRUSH_CANAL
 					or _current_brush == WorldTerrainScript.BrushMode.CRYSTAL_FLORA
 					or _current_brush == WorldTerrainScript.BrushMode.LAVA_VOLCANO
+					or (_current_brush >= HudWindowsScript.TOOL_BIOME_LUSH and _current_brush <= HudWindowsScript.TOOL_BIOME_CREEP_CYBER)
+					or _current_brush == HudWindowsScript.TOOL_WALL
+					or _current_brush == HudWindowsScript.TOOL_DRAIN
+					or _current_brush == HudWindowsScript.TOOL_ERASER
 				)
 				if not is_terrain_paint:
 					_apply_active_brush(mouse_world, false)
 				elif _terrain_hold_cooldown <= 0.0:
 					_terrain_hold_cooldown = 0.08
-					_apply_active_brush(mouse_world, false)
+					_apply_lerp_brush_stroke(mouse_world)
 
 
 func _step_simulation_substeps(delta: float) -> void:
@@ -3048,10 +4209,11 @@ func _step_simulation_substeps(delta: float) -> void:
 		return
 	if _sim_speed <= 0.0:
 		return
-	var total_sim_dt := delta * _sim_speed
+	var eff_speed := _sim_speed * 0.5 if _sim_speed >= 35.0 else _sim_speed
+	var total_sim_dt := delta * eff_speed
 	var max_step: float = 0.05 if _sim_speed > 5.0 else float(TUNING_KNOBS["SIM_SUBSTEP_MAX_DT"])
 	var steps := 0
-	var max_substeps: int = int(TUNING_KNOBS["SIM_MAX_SUBSTEPS"])
+	var max_substeps: int = maxi(int(TUNING_KNOBS["SIM_MAX_SUBSTEPS"]), 12) if _sim_speed >= 35.0 else int(TUNING_KNOBS["SIM_MAX_SUBSTEPS"])
 	var budget_usec: int = int(TUNING_KNOBS["SIM_FRAME_BUDGET_USEC"])
 	var sim_start_usec := Time.get_ticks_usec()
 	while total_sim_dt > 0.0001 and steps < max_substeps:
@@ -3109,9 +4271,17 @@ func _process_capture_sequence(delta: float) -> void:
 			if _fx.has_method("spawn_reaction_strip"):
 				_fx.spawn_reaction_strip(east_ally + Vector2(0.0, -14.0), STRIP_WAR)
 				_fx.spawn_reaction_strip(rebel_pos + Vector2(0.0, -14.0), STRIP_REBEL)
+				if _civ != null and _civ.has_method("get_active_plots"):
+					for raw_pl in _civ.get_active_plots():
+						if raw_pl is Dictionary:
+							var pl: Dictionary = raw_pl
+							var pk := str(pl.get("kind", "war")).to_lower()
+							var pid := STRIP_PLOT_WAR if pk == "war" else (STRIP_PLOT_REBEL if pk == "rebel" else STRIP_PLOT_PACT)
+							_fx.spawn_reaction_strip(Vector2(pl.get("pos", east_ally)) + Vector2(0.0, -14.0), pid)
 			_physics.step_physics(0.03)
 			_fx.step_fx(0.03)
 			_hit_stop_timer = 0.0
+			_pump_chronicle_from_civ()
 			_update_hud_telemetry()
 		elif _zoom_shot_path != "":
 			var meteor_pos := _clamp_to_world(_showcase_anchor + Vector2(-4.0, 6.0), 24.0)
@@ -3143,6 +4313,7 @@ func _process_capture_sequence(delta: float) -> void:
 		_physics.step_physics(0.016)
 		_fx.step_fx(0.016)
 		_hit_stop_timer = 0.0
+		_pump_chronicle_from_civ()
 
 	var z := _camera.zoom.x
 	if _civ.has_method("set_zoom_lod"):
@@ -3175,6 +4346,8 @@ func _update_lightmap_frame() -> void:
 	if _night_mix > 0.04 and _has_mouse_hover and get_viewport().gui_get_hovered_control() == null:
 		_fx.push_light(_hover_world_pos, float(_brush_radius) * 1.45, Color(0.45, 0.85, 1.0, 1.0), 0.72)
 	_fx.end_light_frame()
+	if _world != null and _world.has_method("set_clouds_suppressed") and _fx.has_method("is_light_layer_visible"):
+		_world.set_clouds_suppressed(_fx.is_light_layer_visible() or _camera.zoom.x > 3.2)
 
 
 func _read_wasd_dir() -> Vector2:
@@ -3214,6 +4387,7 @@ func _finish_capture() -> void:
 
 func _update_camera_controls(delta: float) -> void:
 	if _possessing_uid >= 0:
+		_zoom_to_cursor_active = false
 		_cam_focus_active = false
 		var p_pos: Vector2 = _physics.get_unit_follow_pos(_possessing_uid)
 		if p_pos.x >= 0.0:
@@ -3223,11 +4397,15 @@ func _update_camera_controls(delta: float) -> void:
 	else:
 		var move := _read_wasd_dir()
 		if move != Vector2.ZERO:
+			_zoom_to_cursor_active = false
 			_follow_locked_unit = false
 			_cam_focus_active = false
 			_cam_base_pos += move.normalized() * (float(TUNING_KNOBS["PAN_SPEED"]) / maxf(_camera.zoom.x, 0.5)) * delta
 			_clamp_camera_base()
+		elif _panning_drag:
+			_zoom_to_cursor_active = false
 		elif _follow_locked_unit and _locked_unit_uid >= 0:
+			_zoom_to_cursor_active = false
 			_cam_focus_active = false
 			var follow_pos: Vector2 = _physics.get_unit_follow_pos(_locked_unit_uid)
 			if follow_pos.x >= 0.0:
@@ -3237,6 +4415,7 @@ func _update_camera_controls(delta: float) -> void:
 			else:
 				_follow_locked_unit = false
 		elif _cam_focus_active:
+			_zoom_to_cursor_active = false
 			var c_alpha := 1.0 - exp(-9.0 * delta)
 			_cam_base_pos = _cam_base_pos.lerp(_cam_focus_target, c_alpha)
 			_clamp_camera_base()
@@ -3249,15 +4428,31 @@ func _update_camera_controls(delta: float) -> void:
 	if absf(z - _target_zoom) < 0.004:
 		z = _target_zoom
 	_camera.zoom = Vector2(z, z)
+	if _zoom_to_cursor_active and not _panning_drag:
+		_cam_base_pos = _zoom_anchor_world - _zoom_anchor_screen_off / maxf(z, 0.25)
+		_clamp_camera_base()
+		if absf(z - _target_zoom) < 0.004:
+			_zoom_to_cursor_active = false
 
 
 func _clamp_camera_base() -> void:
-	_cam_base_pos.x = clampf(_cam_base_pos.x, -24.0, float(_world.map_w) + 24.0)
-	_cam_base_pos.y = clampf(_cam_base_pos.y, -24.0, float(_world.map_h) + 24.0)
+	var mw := float(_world.map_w)
+	var mh := float(_world.map_h)
+	var z := maxf(_camera.zoom.x if _camera != null else _target_zoom, 0.25)
+	var half_vp := (get_viewport_rect().size * 0.5) / z
+	var soft_pad := 20.0
+	if half_vp.x * 2.0 >= mw:
+		_cam_base_pos.x = clampf(_cam_base_pos.x, mw * 0.5 - soft_pad, mw * 0.5 + soft_pad)
+	else:
+		_cam_base_pos.x = clampf(_cam_base_pos.x, half_vp.x - soft_pad, mw - half_vp.x + soft_pad)
+	if half_vp.y * 2.0 >= mh:
+		_cam_base_pos.y = clampf(_cam_base_pos.y, mh * 0.5 - soft_pad, mh * 0.5 + soft_pad)
+	else:
+		_cam_base_pos.y = clampf(_cam_base_pos.y, half_vp.y - soft_pad, mh - half_vp.y + soft_pad)
 
 
 func _is_camera_moving() -> bool:
-	if _panning_rmb or _follow_locked_unit or _cam_focus_active:
+	if _panning_drag or _follow_locked_unit or _cam_focus_active:
 		return true
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_S):
 		return true
@@ -3319,6 +4514,8 @@ func _set_entity_rows(header: String, detail: String, extra: String, header_col:
 	_entity_header_label.visible = (header != "")
 	_entity_header_label.text = header
 	_entity_header_label.add_theme_color_override("font_color", header_col)
+	if _bar_track != null and header == "":
+		_bar_track.visible = false
 	_entity_detail_label.visible = (detail != "")
 	_entity_detail_label.text = detail
 	_entity_extra_label.visible = (extra != "")
@@ -3349,6 +4546,10 @@ func _format_unit_inspector(u_info: Dictionary, locked: bool) -> void:
 	else:
 		extra = "Бой: %d · Рад: %.2f" % [int(u_info.get("kills", 0)), rad_exp]
 	_set_entity_rows(header, detail, extra, f_col)
+	if _bar_track != null and _bar_fill != null:
+		_bar_track.visible = true
+		_bar_fill.anchor_right = clampf(float(hp) / maxf(float(max_hp), 1.0), 0.0, 1.0)
+		_bar_fill.color = f_col
 
 	var mem_raw: Variant = u_info.get("memory", [])
 	var mem_lines: PackedStringArray = []
@@ -3376,7 +4577,7 @@ func _format_city_inspector(c_info: Dictionary, locked: bool) -> void:
 		f_col = Color("#FF9B26")
 	var tag := "[Город] " if locked else ""
 	var rebel_tag := "[МЯТЕЖ] " if is_rebel else ""
-	var header := "%s%s%s (%s) · Т%d/4" % [
+	var header := "%s%s%s (%s) · Т%d/5" % [
 		tag,
 		rebel_tag,
 		str(c_info.get("name", "Колония")),
@@ -3411,6 +4612,10 @@ func _format_city_inspector(c_info: Dictionary, locked: bool) -> void:
 	var gates := int(c_info.get("quantum_gates", 0))
 	var extra := "Дип: %s · Лоял: %s · Врата: %d" % [diplo_name, loy_str, gates]
 	_set_entity_rows(header, detail, extra, f_col)
+	if _bar_track != null and _bar_fill != null:
+		_bar_track.visible = true
+		_bar_fill.anchor_right = clampf(float(loyalty) / 100.0, 0.0, 1.0)
+		_bar_fill.color = f_col
 
 	var res_line := "Еда:%d Руд:%d Эн:%d Нау:%d" % [
 		int(round(float(c_info.get("food", 0.0)))),
@@ -3438,7 +4643,7 @@ func _update_hud_telemetry() -> void:
 	var rebels_total: int = int(civ_stats.get("rebellions_total", 0))
 	_colonists_label.text = "Юниты: %d" % units
 	_cities_label.text = "Города: %d" % cities
-	_tech_label.text = "Тех: %d/4" % tech_tier
+	_tech_label.text = "Тех: %d/5" % tech_tier
 	_wars_label.text = "Войн: %d · М:%d" % [wars_active, rebels_total]
 	if wars_active > 0:
 		_wars_label.add_theme_color_override("font_color", Color("#FF7474"))
@@ -3446,11 +4651,13 @@ func _update_hud_telemetry() -> void:
 		_wars_label.add_theme_color_override("font_color", Color("#FF9B26"))
 	else:
 		_wars_label.add_theme_color_override("font_color", Color("#E2ECF5"))
-	_flora_label.text = "Флора: %d" % flora
-	_temp_label.text = "Темп: %s%.1f°C" % ["+" if avg_temp >= 0.0 else "", avg_temp]
+	_planet_label.tooltip_text = "Флора: %d · Сред. темп: %s%.1f°C" % [flora, "+" if avg_temp >= 0.0 else "", avg_temp]
 
 	var probe_pos := _hover_world_pos if (_has_mouse_hover or _is_capture_mode()) else _cam_base_pos
 	var entity_shown := false
+	var sel_u_info: Dictionary = {}
+	var sel_c_info: Dictionary = {}
+	var sel_sig := "none"
 
 	if _locked_unit_uid >= 0:
 		var u_locked: Dictionary = _physics.inspect_unit_by_id(_locked_unit_uid)
@@ -3458,6 +4665,8 @@ func _update_hud_telemetry() -> void:
 			var locked_u_pos: Vector2 = u_locked.get("pos", probe_pos)
 			probe_pos = locked_u_pos
 			_format_unit_inspector(u_locked, true)
+			sel_u_info = u_locked
+			sel_sig = "u:%d:%d:%d" % [_locked_unit_uid, _locked_city_id, _possessing_uid]
 			entity_shown = true
 		else:
 			_locked_unit_uid = -1
@@ -3469,6 +4678,8 @@ func _update_hud_telemetry() -> void:
 			_locked_city_pos = locked_c_pos
 			probe_pos = _locked_city_pos
 			_format_city_inspector(c_locked, true)
+			sel_c_info = c_locked
+			sel_sig = "c:%d:%d:%d" % [_locked_unit_uid, _locked_city_id, _possessing_uid]
 			entity_shown = true
 		else:
 			_locked_city_id = -1
@@ -3531,10 +4742,22 @@ func _update_hud_telemetry() -> void:
 		_loc_label.text = "Сектор: Орбита"
 		_metrics_label.text = "Вне границ планеты"
 
+	_sync_hud_selection_context(sel_u_info, sel_c_info, sel_sig)
 	_sync_inspector_layout()
 
 
-func _draw_bresenham_circle(target: CanvasItem, geom: Vector3i, colors: PackedColorArray) -> void:
+func _sync_hud_selection_context(u_info: Dictionary, c_info: Dictionary, sig: String) -> void:
+	if _hud_windows == null:
+		return
+	var modal_open: bool = _hud_windows.has_open_modal()
+	var changed: bool = (sig != _hud_sel_sig)
+	if changed or (sig != "none" and not modal_open and _hud_sel_timer <= 0.0):
+		_hud_sel_sig = sig
+		_hud_sel_timer = 0.30
+		_hud_windows.update_selection_context(u_info, c_info)
+
+
+func _draw_bresenham_circle(target: CanvasItem, geom: Vector3i, colors: PackedColorArray, dash_period: int = 0) -> void:
 	var cx: int = geom.x
 	var cy: int = geom.y
 	var r: int = maxi(geom.z, 1)
@@ -3549,8 +4772,13 @@ func _draw_bresenham_circle(target: CanvasItem, geom: Vector3i, colors: PackedCo
 	var x := 0
 	var y := r
 	var d := 1 - r
+	var step_idx := 0
+	var dash_half := maxi(1, dash_period >> 1)
+	var dash_phase := int(floor(_elapsed_time * 6.0)) if dash_period > 0 else 0
 	while x <= y:
-		_plot_circle_octants(target, Vector3i(cx, cy, x), Vector2i(y, 0), rim_col)
+		if dash_period <= 0 or ((step_idx + dash_phase) % dash_period) < dash_half:
+			_plot_circle_octants(target, Vector3i(cx, cy, x), Vector2i(y, 0), rim_col)
+		step_idx += 1
 		x += 1
 		if d < 0:
 			d += 2 * x + 1
@@ -3582,19 +4810,22 @@ func _plot_circle_octants(target: CanvasItem, origin_x: Vector3i, y_pad: Vector2
 
 
 func _on_world_overlay_draw() -> void:
-	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode:
+	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _smoke_parity_mode:
 		return
 	var zoom_x := maxf(_camera.zoom.x, 1.0)
 	_draw_overlay_diplo_arcs(zoom_x)
+	_draw_overlay_regiment_arrows(zoom_x)
 	_draw_overlay_capture_bars(zoom_x)
 	_draw_overlay_shields()
 	_draw_overlay_army_banners()
+	_draw_overlay_notable_badges()
 	_draw_overlay_active_plots()
 	_draw_overlay_possession_ring()
+	_draw_overlay_reticle()
 
 
 func _draw_overlay_diplo_arcs(zoom_x: float) -> void:
-	var show_diplo_arcs := (_camera.zoom.x <= 1.8) or (_current_brush == BRUSH_DIPLO_SPARK)
+	var show_diplo_arcs := (_camera.zoom.x <= 3.0) or (_current_brush == BRUSH_DIPLO_SPARK)
 	if not show_diplo_arcs or _civ == null or not _civ.has_method("get_diplomacy_links"):
 		return
 	var arc_w := clampf(1.45 / zoom_x, 0.45, 0.95)
@@ -3679,10 +4910,11 @@ func _draw_overlay_shields() -> void:
 		var pos: Vector2 = pylon.get("pos", Vector2.ZERO)
 		var rad := maxi(int(round(float(pylon.get("radius", 48.0)))), 8)
 		var pulse := 0.85 + 0.15 * sin(_elapsed_time * 3.4 + pos.x * 0.07)
-		var rim_a := clampf((0.24 + 0.54 * flash) * pulse * clampf(charge + 0.30, 0.0, 1.0), 0.14, 0.88)
+		var rim_a := clampf((0.18 + 0.56 * flash) * pulse * clampf(charge + 0.25, 0.0, 1.0), 0.12, 0.88)
 		var rim_col := Color(0.32, 0.94, 1.0, rim_a)
-		var fill_col := Color(0.24, 0.88, 1.0, rim_a * 0.05)
-		_draw_bresenham_circle(_world_overlay, Vector3i(int(round(pos.x)), int(round(pos.y)), rad), PackedColorArray([rim_col, fill_col]))
+		var fill_col := Color(0.24, 0.88, 1.0, rim_a * 0.04)
+		var dash_p := 4 if flash < 0.45 else 0
+		_draw_bresenham_circle(_world_overlay, Vector3i(int(round(pos.x)), int(round(pos.y)), rad), PackedColorArray([rim_col, fill_col]), dash_p)
 
 
 func _draw_overlay_possession_ring() -> void:
@@ -3732,39 +4964,112 @@ func _draw_overlay_army_banners() -> void:
 			_world_overlay.draw_rect(Rect2(float(bx - 2), float(by + 1), float(bar_w), 1.0), finial_col, true)
 
 
+func _draw_fx_strip_icon(col_idx: int, world_center: Vector2, size_px: float = 8.0, tint: Color = Color.WHITE) -> void:
+	var half := size_px * 0.5
+	var dst := Rect2((world_center - Vector2(half, half)).round(), Vector2(size_px, size_px))
+	if _fx_strips_tex != null:
+		var sx := float(clampi(col_idx, 0, 31)) * FX_STRIPS_FRAME_W
+		var src := Rect2(sx, 0.0, FX_STRIPS_FRAME_W, FX_STRIPS_FRAME_W)
+		_world_overlay.draw_texture_rect_region(_fx_strips_tex, dst, src, tint)
+	else:
+		_world_overlay.draw_rect(Rect2((world_center - Vector2(2.0, 2.0)).round(), Vector2(4.0, 4.0)), tint, true)
+
+
+func _draw_radial_progress_poly(center: Vector2, radius: float, progress: float, col: Color, width: float = 1.0) -> void:
+	var segs := 12
+	var bg_pts := PackedVector2Array()
+	for i in range(segs + 1):
+		var a := -PI * 0.5 + (float(i) / float(segs)) * TAU
+		bg_pts.append(center + Vector2(cos(a), sin(a)) * radius)
+	_world_overlay.draw_polyline(bg_pts, Color(0.06, 0.09, 0.14, 0.72), width, false)
+	var p := clampf(progress, 0.0, 1.0)
+	if p <= 0.01:
+		return
+	var fill_segs := maxi(1, int(ceil(p * float(segs))))
+	var fg_pts := PackedVector2Array()
+	for i in range(fill_segs + 1):
+		var frac := minf(float(i) / float(segs), p)
+		var a := -PI * 0.5 + frac * TAU
+		fg_pts.append(center + Vector2(cos(a), sin(a)) * radius)
+	_world_overlay.draw_polyline(fg_pts, col, width, false)
+
+
+func _draw_arrow_vector(from_pos: Vector2, to_pos: Vector2, col: Color, width: float, head_len: float = 4.0) -> void:
+	var diff := to_pos - from_pos
+	var d := diff.length()
+	if d < 2.5:
+		return
+	var dir := diff / d
+	var perp := Vector2(-dir.y, dir.x)
+	_world_overlay.draw_line(from_pos, to_pos, col, width, false)
+	var base := to_pos - dir * head_len
+	_world_overlay.draw_line(to_pos, base + perp * (head_len * 0.58), col, width, false)
+	_world_overlay.draw_line(to_pos, base - perp * (head_len * 0.58), col, width, false)
+
+
+func _draw_overlay_regiment_arrows(zoom_x: float) -> void:
+	if _civ == null or not _civ.has_method("get_army_orders"):
+		return
+	var orders: Dictionary = _civ.get_army_orders()
+	if orders.is_empty():
+		return
+	var w := clampf(1.4 / zoom_x, 0.55, 1.05)
+	var head := clampf(4.5 / sqrt(zoom_x), 2.5, 4.8)
+	for cid_v in orders.keys():
+		var raw_o: Variant = orders[cid_v]
+		if not (raw_o is Dictionary):
+			continue
+		var ord: Dictionary = raw_o
+		if not bool(ord.get("active", false)):
+			continue
+		var rally_pos: Vector2 = ord.get("rally_pos", Vector2.ZERO)
+		var target_pos: Vector2 = ord.get("target_pos", Vector2.ZERO)
+		if rally_pos.distance_squared_to(target_pos) < 36.0:
+			continue
+		var fac := clampi(int(ord.get("faction", 0)), 0, FACTION_RETICLE_COLORS.size() - 1)
+		var mode_s := str(ord.get("mode", "march"))
+		var col: Color = FACTION_RETICLE_COLORS[fac]
+		col.a = 0.72 if mode_s == "march" else 0.44
+		_draw_arrow_vector(rally_pos, target_pos, col, w, head)
+
+
+func _draw_overlay_notable_badges() -> void:
+	if _civ == null or not _civ.has_method("get_notables_summary"):
+		return
+	var notables: Array = _civ.get_notables_summary()
+	if notables.is_empty():
+		return
+	for raw_n in notables:
+		if not (raw_n is Dictionary):
+			continue
+		var n: Dictionary = raw_n
+		var npos: Vector2 = n.get("pos", Vector2.ZERO)
+		if npos.x <= 0.0 and npos.y <= 0.0:
+			continue
+		var rk := int(n.get("rank", 0))
+		var col_idx := 27 if rk == 2 else 28
+		var bob := 0.5 * sin(_elapsed_time * 3.5 + npos.x * 0.1)
+		_draw_fx_strip_icon(col_idx, npos + Vector2(0.0, -10.5 + bob), 7.0, Color.WHITE)
+
+
 func _draw_overlay_active_plots() -> void:
 	if _civ == null or not _civ.has_method("get_active_plots"):
 		return
 	var plots: Array = _civ.get_active_plots()
 	if plots.is_empty():
 		return
-	var edge := Color("#101824")
 	for raw_p in plots:
 		if not (raw_p is Dictionary):
 			continue
 		var p: Dictionary = raw_p
 		var pos: Vector2 = p.get("pos", Vector2.ZERO)
+		var kind_id := clampi(int(p.get("kind_id", 0)), 0, PLOT_STRIP_COLS.size() - 1)
 		var kind := str(p.get("kind", "war")).to_lower()
 		var prog := clampf(float(p.get("progress", 0.0)), 0.0, 1.0)
-		var ox := int(round(pos.x)) - 4
-		var oy := int(round(pos.y)) - 19
 		var accent := Color("#FF4646") if kind == "war" else (Color("#FF9B26") if kind == "rebel" else Color("#46E5FF"))
-		_world_overlay.draw_rect(Rect2(float(ox), float(oy), 8.0, 7.0), Color(0.06, 0.09, 0.14, 0.85), true)
-		_world_overlay.draw_rect(Rect2(float(ox), float(oy), 8.0, 1.0), accent, true)
-		if kind == "war":
-			for k in range(5):
-				_world_overlay.draw_rect(Rect2(float(ox + 1 + k), float(oy + 1 + k), 1.0, 1.0), Color("#FFD84A") if k == 2 else accent, true)
-				_world_overlay.draw_rect(Rect2(float(ox + 6 - k), float(oy + 1 + k), 1.0, 1.0), Color("#FFD84A") if k == 2 else accent, true)
-		elif kind == "rebel":
-			_world_overlay.draw_rect(Rect2(float(ox + 3), float(oy + 1), 2.0, 3.0), Color("#FFE156"), true)
-			_world_overlay.draw_rect(Rect2(float(ox + 2), float(oy + 4), 4.0, 2.0), accent, true)
-		else:
-			_world_overlay.draw_rect(Rect2(float(ox + 1), float(oy + 2), 3.0, 3.0), accent, false)
-			_world_overlay.draw_rect(Rect2(float(ox + 4), float(oy + 2), 3.0, 3.0), Color("#FFD15C"), false)
-		_world_overlay.draw_rect(Rect2(float(ox), float(oy + 8), 8.0, 2.0), edge, true)
-		var fill_w := int(round(prog * 8.0))
-		if fill_w > 0:
-			_world_overlay.draw_rect(Rect2(float(ox), float(oy + 8), float(fill_w), 1.0), accent, true)
+		var icon_center := (pos + Vector2(0.0, -13.0)).round()
+		_draw_radial_progress_poly(icon_center, 5.2, prog, accent, 1.0)
+		_draw_fx_strip_icon(PLOT_STRIP_COLS[kind_id], icon_center, 7.0, Color.WHITE)
 
 
 func _collect_kingdom_badges() -> Array[Dictionary]:
@@ -3823,7 +5128,7 @@ func _draw_pixel_crown(canvas: CanvasItem, origin: Vector2, col: Color) -> void:
 
 
 func _on_macro_badges_draw() -> void:
-	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _camera.zoom.x > 2.6:
+	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _smoke_parity_mode or _camera.zoom.x > 2.6:
 		return
 	if _civ == null or not _civ.has_method("get_macro_badges"):
 		return
@@ -3857,12 +5162,137 @@ func _on_macro_badges_draw() -> void:
 		_macro_badges.draw_string(font, Vector2(rect.position.x + 15.0, rect.position.y + 12.0), label_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#E7F3FF"))
 
 
-func _on_reticle_draw() -> void:
-	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _is_capture_mode() or not _has_mouse_hover:
+func _resolve_faction_reticle(cx: int, cy: int, shift_held: bool) -> Dictionary:
+	var f_col: Color = FACTION_RETICLE_COLORS[posmod(_selected_faction, FACTION_RETICLE_COLORS.size())]
+	var valid_col: bool = false
+	var draw_r: int = _brush_radius
+	if _current_brush == BRUSH_SETTLERS:
+		valid_col = _is_settler_land_near(_hover_world_pos, float(_brush_radius))
+	else:
+		valid_col = bool(_world.is_walkable(cx, cy))
+		if not shift_held and valid_col:
+			var can_here: bool = _civ.has_method("can_settle_near") and bool(_civ.can_settle_near(_hover_world_pos))
+			if not can_here:
+				var ci: Dictionary = _civ.inspect_city_at(_hover_world_pos)
+				can_here = bool(ci.get("found", false)) and int(ci.get("faction", -1)) == _selected_faction
+			valid_col = can_here or _is_settler_land_near(_hover_world_pos, float(_brush_radius))
+		draw_r = 8 if shift_held else _brush_radius
+	var rim_col := Color(f_col.r, f_col.g, f_col.b, 0.90) if valid_col else Color(1.0, 0.28, 0.28, 0.92)
+	return {
+		"rim_col": rim_col,
+		"fill_alpha": 0.16 if valid_col else 0.10,
+		"radius": draw_r,
+		"valid": valid_col,
+	}
+
+
+func _resolve_brush_reticle_style(shift_held: bool) -> Dictionary:
+	var table: Dictionary = {
+		BRUSH_ORBITAL_STRIKE: [Color("#FFD15C"), 0.15],
+		BRUSH_STORM_RAIN: [Color(0.30, 0.83, 1.0, 0.88), 0.11],
+		BRUSH_STORM_FIRE: [Color(1.0, 0.48, 0.18, 0.88), 0.11],
+		BRUSH_STORM_ION: [Color(0.28, 0.95, 1.0, 0.92), 0.14],
+		BRUSH_AI_GLITCH: [Color(1.0, 0.28, 0.43, 0.90), 0.14],
+		BRUSH_XENO_VIRUS: [Color(0.72, 0.30, 1.0, 0.90), 0.14],
+		BRUSH_BIO_SEEDER: [Color(0.41, 0.94, 0.47, 0.90), 0.14],
+		BRUSH_CANAL: [Color("#42A3D1"), 0.11],
+		WorldTerrainScript.BrushMode.LAVA_VOLCANO: [Color(0.98, 0.55, 0.24, 0.86), 0.11],
+		WorldTerrainScript.BrushMode.METEOR_CRATER: [Color(0.98, 0.55, 0.24, 0.86), 0.12],
+		HudWindowsScript.TOOL_BIOME_LUSH: [Color("#5CE676"), 0.12],
+		HudWindowsScript.TOOL_BIOME_SCORCHED: [Color("#FF7A45"), 0.12],
+		HudWindowsScript.TOOL_BIOME_XENO: [Color("#3BF0B8"), 0.14],
+		HudWindowsScript.TOOL_BIOME_CRYO: [Color("#8AE6FF"), 0.14],
+		HudWindowsScript.TOOL_BIOME_ACID: [Color("#A8F038"), 0.14],
+		HudWindowsScript.TOOL_BIOME_DUNES: [Color("#F2C464"), 0.12],
+		HudWindowsScript.TOOL_BIOME_OASIS: [Color("#5EEBFF"), 0.15],
+		HudWindowsScript.TOOL_BIOME_CREEP_MYC: [Color("#C864FF"), 0.16],
+		HudWindowsScript.TOOL_BIOME_CREEP_CYBER: [Color("#38D4FF"), 0.16],
+		HudWindowsScript.TOOL_FAUNA_HERBIVORE: [Color("#72F088"), 0.13],
+		HudWindowsScript.TOOL_FAUNA_PREDATOR: [Color("#FF7458"), 0.14],
+		HudWindowsScript.TOOL_FAUNA_INSECT: [Color("#D4F24E"), 0.14],
+		HudWindowsScript.TOOL_BOSS_LEVIATHAN: [Color("#FF4848"), 0.18],
+		HudWindowsScript.TOOL_BOSS_UFO: [Color("#48F0FF"), 0.18],
+		HudWindowsScript.TOOL_BOSS_NECRO: [Color("#B85CFF"), 0.18],
+		HudWindowsScript.TOOL_BOSS_COLOSSUS: [Color("#FF9E3D"), 0.18],
+		HudWindowsScript.TOOL_MAGNET: [Color("#45E9FF"), 0.14],
+		HudWindowsScript.TOOL_FLICK: [Color("#FFD84A"), 0.14],
+		HudWindowsScript.TOOL_TRAIT_RAIN: [Color("#6CF5B8"), 0.15],
+		HudWindowsScript.TOOL_GEAR_RAIN: [Color("#FFC947"), 0.15],
+		HudWindowsScript.TOOL_MONOLITH: [Color("#9E7BFF"), 0.17],
+		HudWindowsScript.TOOL_GREY_GOO: [Color("#9AA6B8"), 0.16],
+		HudWindowsScript.TOOL_CONWAY: [Color("#54FF98"), 0.16],
+		HudWindowsScript.TOOL_BOMB: [Color("#FF5C42"), 0.15],
+		HudWindowsScript.TOOL_TORNADO: [Color("#B5DCEB"), 0.14],
+		HudWindowsScript.TOOL_EARTHQUAKE: [Color("#D98E4E"), 0.14],
+		HudWindowsScript.TOOL_GEYSER: [Color("#6EDBFF"), 0.14],
+		HudWindowsScript.TOOL_ERASER: [Color("#FF6678"), 0.15],
+		HudWindowsScript.TOOL_WALL: [Color("#70F5FF") if shift_held else Color("#A6B4C8"), 0.16],
+		HudWindowsScript.TOOL_DRAIN: [Color("#FFE082"), 0.14],
+	}
+	if table.has(_current_brush):
+		var entry: Array = table[_current_brush]
+		var col: Color = entry[0]
+		if col.a > 0.99:
+			col.a = 0.88
+		return {"rim_col": col, "fill_alpha": float(entry[1])}
+	if _current_brush == BRUSH_BLESS:
+		var bc := Color("#C855FF") if shift_held else Color("#FFD857")
+		bc.a = 0.88
+		return {"rim_col": bc, "fill_alpha": 0.14}
+	if _current_brush == BRUSH_DIPLO_SPARK:
+		var dc := Color("#FF9B26") if shift_held else Color("#FF4C5B")
+		dc.a = 0.90
+		return {"rim_col": dc, "fill_alpha": 0.14}
+	if _current_brush == WorldTerrainScript.BrushMode.TERRAFORM_LIFE:
+		var tc := Color("#42A3D1") if shift_held else Color("#59E072")
+		tc.a = 0.84
+		return {"rim_col": tc, "fill_alpha": 0.11}
+	if _current_brush == WorldTerrainScript.BrushMode.VORTEX_PULL:
+		var vc := Color(0.66, 0.93, 1.0, 0.92)
+		if not shift_held:
+			var elem: String = str(_world.sample_dominant_element(_hover_world_pos, float(_brush_radius))) if _world.has_method("sample_dominant_element") else "earth"
+			if elem == "lava" or elem == "fire":
+				vc = Color(1.0, 0.52, 0.18, 0.88)
+			elif elem == "water":
+				vc = Color(0.36, 0.86, 1.0, 0.88)
+			elif elem == "crystal":
+				vc = Color(0.55, 0.95, 1.0, 0.90)
+			else:
+				vc = Color(0.62, 0.72, 1.0, 0.84)
+		return {"rim_col": vc, "fill_alpha": 0.11}
+	return {"rim_col": Color(0.35, 0.90, 1.0, 0.82), "fill_alpha": 0.11}
+
+
+func _draw_shaped_reticle(cx: int, cy: int, r: int, rim_col: Color, fill_col: Color) -> void:
+	var rf := float(maxi(r, 1))
+	if _brush_shape == WorldTerrainScript.BrushShape.SQUARE:
+		var rect := Rect2(float(cx) - rf, float(cy) - rf, rf * 2.0 + 1.0, rf * 2.0 + 1.0)
+		if fill_col.a > 0.005:
+			_world_overlay.draw_rect(rect, fill_col, true)
+		_world_overlay.draw_rect(rect, rim_col, false, 1.0)
+	elif _brush_shape == WorldTerrainScript.BrushShape.DIAMOND:
+		var c := Vector2(float(cx) + 0.5, float(cy) + 0.5)
+		var pts := PackedVector2Array([
+			c + Vector2(0.0, -rf), c + Vector2(rf, 0.0),
+			c + Vector2(0.0, rf), c + Vector2(-rf, 0.0), c + Vector2(0.0, -rf)
+		])
+		if fill_col.a > 0.005:
+			_world_overlay.draw_colored_polygon(pts.slice(0, 4), fill_col)
+		_world_overlay.draw_polyline(pts, rim_col, 1.0, false)
+	elif _brush_shape == WorldTerrainScript.BrushShape.SPRAY:
+		_draw_bresenham_circle(_world_overlay, Vector3i(cx, cy, r), PackedColorArray([rim_col, Color(fill_col.r, fill_col.g, fill_col.b, fill_col.a * 0.55)]), 3)
+		for i in range(6):
+			var ang := _elapsed_time * 1.6 + float(i) * (TAU / 6.0)
+			var dp := Vector2(float(cx), float(cy)) + Vector2(cos(ang), sin(ang)) * (rf * 0.55)
+			_world_overlay.draw_rect(Rect2(dp.round(), Vector2(1.0, 1.0)), rim_col, true)
+	else:
+		_draw_bresenham_circle(_world_overlay, Vector3i(cx, cy, r), PackedColorArray([rim_col, fill_col]))
+
+
+func _draw_overlay_reticle() -> void:
+	if _smoke_mode or _smoke_civ_mode or _smoke_combat_mode or _smoke_worldbox_pace_mode or _smoke_parity_mode or _is_capture_mode() or not _has_mouse_hover:
 		return
-	if _possessing_uid >= 0:
-		return
-	if get_viewport().gui_get_hovered_control() != null:
+	if _possessing_uid >= 0 or get_viewport().gui_get_hovered_control() != null:
 		return
 	if _hover_world_pos.x < 0.0 or _hover_world_pos.y < 0.0 or _hover_world_pos.x >= float(_world.map_w) or _hover_world_pos.y >= float(_world.map_h):
 		return
@@ -3875,71 +5305,41 @@ func _on_reticle_draw() -> void:
 		var insp_col := Color(0.88, 0.94, 1.0, 0.85)
 		for d_v in [-4, -3, 3, 4]:
 			var d: int = int(d_v)
-			_reticle.draw_rect(Rect2(float(cx + d), float(cy), 1.0, 1.0), insp_col, true)
-			_reticle.draw_rect(Rect2(float(cx), float(cy + d), 1.0, 1.0), insp_col, true)
-		_reticle.draw_rect(Rect2(float(cx), float(cy), 1.0, 1.0), Color("#7CE7FF"), true)
+			_world_overlay.draw_rect(Rect2(float(cx + d), float(cy), 1.0, 1.0), insp_col, true)
+			_world_overlay.draw_rect(Rect2(float(cx), float(cy + d), 1.0, 1.0), insp_col, true)
+		_world_overlay.draw_rect(Rect2(float(cx), float(cy), 1.0, 1.0), Color("#7CE7FF"), true)
 		return
 
 	var rim_col := Color(0.35, 0.90, 1.0, 0.82)
 	var fill_alpha := 0.11
 	var r := _brush_radius
-	if _current_brush == BRUSH_COLONY:
-		var f_col: Color = FACTION_RETICLE_COLORS[posmod(_selected_faction, FACTION_RETICLE_COLORS.size())]
-		rim_col = Color(f_col.r, f_col.g, f_col.b, 0.90)
-		fill_alpha = 0.16
-		r = 8 if shift_held else _brush_radius
-	elif _current_brush == BRUSH_BLESS:
-		rim_col = Color("#C855FF") if shift_held else Color("#FFD857")
-		rim_col.a = 0.88
-		fill_alpha = 0.14
-	elif _current_brush == BRUSH_ORBITAL_STRIKE:
-		rim_col = Color("#FFD15C")
-		rim_col.a = 0.92
-		fill_alpha = 0.15
-	elif _current_brush == BRUSH_DIPLO_SPARK:
-		rim_col = Color("#FF9B26") if shift_held else Color("#FF4C5B")
-		rim_col.a = 0.90
-		fill_alpha = 0.14
-		r = 10
-	elif _current_brush == BRUSH_STORM_RAIN:
-		rim_col = Color(0.30, 0.83, 1.0, 0.88)
-	elif _current_brush == BRUSH_STORM_FIRE:
-		rim_col = Color(1.0, 0.48, 0.18, 0.88)
-	elif _current_brush == BRUSH_STORM_ION:
-		rim_col = Color(0.28, 0.95, 1.0, 0.92)
-		fill_alpha = 0.14
-	elif _current_brush == BRUSH_AI_GLITCH:
-		rim_col = Color(1.0, 0.28, 0.43, 0.90)
-		fill_alpha = 0.14
-	elif _current_brush == BRUSH_XENO_VIRUS:
-		rim_col = Color(0.72, 0.30, 1.0, 0.90)
-		fill_alpha = 0.14
-	elif _current_brush == BRUSH_BIO_SEEDER:
-		rim_col = Color(0.41, 0.94, 0.47, 0.90)
-		fill_alpha = 0.14
-	elif _current_brush == BRUSH_CANAL:
-		rim_col = Color("#42A3D1")
-		rim_col.a = 0.86
-	elif _current_brush == WorldTerrainScript.BrushMode.TERRAFORM_LIFE:
-		rim_col = Color("#42A3D1") if shift_held else Color("#59E072")
-		rim_col.a = 0.84
-	elif _current_brush == WorldTerrainScript.BrushMode.LAVA_VOLCANO or _current_brush == WorldTerrainScript.BrushMode.METEOR_CRATER:
-		rim_col = Color(0.98, 0.55, 0.24, 0.86)
-	elif _current_brush == WorldTerrainScript.BrushMode.VORTEX_PULL:
-		var elem: String = str(_world.sample_dominant_element(_hover_world_pos, float(_brush_radius))) if _world.has_method("sample_dominant_element") else "earth"
-		if elem == "lava" or elem == "fire":
-			rim_col = Color(1.0, 0.52, 0.18, 0.88)
-		elif elem == "water":
-			rim_col = Color(0.36, 0.86, 1.0, 0.88)
-		elif elem == "crystal":
-			rim_col = Color(0.55, 0.95, 1.0, 0.90)
-		else:
-			rim_col = Color(0.62, 0.72, 1.0, 0.84)
+	var draw_center_plus := true
+	if _current_brush == BRUSH_SETTLERS or _current_brush == BRUSH_COLONY:
+		var fr := _resolve_faction_reticle(cx, cy, shift_held)
+		rim_col = fr["rim_col"]
+		fill_alpha = float(fr["fill_alpha"])
+		r = int(fr["radius"])
+		if not bool(fr["valid"]):
+			draw_center_plus = false
+			for d_err in range(-3, 4):
+				_world_overlay.draw_rect(Rect2(float(cx + d_err), float(cy + d_err), 1.0, 1.0), rim_col, true)
+				_world_overlay.draw_rect(Rect2(float(cx + d_err), float(cy - d_err), 1.0, 1.0), rim_col, true)
+	else:
+		var sty := _resolve_brush_reticle_style(shift_held)
+		rim_col = sty["rim_col"]
+		fill_alpha = float(sty["fill_alpha"])
+		if _current_brush == BRUSH_DIPLO_SPARK:
+			r = 10
 
 	var fill_col := Color(rim_col.r, rim_col.g, rim_col.b, fill_alpha)
-	_draw_bresenham_circle(_reticle, Vector3i(cx, cy, r), PackedColorArray([rim_col, fill_col]))
-	_reticle.draw_rect(Rect2(float(cx), float(cy), 1.0, 1.0), rim_col, true)
-	_reticle.draw_rect(Rect2(float(cx - 1), float(cy), 1.0, 1.0), rim_col, true)
-	_reticle.draw_rect(Rect2(float(cx + 1), float(cy), 1.0, 1.0), rim_col, true)
-	_reticle.draw_rect(Rect2(float(cx), float(cy - 1), 1.0, 1.0), rim_col, true)
-	_reticle.draw_rect(Rect2(float(cx), float(cy + 1), 1.0, 1.0), rim_col, true)
+	_draw_shaped_reticle(cx, cy, r, rim_col, fill_col)
+	if _current_brush == HudWindowsScript.TOOL_FLICK and _flick_dragging:
+		_draw_arrow_vector(_flick_start_pos, _hover_world_pos, Color("#FFD84A"), 1.25, 4.5)
+	elif _current_brush == HudWindowsScript.TOOL_MAGNET and _magnet_hold_active and _magnet_vel.length_squared() > 4.0:
+		_draw_arrow_vector(_hover_world_pos, _hover_world_pos + _magnet_vel.limit_length(32.0), Color("#45E9FF"), 1.25, 4.0)
+	if draw_center_plus:
+		_world_overlay.draw_rect(Rect2(float(cx), float(cy), 1.0, 1.0), rim_col, true)
+		_world_overlay.draw_rect(Rect2(float(cx - 1), float(cy), 1.0, 1.0), rim_col, true)
+		_world_overlay.draw_rect(Rect2(float(cx + 1), float(cy), 1.0, 1.0), rim_col, true)
+		_world_overlay.draw_rect(Rect2(float(cx), float(cy - 1), 1.0, 1.0), rim_col, true)
+		_world_overlay.draw_rect(Rect2(float(cx), float(cy + 1), 1.0, 1.0), rim_col, true)

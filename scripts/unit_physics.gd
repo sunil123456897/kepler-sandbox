@@ -4,6 +4,7 @@ class_name UnitPhysics
 const UNIT_SPRITE_SHADER := preload("res://shaders/unit_sprite.gdshader")
 const UNIT_HARVEST_SCRIPT := preload("res://scripts/unit_harvest.gd")
 const UNIT_COMBAT_AI_SCRIPT := preload("res://scripts/unit_combat_ai.gd")
+const UNIT_TRAITS_FAUNA_SCRIPT := preload("res://scripts/unit_traits_fauna.gd")
 
 const TUNING_KNOBS := {
 	"POPULATION_COUNT": 0,
@@ -88,8 +89,22 @@ const BIOME_LAVA: int = 4
 
 # Worker roles, tasks, and CivSim resource constants (mirror CivSim without class_name hints)
 const MAX_UNITS: int = 720
+const MAX_FAUNA: int = 192
 const MAX_FLORA: int = 900
 const MAX_CITIES: int = 64
+const DEFAULT_UNIT_ATLAS_COLS: int = 44
+const DEFAULT_FLORA_ATLAS_COLS: int = 14
+const Z_GRAVITY: float = 120.0
+const Z_MAX: float = 64.0
+const TR_ASHBORN_BIT: int = 1 << 2
+const TR_GIGANTISM_BIT: int = 1 << 7
+const TR_TINY_BIT: int = 1 << 8
+const TR_PYRO_BIT: int = 1 << 12
+const TR_IMMORTAL_BIT: int = 1 << 15
+const TR_RAD_IMMUNE_BIT: int = 1 << 28
+const STATUS_CRYO_BIT: int = 1 << 2
+const STATUS_SLEEP_BIT: int = 1 << 11
+const STATUS_MAG_BIT: int = 1 << 15
 
 const FACTION_HUMAN: int = 0
 const FACTION_ROBOT: int = 1
@@ -158,7 +173,6 @@ const UCOL_SPORE_CARGO: int = 19
 const UCOL_MUTANT_CRYSTAL_A: int = 20
 const UCOL_MUTANT_CRYSTAL_B: int = 21
 const UCOL_HUMAN_FARMER: int = 22
-const UCOL_CARGO_PIP: int = 23
 
 # Flora atlas columns (168x12, 14 tiles of 12x12, sprite_mode=3 motion_mode=1)
 const FLORA_ATLAS_PATH: String = "res://assets/atlases/flora_atlas.png"
@@ -178,6 +192,16 @@ const FLORA_SPORE_POD: int = 10
 const FLORA_CRYSTAL_CLUSTER: int = 11
 const FLORA_LUSH_SAPLING: int = 12
 const FLORA_BURNING_BUSH: int = 13
+const FLORA_XENO_PALM: int = 14
+const FLORA_CRYO_CRYSTAL: int = 15
+const FLORA_ACID_WEED: int = 16
+const FLORA_SILICA_CACTUS: int = 17
+const FLORA_BIOLUM_BELL: int = 18
+const FLORA_VOID_TENDRIL: int = 19
+const FLORA_MYCELIUM_NODE: int = 20
+const FLORA_CYBER_SPIRE: int = 21
+const FLORA_MUTAGEN_BULB: int = 22
+const FLORA_MONOLITH_SHARD: int = 23
 
 const DEATH_BURN: int = 0
 const DEATH_DROWN: int = 1
@@ -257,7 +281,13 @@ const STRIP_PACT: int = 8
 const STRIP_WAR: int = 9
 const STRIP_REBEL: int = 10
 const STRIP_PORTAL: int = 11
+const STRIP_RELIC_DIAMOND: int = 16
+const STRIP_FEUD_SWORDS: int = 17
 const STRIP_SKULL: int = STRIP_MUTATE
+
+const SAVE_MAGIC_ZSTD: int = 0x5550485A # "UPHZ"
+const SAVE_MAGIC_RAW: int = 0x55504831 # "UPH1"
+const SAVE_VERSION: int = 2
 
 const DIPLO_NEUTRAL: int = 0
 const DIPLO_PACT: int = 1
@@ -276,8 +306,6 @@ const LAYER_LOGISTICS: int = 1
 const LAYER_COMBAT: int = 2
 const LAYER_CRITICAL: int = 3
 
-const SHADOW_BASE_COLOR := Color(0.04, 0.06, 0.14, 0.34)
-
 signal impact_trauma(trauma: float, hit_stop_sec: float)
 
 var _world: Node2D = null
@@ -290,20 +318,19 @@ var _cell_size: int = 16
 var _grid_w: int = 40
 var _grid_h: int = 23
 
-var _shadow_group: CanvasGroup
-var _mm_ground_shadows: MultiMeshInstance2D
 var _mm_flora: MultiMeshInstance2D
 var _mm_units: MultiMeshInstance2D
-var _mm_cargo: MultiMeshInstance2D
 var _flora_mat: ShaderMaterial
 var _unit_mat: ShaderMaterial
-var _cargo_mat: ShaderMaterial
 
 # Flat SoA arrays for colonists & units (zero Node2D per unit)
 var _unit_count: int = 0
 var _target_pop_count: int = 0
 var _harvest_ai: RefCounted = null
 var _combat_ai: RefCounted = null
+var _traits_fauna: RefCounted = null
+var _unit_atlas_cols: int = DEFAULT_UNIT_ATLAS_COLS
+var _flora_atlas_cols: int = DEFAULT_FLORA_ATLAS_COLS
 var _sim_pace_mult: float = 1.0
 var _law_self_founding: bool = true
 var _law_diplomacy_wars: bool = true
@@ -313,10 +340,16 @@ var _law_disasters: bool = true
 var _law_rad_mutations: bool = true
 var _has_world_moisture: bool = false
 var _has_tile_env: bool = false
+var _has_is_ice_bridge: bool = false
+var _has_world_frost: bool = false
+var _has_world_frost_tiles: bool = false
 var _has_can_settle_near: bool = false
 var _has_try_self_found: bool = false
 var _has_record_foot_step: bool = false
 var _has_get_army_orders: bool = false
+var _has_on_unit_killed: bool = false
+var _has_try_avatar_gesture: bool = false
+var _has_get_active_plot_count: bool = false
 var _civ_has_hunger: bool = false
 var _synced_diplo_seq: int = -1
 var _bld_indexed_count: int = 0
@@ -377,6 +410,18 @@ var _u_acq_cd: PackedFloat32Array
 var _u_settle_timer: PackedFloat32Array
 var _u_step_timer: PackedFloat32Array
 var _u_rain_stun_timer: PackedFloat32Array
+var _u_notable_idx: PackedInt32Array
+var _u_last_attacker_uid: PackedInt32Array
+var _u_pos_z: PackedFloat32Array
+var _u_vel_z: PackedFloat32Array
+var _u_trait_mask: PackedInt64Array
+var _u_status_mask: PackedInt32Array
+var _u_dmg_mul: PackedFloat32Array
+var _u_hp_bonus: PackedFloat32Array
+var _u_spd_mul: PackedFloat32Array
+var _u_armor_mul: PackedFloat32Array
+var _u_dodge_bonus: PackedFloat32Array
+var _u_crit_chance: PackedFloat32Array
 
 # 8-slot circular Unit Memory Chronicle (flat SoA, zero per-tick alloc)
 var _u_mem_type: PackedByteArray
@@ -394,6 +439,11 @@ var _macro_head: PackedInt32Array
 var _macro_next: PackedInt32Array
 var _any_infected_unit: bool = false
 var _any_glitched_unit: bool = false
+var _any_z_active: bool = false
+var _any_unit_frozen: bool = false
+var _any_scale_traits: bool = false
+var _cur_any_z: bool = false
+var _mm_scale_dirty: bool = false
 
 # Flat SoA arrays for flora & props + spatial hash (preallocated up to MAX_FLORA)
 var _flora_count: int = 0
@@ -444,6 +494,10 @@ var _beam_ends: PackedVector2Array = PackedVector2Array()
 var _beam_colors: PackedColorArray = PackedColorArray()
 var _beam_widths: PackedFloat32Array = PackedFloat32Array()
 var _beam_heavy: PackedByteArray = PackedByteArray()
+var _proj_src: PackedVector2Array = PackedVector2Array()
+var _proj_dst: PackedVector2Array = PackedVector2Array()
+var _proj_kind_dmg: PackedVector2Array = PackedVector2Array()
+var _proj_owner: PackedInt32Array = PackedInt32Array()
 
 # Synced building footprints for flora clearance & colonist roof avoidance
 var _bld_pos: PackedVector2Array
@@ -481,15 +535,12 @@ var _u_wan_ang: PackedFloat32Array
 var _u_wan_dx: PackedFloat32Array
 var _u_wan_dy: PackedFloat32Array
 var _unit_mm_buf: PackedFloat32Array
-var _shadow_mm_buf: PackedFloat32Array
-var _shadow_flora_count: int = 0
-var _flora_shadows_dirty: bool = true
-var _shadows_dirty: bool = true
 var _zoom_lod_val: float = 2.0
 var _tick_idx: int = 0
 var _spatial_hash_dirty: bool = true
 
 var _rng := RandomNumberGenerator.new()
+var _ext_rng := RandomNumberGenerator.new()
 var _sim_time: float = 0.0
 var _vortex_fx_cd: float = 0.0
 var _vortex_alchemy_cd: float = 0.0
@@ -602,6 +653,7 @@ var _cur_harv_t: float = 0.0
 var _u_steer_dir: PackedVector2Array
 var _u_bld_avoid: PackedVector2Array
 var _u_combat_params: PackedVector3Array
+var _u_cp_key: PackedInt32Array
 var _u_goal_cd: PackedFloat32Array
 var _u_in_regiment: PackedByteArray
 var _u_has_status: PackedByteArray
@@ -646,6 +698,8 @@ var _w_biomes: PackedByteArray
 var _w_temp: PackedFloat32Array
 var _w_rad: PackedFloat32Array
 var _w_fire: PackedFloat32Array
+var _cur_frost_tiles: int = -1
+var _w_frost: PackedByteArray
 
 # Cached numeric TUNING_KNOBS scalars (zero Dictionary string hashes in hot loops)
 var _k_colonist_speed: float = 16.0
@@ -725,11 +779,30 @@ func _ensure_layers() -> void:
 	_ensure_layers_rng_and_grid()
 
 
+func _read_atlas_cols(json_path: String, fallback_cols: int) -> int:
+	if not FileAccess.file_exists(json_path):
+		return fallback_cols
+	var txt := FileAccess.get_file_as_string(json_path)
+	if txt.is_empty():
+		return fallback_cols
+	var parsed: Variant = JSON.parse_string(txt)
+	if parsed is Dictionary:
+		var d: Dictionary = parsed
+		var cols := int(d.get("atlas_cols", d.get("cols", d.get("columns", fallback_cols))))
+		if cols > 0:
+			return cols
+	return fallback_cols
+
+
 func _ensure_layers_rng_and_grid() -> void:
 	_rng.seed = 20261114
+	_ext_rng.seed = 20261199
 	_cache_tuning_knobs()
+	_unit_atlas_cols = _read_atlas_cols("res://assets/atlases/units_atlas.json", DEFAULT_UNIT_ATLAS_COLS)
+	_flora_atlas_cols = _read_atlas_cols("res://assets/atlases/flora_atlas.json", DEFAULT_FLORA_ATLAS_COLS)
 	_harvest_ai = UNIT_HARVEST_SCRIPT.new()
 	_combat_ai = UNIT_COMBAT_AI_SCRIPT.new()
+	_traits_fauna = UNIT_TRAITS_FAUNA_SCRIPT.new()
 	_resize_grid(_map_w, _map_h)
 	_ensure_flora_arrays()
 	_city_hunger_cache.resize(MAX_CITIES)
@@ -739,9 +812,17 @@ func _ensure_layers_rng_and_grid() -> void:
 	_rain_zone_r2.resize(8)
 	_rain_zone_t.resize(8)
 	_rain_zone_t.fill(0.0)
-	_ensure_shadow_and_flora_layers()
-	_ensure_unit_and_cargo_layers()
+	_ensure_flora_layer()
+	_ensure_unit_layer()
 	set_zoom_lod(_zoom_lod_val)
+
+
+func get_unit_max_hp(idx: int) -> float:
+	if idx < 0 or idx >= _unit_count:
+		return 100.0
+	var base := 130.0 if _u_role[idx] == ROLE_MUTANT else 100.0
+	var bonus := _u_hp_bonus[idx] if idx < _u_hp_bonus.size() else 0.0
+	return maxf(25.0, base + bonus)
 
 
 func _cache_tuning_knobs() -> void:
@@ -827,44 +908,14 @@ func mark_flora_anim(f: int) -> void:
 			_flora_anim_count += 1
 
 
-func _ensure_shadow_and_flora_layers() -> void:
-	_shadow_group = CanvasGroup.new()
-	_shadow_group.z_index = 0
-	_shadow_group.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_shadow_group.self_modulate = SHADOW_BASE_COLOR
-
-	_mm_ground_shadows = MultiMeshInstance2D.new()
-	_mm_ground_shadows.z_index = 0
-	_mm_ground_shadows.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_mm_ground_shadows.texture = _build_ground_shadow_texture()
-
-	var shadow_mm := MultiMesh.new()
-	shadow_mm.transform_format = MultiMesh.TRANSFORM_2D
-	shadow_mm.use_colors = false
-	shadow_mm.use_custom_data = false
-	var shadow_quad := QuadMesh.new()
-	shadow_quad.size = Vector2(6.0, 4.0)
-	shadow_mm.mesh = shadow_quad
-	var shadow_cap := MAX_UNITS + MAX_FLORA
-	shadow_mm.instance_count = shadow_cap
-	shadow_mm.visible_instance_count = 0
-	_mm_ground_shadows.multimesh = shadow_mm
-	_shadow_mm_buf.resize(shadow_cap * 8)
-	_shadow_mm_buf.fill(0.0)
-	for si in range(shadow_cap):
-		var sb := si * 8
-		_shadow_mm_buf[sb] = 1.0
-		_shadow_mm_buf[sb + 5] = 1.0
-
-	_shadow_group.add_child(_mm_ground_shadows)
-	add_child(_shadow_group)
-
+func _ensure_flora_layer() -> void:
+	var flora_cols := maxi(_flora_atlas_cols, 1)
 	var flora_tex := _load_png_texture(FLORA_ATLAS_PATH)
 	if flora_tex == null:
-		flora_tex = _make_fallback_atlas(FLORA_ATLAS_COLS * 12, 12)
+		flora_tex = _make_fallback_atlas(flora_cols * 12, 12)
 	var flora_mask := _load_png_texture(FLORA_MASK_PATH)
 	if flora_mask == null:
-		flora_mask = _make_fallback_atlas(FLORA_ATLAS_COLS * 12, 12)
+		flora_mask = _make_fallback_atlas(flora_cols * 12, 12)
 
 	_mm_flora = MultiMeshInstance2D.new()
 	_mm_flora.z_index = 0
@@ -874,7 +925,7 @@ func _ensure_shadow_and_flora_layers() -> void:
 	_flora_mat.shader = UNIT_SPRITE_SHADER
 	_flora_mat.set_shader_parameter("sprite_mode", 3)
 	_flora_mat.set_shader_parameter("motion_mode", 1)
-	_flora_mat.set_shader_parameter("atlas_cols", FLORA_ATLAS_COLS)
+	_flora_mat.set_shader_parameter("atlas_cols", flora_cols)
 	_flora_mat.set_shader_parameter("sprite_size", Vector2(12.0, 12.0))
 	_flora_mat.set_shader_parameter("mask_tex", flora_mask)
 	_flora_mat.set_shader_parameter("hdr_emissive", 2.6)
@@ -895,13 +946,14 @@ func _ensure_shadow_and_flora_layers() -> void:
 	add_child(_mm_flora)
 
 
-func _ensure_unit_and_cargo_layers() -> void:
+func _ensure_unit_layer() -> void:
+	var unit_cols := maxi(_unit_atlas_cols, 1)
 	var unit_tex := _load_png_texture(UNITS_ATLAS_PATH)
 	if unit_tex == null:
-		unit_tex = _make_fallback_atlas(UNIT_ATLAS_COLS * 8, 8)
+		unit_tex = _make_fallback_atlas(unit_cols * 8, 8)
 	var unit_mask := _load_png_texture(UNITS_MASK_PATH)
 	if unit_mask == null:
-		unit_mask = _make_fallback_atlas(UNIT_ATLAS_COLS * 8, 8)
+		unit_mask = _make_fallback_atlas(unit_cols * 8, 8)
 
 	var u_px: float = TUNING_KNOBS["UNIT_QUAD_PX"]
 	_mm_units = MultiMeshInstance2D.new()
@@ -912,7 +964,7 @@ func _ensure_unit_and_cargo_layers() -> void:
 	_unit_mat.shader = UNIT_SPRITE_SHADER
 	_unit_mat.set_shader_parameter("sprite_mode", 3)
 	_unit_mat.set_shader_parameter("motion_mode", 2)
-	_unit_mat.set_shader_parameter("atlas_cols", UNIT_ATLAS_COLS)
+	_unit_mat.set_shader_parameter("atlas_cols", unit_cols)
 	_unit_mat.set_shader_parameter("sprite_size", Vector2(u_px, u_px))
 	_unit_mat.set_shader_parameter("mask_tex", unit_mask)
 	_unit_mat.set_shader_parameter("hdr_emissive", 2.6)
@@ -927,50 +979,10 @@ func _ensure_unit_and_cargo_layers() -> void:
 	var unit_quad := QuadMesh.new()
 	unit_quad.size = Vector2(u_px, u_px)
 	unit_mm.mesh = unit_quad
-	unit_mm.instance_count = MAX_UNITS
+	unit_mm.instance_count = MAX_UNITS + MAX_FAUNA
 	unit_mm.visible_instance_count = 0
 	_mm_units.multimesh = unit_mm
 	add_child(_mm_units)
-
-	_mm_cargo = MultiMeshInstance2D.new()
-	_mm_cargo.z_index = 2
-	_mm_cargo.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_mm_cargo.texture = unit_tex
-	_cargo_mat = ShaderMaterial.new()
-	_cargo_mat.shader = UNIT_SPRITE_SHADER
-	_cargo_mat.set_shader_parameter("sprite_mode", 3)
-	_cargo_mat.set_shader_parameter("motion_mode", 2)
-	_cargo_mat.set_shader_parameter("atlas_cols", UNIT_ATLAS_COLS)
-	_cargo_mat.set_shader_parameter("sprite_size", Vector2(u_px, u_px))
-	_cargo_mat.set_shader_parameter("mask_tex", unit_mask)
-	_cargo_mat.set_shader_parameter("hdr_emissive", 2.2)
-	_cargo_mat.set_shader_parameter("age_tint", _age_tint)
-	_cargo_mat.set_shader_parameter("age_tint_strength", _age_tint_strength)
-	_cargo_mat.set_shader_parameter("cargo_tint_override", 1.0)
-	_mm_cargo.material = _cargo_mat
-
-	var cargo_mm := MultiMesh.new()
-	cargo_mm.transform_format = MultiMesh.TRANSFORM_2D
-	cargo_mm.use_colors = true
-	cargo_mm.use_custom_data = true
-	var cargo_quad := QuadMesh.new()
-	cargo_quad.size = Vector2(u_px, u_px)
-	cargo_mm.mesh = cargo_quad
-	cargo_mm.instance_count = MAX_UNITS
-	cargo_mm.visible_instance_count = 0
-	_mm_cargo.multimesh = cargo_mm
-	add_child(_mm_cargo)
-
-
-func _build_ground_shadow_texture() -> ImageTexture:
-	var img := Image.create(6, 4, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.0, 0.0, 0.0, 0.0))
-	for y in range(4):
-		var x0 := 1 if (y == 0 or y == 3) else 0
-		var x1 := 5 if (y == 0 or y == 3) else 6
-		for x in range(x0, x1):
-			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, 1.0))
-	return ImageTexture.create_from_image(img)
 
 
 func set_day_phase(phase: float, night_mix: float) -> void:
@@ -982,28 +994,10 @@ func set_day_phase(phase: float, night_mix: float) -> void:
 	if _unit_mat != null:
 		_unit_mat.set_shader_parameter("day_phase", phase)
 		_unit_mat.set_shader_parameter("night_mix", nm)
-	if _cargo_mat != null:
-		_cargo_mat.set_shader_parameter("day_phase", phase)
-		_cargo_mat.set_shader_parameter("night_mix", nm)
 
 
 func set_zoom_lod(zoom_val: float) -> void:
 	_zoom_lod_val = zoom_val
-	if _shadow_group != null:
-		if zoom_val <= 1.70:
-			_shadow_group.visible = false
-		else:
-			var fade := clampf((zoom_val - 1.70) / 0.35, 0.0, 1.0)
-			_shadow_group.visible = true
-			_shadow_group.self_modulate = Color(SHADOW_BASE_COLOR.r, SHADOW_BASE_COLOR.g, SHADOW_BASE_COLOR.b, SHADOW_BASE_COLOR.a * fade)
-			if _shadows_dirty or _flora_shadows_dirty:
-				_sync_ground_shadows()
-	if _mm_cargo != null:
-		var show_cargo := zoom_val > 1.55
-		var was_vis := _mm_cargo.visible
-		_mm_cargo.visible = show_cargo
-		if show_cargo and not was_vis:
-			_sync_cargo_multimesh()
 
 
 func set_cosmic_age_mods(flora_mul: float, crop_mul: float, tint: Color, tint_strength: float) -> void:
@@ -1017,9 +1011,6 @@ func set_cosmic_age_mods(flora_mul: float, crop_mul: float, tint: Color, tint_st
 	if _unit_mat != null:
 		_unit_mat.set_shader_parameter("age_tint", _age_tint)
 		_unit_mat.set_shader_parameter("age_tint_strength", _age_tint_strength)
-	if _cargo_mat != null:
-		_cargo_mat.set_shader_parameter("age_tint", _age_tint)
-		_cargo_mat.set_shader_parameter("age_tint_strength", _age_tint_strength)
 
 
 func notify_shield_saved(world_pos: Vector2, radius: float) -> int:
@@ -1053,6 +1044,12 @@ func set_possessed_unit(uid: int, move_dir: Vector2, trigger_pulse: bool) -> Dic
 
 	var idx := int(_uid_to_idx.get(uid, -1))
 	if idx < 0 or idx >= _unit_count:
+		if _traits_fauna != null and _traits_fauna.has_fauna_uid(uid):
+			_possessed_uid = uid
+			_possess_move = move_dir.normalized() if move_dir.length_squared() > 0.0001 else Vector2.ZERO
+			_possess_pulse = trigger_pulse
+			var f_struck: int = int(_traits_fauna.boss_avatar_action(self, uid, Vector2.ZERO, false)) if trigger_pulse else 0
+			return {"active": true, "uid": uid, "pos": _traits_fauna.get_fauna_pos_by_uid(uid), "struck_targets": f_struck}
 		_possessed_uid = -1
 		_possess_move = Vector2.ZERO
 		_possess_pulse = false
@@ -1110,6 +1107,8 @@ func _execute_possessed_kinetic_pulse(idx: int) -> int:
 				_vel[i] = Vector2(_vx[i], _vy[i])
 				_knockback_timer[i] = maxf(_knockback_timer[i], 0.24)
 				if hostile:
+					if i < _u_last_attacker_uid.size():
+						_u_last_attacker_uid[i] = p_uid
 					_hp[i] -= 34.0
 					_hit_flash_timer[i] = 0.16
 					struck += 1
@@ -1191,7 +1190,6 @@ func _remove_flora_slot(f: int) -> void:
 			_u_flora_idx[u] = f
 	_flora_hash_dirty = true
 	_flora_dirty_all = true
-	_flora_shadows_dirty = true
 	if _mm_flora != null and _mm_flora.multimesh != null:
 		_mm_flora.multimesh.visible_instance_count = _flora_count
 
@@ -1262,6 +1260,11 @@ func bind_systems(world: Node2D, fx: Node2D) -> void:
 	_fx = fx
 	_has_world_moisture = _world != null and _world.has_method("get_moisture")
 	_has_tile_env = _world != null and _world.has_method("get_tile_env")
+	_has_is_ice_bridge = _world != null and _world.has_method("is_ice_bridge")
+	_has_world_frost = _world != null and ("_frost" in _world)
+	_has_world_frost_tiles = _world != null and ("_frost_tiles" in _world)
+	_cur_frost_tiles = -1
+	_w_frost = PackedByteArray()
 	if _world != null:
 		var mw_var: Variant = _world.get("map_w")
 		var mh_var: Variant = _world.get("map_h")
@@ -1304,6 +1307,9 @@ func bind_civ(civ: Node2D) -> void:
 	_has_try_self_found = _civ != null and _civ.has_method("try_self_found_settlement")
 	_has_record_foot_step = _civ != null and _civ.has_method("record_foot_step")
 	_has_get_army_orders = _civ != null and _civ.has_method("get_army_orders")
+	_has_on_unit_killed = _civ != null and _civ.has_method("on_unit_killed")
+	_has_try_avatar_gesture = _civ != null and _civ.has_method("try_avatar_gesture")
+	_has_get_active_plot_count = _civ != null and _civ.has_method("get_active_plot_count")
 	_civ_has_hunger = _civ != null and _civ.has_method("get_city_hunger_pressure")
 	_synced_diplo_seq = -1
 	if _civ != null and _civ.has_method("get_goal_buffers"):
@@ -1375,7 +1381,6 @@ func spawn_free_settlers(world_pos: Vector2, faction_id: int, count: int) -> int
 		_mm_units.multimesh.visible_instance_count = _unit_count
 	_unit_colors_dirty = true
 	_spatial_hash_dirty = true
-	_shadows_dirty = true
 	_rebuild_spatial_hash()
 	_sync_unit_multimesh()
 	return n_add
@@ -1415,8 +1420,11 @@ func recruit_settlers_to_city(city_id: int, founder_uids: PackedInt32Array) -> i
 		_u_flora_idx[idx] = -1
 		_u_carry_type[idx] = CARRY_NONE
 		_u_carry_amt[idx] = 0.0
+		_u_goal_cd[idx] = 0.0
+		_u_alert_layer[idx] = LAYER_ROUTINE
 		_u_settle_timer[idx] = 0.0
 		_u_combat_params[idx] = Vector3(-1.0, 0.0, 0.0)
+		_u_cp_key[idx] = -1
 		_hit_flash_timer[idx] = 0.25
 		_suit_tint[idx] = _compute_worker_tint(city_col, role, fac)
 		_city_pop_counts[city_id] += 1
@@ -1598,20 +1606,13 @@ func _exit_tree() -> void:
 	if _unit_mat != null:
 		_unit_mat.set_shader_parameter("mask_tex", null)
 		_unit_mat = null
-	if _cargo_mat != null:
-		_cargo_mat.set_shader_parameter("mask_tex", null)
-		_cargo_mat = null
-	for mm_inst: MultiMeshInstance2D in [_mm_ground_shadows, _mm_flora, _mm_units, _mm_cargo]:
+	for mm_inst: MultiMeshInstance2D in [_mm_flora, _mm_units]:
 		if mm_inst != null:
 			mm_inst.multimesh = null
 			mm_inst.material = null
 			mm_inst.texture = null
-	_mm_ground_shadows = null
-	_shadow_group = null
 	_mm_flora = null
 	_mm_units = null
-	_mm_cargo = null
-	_shadow_mm_buf.clear()
 	_uid_to_idx.clear()
 	_w_cache_owner = null
 	_w_tiers = PackedByteArray()
@@ -1621,6 +1622,7 @@ func _exit_tree() -> void:
 	_w_fire = PackedFloat32Array()
 	_harvest_ai = null
 	_combat_ai = null
+	_traits_fauna = null
 	_civ = null
 	_world = null
 	_fx = null
@@ -1689,10 +1691,9 @@ func rebuild_population(count: int = 0) -> void:
 	var raw_seed: Variant = _world.get("current_seed") if _world != null else null
 	var world_seed: int = int(raw_seed) if raw_seed != null else 20261114
 	_rng.seed = (world_seed ^ 0x5A17C0DE) if world_seed != 0 else 20261114
+	_ext_rng.seed = (world_seed ^ 0x3C6EF372) if world_seed != 0 else 20261199
 	_clear_tc()
 	_spatial_hash_dirty = true
-	_flora_shadows_dirty = true
-	_shadows_dirty = true
 	_death_count = 0
 	_skirmish_count = 0
 	_total_dodges = 0
@@ -1705,6 +1706,12 @@ func rebuild_population(count: int = 0) -> void:
 		_harvest_ai.reset_state()
 	if _combat_ai != null:
 		_combat_ai.reset_state()
+	if _traits_fauna != null:
+		_traits_fauna.reset_all()
+	_proj_src.clear()
+	_proj_dst.clear()
+	_proj_kind_dmg.clear()
+	_proj_owner.clear()
 	if _rain_zone_t.size() == 8:
 		_rain_zone_t.fill(0.0)
 	_any_rain_zone = false
@@ -1721,6 +1728,10 @@ func rebuild_population(count: int = 0) -> void:
 	_beam_heavy = PackedByteArray()
 	_any_infected_unit = false
 	_any_glitched_unit = false
+	_any_z_active = false
+	_any_unit_frozen = false
+	_any_scale_traits = false
+	_mm_scale_dirty = true
 
 	_spawn_colonists(_target_pop_count)
 	_spawn_flora(int(TUNING_KNOBS["FLORA_COUNT"]))
@@ -1829,6 +1840,8 @@ func _resize_unit_arrays(count: int) -> void:
 	_u_settle_timer.resize(count)
 	_u_step_timer.resize(count)
 	_u_rain_stun_timer.resize(count)
+	_u_notable_idx.resize(count)
+	_u_last_attacker_uid.resize(count)
 	_macro_next.resize(count)
 	_u_mem_head.resize(count)
 	_u_mem_count.resize(count)
@@ -1848,9 +1861,26 @@ func _resize_unit_arrays(count: int) -> void:
 	_u_steer_dir.resize(count)
 	_u_bld_avoid.resize(count)
 	_u_combat_params.resize(count)
+	_u_cp_key.resize(count)
 	_u_goal_cd.resize(count)
 	_u_in_regiment.resize(count)
 	_u_has_status.resize(count)
+	_resize_ext_unit_arrays(count)
+
+
+func _resize_ext_unit_arrays(count: int) -> void:
+	_u_pos_z.resize(count)
+	_u_vel_z.resize(count)
+	_u_trait_mask.resize(count)
+	_u_status_mask.resize(count)
+	_u_dmg_mul.resize(count)
+	_u_hp_bonus.resize(count)
+	_u_spd_mul.resize(count)
+	_u_armor_mul.resize(count)
+	_u_dodge_bonus.resize(count)
+	_u_crit_chance.resize(count)
+	if _traits_fauna != null:
+		_traits_fauna.resize_unit_ext(count)
 
 
 func _ensure_step_scratch(n: int) -> void:
@@ -1929,6 +1959,8 @@ func _copy_unit_slot(src: int, dst: int) -> void:
 	_u_settle_timer[dst] = _u_settle_timer[src]
 	_u_step_timer[dst] = _u_step_timer[src]
 	_u_rain_stun_timer[dst] = _u_rain_stun_timer[src]
+	_u_notable_idx[dst] = _u_notable_idx[src]
+	_u_last_attacker_uid[dst] = _u_last_attacker_uid[src]
 	_u_mem_head[dst] = _u_mem_head[src]
 	_u_mem_count[dst] = _u_mem_count[src]
 	var mem_s := src * MEMORY_SLOTS
@@ -1942,6 +1974,22 @@ func _copy_unit_slot(src: int, dst: int) -> void:
 	_u_temp[dst] = _u_temp[src]
 	_u_grad_x[dst] = _u_grad_x[src]
 	_u_grad_y[dst] = _u_grad_y[src]
+	_copy_ext_unit_slot(src, dst)
+
+
+func _copy_ext_unit_slot(src: int, dst: int) -> void:
+	_u_pos_z[dst] = _u_pos_z[src]
+	_u_vel_z[dst] = _u_vel_z[src]
+	_u_trait_mask[dst] = _u_trait_mask[src]
+	_u_status_mask[dst] = _u_status_mask[src]
+	_u_dmg_mul[dst] = _u_dmg_mul[src]
+	_u_hp_bonus[dst] = _u_hp_bonus[src]
+	_u_spd_mul[dst] = _u_spd_mul[src]
+	_u_armor_mul[dst] = _u_armor_mul[src]
+	_u_dodge_bonus[dst] = _u_dodge_bonus[src]
+	_u_crit_chance[dst] = _u_crit_chance[src]
+	if _traits_fauna != null:
+		_traits_fauna.copy_unit_ext_slot(src, dst)
 	_u_boids_ax[dst] = _u_boids_ax[src]
 	_u_boids_ay[dst] = _u_boids_ay[src]
 	_u_wan_ang[dst] = _u_wan_ang[src]
@@ -1950,6 +1998,7 @@ func _copy_unit_slot(src: int, dst: int) -> void:
 	_u_steer_dir[dst] = _u_steer_dir[src]
 	_u_bld_avoid[dst] = _u_bld_avoid[src]
 	_u_combat_params[dst] = _u_combat_params[src]
+	_u_cp_key[dst] = _u_cp_key[src]
 	_u_goal_cd[dst] = _u_goal_cd[src]
 	_u_in_regiment[dst] = _u_in_regiment[src]
 	_u_has_status[dst] = _u_has_status[src]
@@ -1993,6 +2042,7 @@ func _init_unit_slot(idx: int, pos_val: Vector2, city_id: int, faction_id: int, 
 	_u_steer_dir[idx] = Vector2.ZERO
 	_u_bld_avoid[idx] = Vector2.ZERO
 	_u_combat_params[idx] = Vector3(-1.0, 0.0, 0.0)
+	_u_cp_key[idx] = -1
 	_u_goal_cd[idx] = 0.0
 	_u_in_regiment[idx] = 0
 	_u_has_status[idx] = 0
@@ -2044,6 +2094,8 @@ func _init_unit_slot(idx: int, pos_val: Vector2, city_id: int, faction_id: int, 
 	_u_settle_timer[idx] = 0.0
 	_u_step_timer[idx] = float(idx & 7) * 0.04
 	_u_rain_stun_timer[idx] = 0.0
+	_u_notable_idx[idx] = -1
+	_u_last_attacker_uid[idx] = -1
 	_macro_next[idx] = -1
 	_u_mem_head[idx] = 0
 	_u_mem_count[idx] = 0
@@ -2066,6 +2118,23 @@ func _init_unit_slot(idx: int, pos_val: Vector2, city_id: int, faction_id: int, 
 	_u_grad_y[idx] = 0.0
 	_u_boids_ax[idx] = 0.0
 	_u_boids_ay[idx] = 0.0
+	_init_ext_unit_slot(idx, faction_id, role)
+
+
+func _init_ext_unit_slot(idx: int, faction_id: int, role: int) -> void:
+	_u_pos_z[idx] = 0.0
+	_u_vel_z[idx] = 0.0
+	_u_trait_mask[idx] = 0
+	_u_status_mask[idx] = 0
+	_u_dmg_mul[idx] = 1.0
+	_u_hp_bonus[idx] = 0.0
+	_u_spd_mul[idx] = 1.0
+	_u_armor_mul[idx] = 1.0
+	_u_dodge_bonus[idx] = 0.0
+	_u_crit_chance[idx] = 0.05
+	if _traits_fauna != null:
+		_traits_fauna.init_unit_ext_slot(self, idx, faction_id, role)
+		_hp[idx] = get_unit_max_hp(idx)
 
 
 func _record_memory(idx: int, mem_type: int) -> void:
@@ -2094,6 +2163,8 @@ func _record_memory(idx: int, mem_type: int) -> void:
 func _kill_unit(idx: int, death_cause: int) -> void:
 	if idx < 0 or idx >= _unit_count:
 		return
+	if _traits_fauna != null and _traits_fauna.handle_unit_death_traits(self, idx):
+		return
 	var pos := Vector2(_px[idx], _py[idx])
 	var cid := _u_city_id[idx]
 	var fac := int(_u_faction_id[idx])
@@ -2118,11 +2189,19 @@ func _kill_unit(idx: int, death_cause: int) -> void:
 			_fx.spawn_burst(pos, 6, Color(0.76, 0.72, 0.68, 0.85), 24.0, 0.38, 12.0)
 
 	var dead_uid := _u_uid[idx]
-	_uid_to_idx.erase(dead_uid)
+	var killer_uid: int = _u_last_attacker_uid[idx] if (death_cause == DEATH_COMBAT and idx < _u_last_attacker_uid.size()) else -1
 	if dead_uid == _possessed_uid:
 		_possessed_uid = -1
 		_possess_move = Vector2.ZERO
 		_possess_pulse = false
+		impact_trauma.emit(0.45, 0.065)
+		if _fx != null:
+			_fx.spawn_shockwave(pos, 22.0, Color(1.0, 0.42, 0.24, 1.0), 0.35)
+			if _fx.has_method("spawn_reaction_strip"):
+				_fx.call("spawn_reaction_strip", pos + Vector2(0.0, -8.0), STRIP_FEUD_SWORDS)
+	if _has_on_unit_killed and _civ != null:
+		_civ.call("on_unit_killed", dead_uid, killer_uid, pos)
+	_uid_to_idx.erase(dead_uid)
 	var last := _unit_count - 1
 	if idx != last:
 		_copy_unit_slot(last, idx)
@@ -2131,7 +2210,6 @@ func _kill_unit(idx: int, death_cause: int) -> void:
 	_death_count += 1
 	_spatial_hash_dirty = true
 	_unit_colors_dirty = true
-	_shadows_dirty = true
 
 
 func _mutate_unit(idx: int, emit_fx: bool = true) -> void:
@@ -2151,6 +2229,7 @@ func _mutate_unit(idx: int, emit_fx: bool = true) -> void:
 	_u_carry_amt[idx] = 0.0
 	_u_rad_exp[idx] = 1.0
 	_u_combat_params[idx] = Vector3(-1.0, 0.0, 0.0)
+	_u_cp_key[idx] = -1
 	_hit_flash_timer[idx] = 0.35
 	_hp[idx] = 130.0
 	_suit_tint[idx] = _compute_worker_tint(Color(0.88, 0.44, 0.94, 1.0), ROLE_MUTANT, FACTION_MUTANT)
@@ -2194,7 +2273,7 @@ func _spawn_colonists(target_count: int) -> void:
 
 		_init_unit_slot(i, spawned_pos, -1, FACTION_NONE, ROLE_FREE, spawned_pos, SUIT_PALETTE[i % palette_len])
 
-	_mm_units.multimesh.instance_count = MAX_UNITS
+	_mm_units.multimesh.instance_count = MAX_UNITS + MAX_FAUNA
 	_mm_units.multimesh.visible_instance_count = _unit_count
 	_unit_colors_dirty = true
 	_rebuild_spatial_hash()
@@ -2219,8 +2298,11 @@ func spawn_colony_units(city_id: int, world_pos: Vector2, count: int = 16) -> in
 	var req := clampi(count, 1, 256)
 	var free_idx: Array[int] = []
 	var free_d2: Array[float] = []
+	var need_builder := true
 	for i in range(_unit_count):
-		if _u_city_id[i] < 0 and _u_role[i] == ROLE_FREE and (int(_u_faction_id[i]) == FACTION_NONE or int(_u_faction_id[i]) == faction_id):
+		if _u_city_id[i] == city_id and _u_role[i] == ROLE_BUILDER and _hp[i] > 0.0:
+			need_builder = false
+		elif _u_city_id[i] < 0 and _u_role[i] == ROLE_FREE and (int(_u_faction_id[i]) == FACTION_NONE or int(_u_faction_id[i]) == faction_id):
 			var dx := _px[i] - depot_pos.x
 			var dy := _py[i] - depot_pos.y
 			free_idx.append(i)
@@ -2254,7 +2336,8 @@ func spawn_colony_units(city_id: int, world_pos: Vector2, count: int = 16) -> in
 	# 1) Convert recruited Wanderers first (keep local nearby wanderers in place!)
 	for r_i in range(recruited_n):
 		var idx := chosen[r_i]
-		var role := _pick_faction_role(faction_id, idx)
+		var role := ROLE_BUILDER if need_builder else _pick_faction_role(faction_id, idx)
+		need_builder = false
 		var cur_p := Vector2(_px[idx], _py[idx])
 		var keep_local := cur_p.distance_squared_to(depot_pos) <= (64.0 * 64.0) and _is_walkable_pos(cur_p) and _count_water_hits(cur_p, depot_pos) < 2
 		var dest_pt := cur_p if keep_local else _find_walkable_near(depot_pos, 10.0)
@@ -2283,7 +2366,11 @@ func spawn_colony_units(city_id: int, world_pos: Vector2, count: int = 16) -> in
 		_u_target_uid[idx] = -1
 		_u_acq_cd[idx] = float((idx * 7) % 10) * 0.035
 		_u_settle_timer[idx] = 0.0
+		_u_combat_params[idx] = Vector3(-1.0, 0.0, 0.0)
+		_u_cp_key[idx] = -1
 		_suit_tint[idx] = _compute_worker_tint(city_col, role, faction_id)
+		if _traits_fauna != null:
+			_traits_fauna.init_unit_ext_slot(self, idx, faction_id, role)
 		_city_pop_counts[city_id] += 1
 		_record_memory(idx, MEM_JOINED_COLONY)
 		_assign_worker_goal(idx, city_id)
@@ -2294,13 +2381,14 @@ func spawn_colony_units(city_id: int, world_pos: Vector2, count: int = 16) -> in
 		_resize_unit_arrays(_unit_count)
 		for k in range(append_n):
 			var idx := old_count + k
-			var role := _pick_faction_role(faction_id, idx)
+			var role := ROLE_BUILDER if need_builder else _pick_faction_role(faction_id, idx)
+			need_builder = false
 			var spawn_pt := _find_walkable_near(depot_pos, 10.0)
 			_init_unit_slot(idx, spawn_pt, city_id, faction_id, role, depot_pos, _compute_worker_tint(city_col, role, faction_id))
 			_city_pop_counts[city_id] += 1
 			_assign_worker_goal(idx, city_id)
 
-	_mm_units.multimesh.instance_count = MAX_UNITS
+	_mm_units.multimesh.instance_count = MAX_UNITS + MAX_FAUNA
 	_mm_units.multimesh.visible_instance_count = _unit_count
 	_unit_colors_dirty = true
 	_spatial_hash_dirty = true
@@ -2341,6 +2429,8 @@ func get_city_pop(city_id: int) -> int:
 
 
 func _pick_flora_col_for_tile(tier: int, biome: int, temp: float) -> int:
+	if biome >= 5:
+		return _pick_ext_biome_flora(biome)
 	if biome == BIOME_CRYSTAL:
 		var cr_r := _rng.randf()
 		if cr_r < 0.34:
@@ -2377,6 +2467,25 @@ func _pick_flora_col_for_tile(tier: int, biome: int, temp: float) -> int:
 	return FLORA_RUST_SCRUB if _rng.randf() < 0.74 else FLORA_BOULDER
 
 
+func _pick_ext_biome_flora(biome: int) -> int:
+	var r := _ext_rng.randf()
+	if biome == 5:
+		return FLORA_XENO_PALM if r < 0.72 else FLORA_SHROOM_LUSH
+	if biome == 6:
+		return FLORA_CRYO_CRYSTAL if r < 0.65 else FLORA_FROST_PINE
+	if biome == 7:
+		return FLORA_ACID_WEED if r < 0.65 else FLORA_MUTAGEN_BULB
+	if biome == 8:
+		return FLORA_SILICA_CACTUS if r < 0.72 else FLORA_BOULDER
+	if biome == 9:
+		return FLORA_BIOLUM_BELL if r < 0.68 else FLORA_VOID_TENDRIL
+	if biome == 10:
+		return FLORA_MYCELIUM_NODE if r < 0.70 else FLORA_SPORE_POD
+	if biome == 11:
+		return FLORA_CYBER_SPIRE if r < 0.70 else FLORA_MONOLITH_SHARD
+	return FLORA_MUTAGEN_BULB if r < 0.5 else FLORA_MONOLITH_SHARD
+
+
 func _is_flora_allowed_tile(px: int, py: int) -> bool:
 	if _world == null:
 		return true
@@ -2395,6 +2504,8 @@ func _is_col_valid_for_biome(col: int, tier: int, biome: int) -> bool:
 		return false
 	if col == FLORA_TREE_CHARRED or col == FLORA_TREE_ASH or col == FLORA_BURNING_BUSH:
 		return true
+	if biome >= 5:
+		return col >= FLORA_XENO_PALM or col == FLORA_BOULDER or col == FLORA_FROST_PINE or col == FLORA_SPORE_POD or col == FLORA_SHROOM_LUSH or col == FLORA_CRYSTAL_SMALL
 	match biome:
 		BIOME_CRYSTAL:
 			return col == FLORA_CRYSTAL_SMALL or col == FLORA_CRYSTAL_TALL or col == FLORA_CRYSTAL_CLUSTER
@@ -2426,7 +2537,7 @@ func _append_flora_slot(fp: Vector2, col: int, spring_pop: bool = true) -> int:
 	_flora_col[f] = col
 	_flora_sway_phase[f] = fp.x * 0.08 + fp.y * 0.04 + _rng.randf_range(0.0, 1.4)
 	_flora_shake[f] = 0.0
-	_flora_spring[f] = 0.12 if spring_pop else 1.0
+	_flora_spring[f] = 0.45 if spring_pop else 1.0
 	_flora_spring_vel[f] = 2.8 if spring_pop else 0.0
 	_flora_burn[f] = 0.0
 	_flora_grow[f] = 0.0
@@ -2437,7 +2548,6 @@ func _append_flora_slot(fp: Vector2, col: int, spring_pop: bool = true) -> int:
 	if spring_pop:
 		mark_flora_anim(f)
 	_flora_hash_dirty = true
-	_flora_shadows_dirty = true
 	if _mm_flora != null and _mm_flora.multimesh != null:
 		var fmm := _mm_flora.multimesh
 		fmm.visible_instance_count = _flora_count
@@ -2602,13 +2712,39 @@ func _rebuild_flora_hash() -> void:
 		_flora_cell_head[c] = f
 
 
+func _is_ice_bridge_tile(px: int, py: int) -> bool:
+	if _world == null or px < 0 or px >= _map_w or py < 0 or py >= _map_h:
+		return false
+	if _cur_frost_tiles >= 0:
+		if _cur_frost_tiles == 0:
+			return false
+		if not _w_frost.is_empty():
+			var idx := py * _map_w + px
+			return idx < _w_frost.size() and _w_frost[idx] >= 128
+	if _has_is_ice_bridge:
+		return _world.is_ice_bridge(px, py)
+	if _has_world_frost:
+		var f_arr: Variant = _world.get("_frost")
+		if f_arr is PackedByteArray:
+			var fb: PackedByteArray = f_arr
+			var idx2 := py * _map_w + px
+			return idx2 < fb.size() and fb[idx2] >= 128
+	return false
+
+
+func _is_passable_tier(px: int, py: int, t: int) -> bool:
+	return (t > TIER_SHALLOW and t < TIER_SUMMIT) or (t == TIER_SHALLOW and _cur_frost_tiles != 0 and _is_ice_bridge_tile(px, py))
+
+
 func _is_walkable_tile(px: int, py: int) -> bool:
 	if px < 2 or px >= _map_w - 2 or py < 2 or py >= _map_h - 2:
 		return false
 	if _world == null:
 		return true
-	var t: int = _get_tile_tier(px, py)
-	return t >= TIER_SAND and t < TIER_SUMMIT
+	if not _w_tiers.is_empty():
+		var t: int = int(_w_tiers[py * _map_w + px])
+		return (t > TIER_SHALLOW and t < TIER_SUMMIT) or (t == TIER_SHALLOW and _cur_frost_tiles != 0 and _is_ice_bridge_tile(px, py))
+	return _is_passable_tier(px, py, _get_tile_tier(px, py))
 
 
 func _is_walkable_pos(p: Vector2) -> bool:
@@ -2619,13 +2755,29 @@ func _count_water_hits(a: Vector2, b: Vector2) -> int:
 	if _world == null:
 		return 0
 	var hits := 0
+	var mw := _map_w
+	var mh := _map_h
+	var ax := a.x
+	var ay := a.y
+	var dx := b.x - ax
+	var dy := b.y - ay
+	if _cur_frost_tiles == 0 and _w_tiers.size() == mw * mh:
+		var w_tiers := _w_tiers
+		for s in range(1, 4):
+			var t := float(s) * 0.25
+			var px := clampi(int(ax + dx * t), 0, mw - 1)
+			var py := clampi(int(ay + dy * t), 0, mh - 1)
+			var tier := int(w_tiers[py * mw + px])
+			if tier <= TIER_SHALLOW or tier >= TIER_SUMMIT:
+				hits += 1
+		return hits
 	for s in range(1, 4):
 		var t := float(s) * 0.25
 		var p := a.lerp(b, t)
-		var px := clampi(int(p.x), 0, _map_w - 1)
-		var py := clampi(int(p.y), 0, _map_h - 1)
+		var px := clampi(int(p.x), 0, mw - 1)
+		var py := clampi(int(p.y), 0, mh - 1)
 		var tier: int = _get_tile_tier(px, py)
-		if tier < TIER_SAND or tier >= TIER_SUMMIT:
+		if not _is_passable_tier(px, py, tier):
 			hits += 1
 	return hits
 
@@ -2756,8 +2908,9 @@ func _find_walkable_offset(anchor: Vector2, min_r: float, max_r: float, prefer_l
 			continue
 		var score := 1.0
 		if _world != null:
-			var biome: int = _world.get_biome(px, py)
-			var tier: int = _world.get_tier(px, py)
+			var idx := py * _map_w + px
+			var biome: int = int(_w_biomes[idx]) if _w_biomes.size() == _map_w * _map_h else int(_world.get_biome(px, py))
+			var tier: int = int(_w_tiers[idx]) if _w_tiers.size() == _map_w * _map_h else int(_world.get_tier(px, py))
 			if biome == BIOME_LAVA or _world.get_temp(px, py) > 65.0:
 				continue
 			if prefer_lush and biome == BIOME_LUSH:
@@ -2882,11 +3035,19 @@ func trigger_impulse(world_pos: Vector2, radius: float, force: float, is_meteor:
 					_vel[idx] = Vector2(nvx, nvy)
 					_knockback_timer[idx] = maxf(_knockback_timer[idx], 0.35 + 0.55 * clampf(falloff, 0.0, 1.0))
 					_facing[idx] = 1.0 if nvx >= 0.0 else -1.0
+					if idx < _u_vel_z.size():
+						_u_vel_z[idx] = maxf(_u_vel_z[idx], clampf(force * falloff * 0.42, 16.0, 58.0))
+						_any_z_active = true
 					if is_meteor and dist < radius * 0.55:
 						var blast_dmg := (1.0 - dist / (radius * 0.55)) * 42.0
 						_hp[idx] -= blast_dmg
+						if _hp[idx] <= 0.0 and idx < _u_last_attacker_uid.size():
+							_u_last_attacker_uid[idx] = -1
 						_hit_flash_timer[idx] = maxf(_hit_flash_timer[idx], 0.25)
 				idx = _unit_next[idx]
+
+	if _traits_fauna != null and _traits_fauna._f_count > 0:
+		_traits_fauna.damage_fauna_at(self, world_pos, radius, 42.0 if is_meteor else 0.0, -1)
 
 	# Shake, scorch, and update nearby flora inside impact zone
 	var flora_r2 := (radius * 1.45) * (radius * 1.45)
@@ -3050,7 +3211,7 @@ func _sync_single_flora(f: int, from_meteor: bool = false) -> void:
 				var nb: int = _world.get_biome(nx, ny)
 				var ntemp: float = _world.get_temp(nx, ny)
 				_flora_col[f] = _pick_flora_col_for_tile(nt, nb, ntemp)
-				_flora_spring[f] = 0.08
+				_flora_spring[f] = 0.45
 				_flora_spring_vel[f] = 2.5
 				_flora_shake[f] = 0.0
 				_flora_burn[f] = 0.0
@@ -3086,7 +3247,7 @@ func _sync_single_flora(f: int, from_meteor: bool = false) -> void:
 		_flora_col[f] = _pick_flora_col_for_tile(tier, biome, temp)
 		_flora_burn[f] = 0.0
 		_flora_grow[f] = 0.0
-		_flora_spring[f] = 0.12
+		_flora_spring[f] = 0.45
 		_flora_spring_vel[f] = 3.2
 		_flora_hash_dirty = true
 		_flora_dirty_all = true
@@ -3102,7 +3263,7 @@ func _find_shore_dir(pos: Vector2) -> Vector2:
 			var probe: Vector2 = pos + Vector2(cos(ang), sin(ang)) * r_step
 			var tx := clampi(int(probe.x), 0, _map_w - 1)
 			var ty := clampi(int(probe.y), 0, _map_h - 1)
-			if not _world.is_water(tx, ty):
+			if not _world.is_water(tx, ty) or _is_ice_bridge_tile(tx, ty):
 				return Vector2(cos(ang), sin(ang))
 	return Vector2.ZERO
 
@@ -3847,12 +4008,16 @@ func _find_ranged_enemy_idx(seeker: int, px_f: float, py_f: float, max_range: fl
 	var diplo_sz := _diplo_matrix.size()
 	var diplo_stride := _diplo_max_cities
 
+	var checked_r := 0
 	for gy in range(y0, y1 + 1):
 		var row_off := gy * _grid_w
 		for gx in range(x0, x1 + 1):
 			var j := _cell_head[row_off + gx]
 			while j != -1:
 				if j != seeker and _hp[j] > 0.0:
+					checked_r += 1
+					if checked_r > 20:
+						return best_idx
 					var dx := px_f - _px[j]
 					var dy := py_f - _py[j]
 					var d2 := dx * dx + dy * dy
@@ -4042,6 +4207,17 @@ func step_physics(dt: float) -> void:
 			_road_mask = rm as PackedByteArray
 	_sync_hunger_cache()
 	_refresh_world_caches()
+	_cur_frost_tiles = 0
+	if _world != null and _has_world_frost:
+		_cur_frost_tiles = int(_world.get("_frost_tiles")) if _has_world_frost_tiles else 1
+		if _cur_frost_tiles > 0:
+			var wf_arr: Variant = _world.get("_frost")
+			_w_frost = (wf_arr as PackedByteArray) if (wf_arr is PackedByteArray) else PackedByteArray()
+		else:
+			_w_frost = PackedByteArray()
+	else:
+		_cur_frost_tiles = -1 if _has_is_ice_bridge else 0
+		_w_frost = PackedByteArray()
 	_update_rain_zones(safe_dt)
 	if _spatial_hash_dirty or (_tick_idx & 1) == 0:
 		_rebuild_spatial_hash()
@@ -4071,29 +4247,53 @@ func step_physics(dt: float) -> void:
 	if n_units > 0:
 		_ensure_step_scratch(n_units)
 		_batch_timers_and_dots(n_units, safe_dt)
+		if _traits_fauna != null:
+			if (_tick_idx & 3) == 0:
+				_traits_fauna.step_unit_statuses_and_traits(self, n_units, safe_dt)
+			if _sim_pace_mult < 12.0:
+				_traits_fauna.step_liveliness_slice(self, n_units, safe_dt)
 		_batch_boids_and_combat(n_units)
 		_batch_environment(n_units, safe_dt)
 		_batch_cool_regen_and_roads(n_units, safe_dt)
 		_batch_combat_and_regiment_steer(n_units, safe_dt)
 		_batch_routine_and_avoid_steer(n_units, safe_dt)
 		_batch_integrate_positions(n_units, safe_dt)
+		if _any_z_active:
+			_batch_integrate_z(n_units, safe_dt)
 		_batch_pack_unit_mm(n_units, safe_dt)
 	if _cur_any_died:
 		_step_deferred_mortality()
+		_cur_any_died = false
 
+	var fauna_vis := _step_fauna_and_pack(safe_dt)
 	_any_infected_unit = _cur_next_any_inf or _next_any_inf
 	_any_glitched_unit = _cur_next_any_glitch
 	_pos_dirty = true
-	mm.visible_instance_count = _unit_count
+	mm.visible_instance_count = _unit_count + fauna_vis
 	mm.buffer = _unit_mm_buf
 	_unit_colors_dirty = false
 
 	if _harvest_ai != null:
 		_harvest_ai.step_self_founding(self, safe_dt)
-	_sync_cargo_multimesh()
 	_step_flora(safe_dt)
-	_shadows_dirty = true
 	_sync_flora_multimesh()
+	_w_frost = PackedByteArray()
+	_cur_frost_tiles = -1
+
+
+func _step_fauna_and_pack(safe_dt: float) -> int:
+	if _traits_fauna == null or _traits_fauna._f_count <= 0:
+		return 0
+	var pre_uc := _unit_count
+	var f_vis: int = _traits_fauna.step_and_pack_fauna(self, safe_dt, _unit_count)
+	if _cur_any_died:
+		_step_deferred_mortality()
+		_cur_any_died = false
+	if _unit_count != pre_uc:
+		_sync_unit_multimesh()
+		_traits_fauna._pack_fauna_mm(self, _unit_count)
+	_mm_scale_dirty = true
+	return f_vis
 
 
 func _sync_hunger_cache() -> void:
@@ -4165,6 +4365,20 @@ func _decay_unit_status(i: int, fac: int, safe_dt: float) -> int:
 
 
 func _batch_timers_and_dots(n: int, safe_dt: float) -> void:
+	var hp_arr := _hp
+	var cid_arr := _u_city_id
+	var fl_arr := _hit_flash_timer
+	var atk_arr := _u_attack_cd
+	var dodge_arr := _u_dodge_cd
+	var spar_arr := _u_sparring_cd
+	var acq_arr := _u_acq_cd
+	var goal_arr := _u_goal_cd
+	var st_arr := _u_has_status
+	var corr_arr := _u_corrode_timer
+	var st_alive := _u_step_alive
+	var st_flags := _u_step_flags
+	var st_f2 := _u_step_flags2
+	var st_hung := _u_step_hunger
 	var fac_arr := _u_faction_id
 	var role_arr := _u_role
 	var uid_arr := _u_uid
@@ -4186,37 +4400,37 @@ func _batch_timers_and_dots(n: int, safe_dt: float) -> void:
 	var corr_dps := _k_spore_corrode_dps
 
 	for i in range(n):
-		var hp_val := _hp[i]
+		var hp_val := hp_arr[i]
 		if hp_val <= 0.0:
-			_u_step_alive[i] = 0
+			st_alive[i] = 0
 			_cur_any_died = true
 			continue
-		var cid := _u_city_id[i]
+		var cid := cid_arr[i]
 		if cid >= 0 and cid < cact_sz and cact_arr[cid] == 0:
 			_release_single_worker(i, cid)
 			cid = -1
 		var fac := int(fac_arr[i])
 		var role := int(role_arr[i])
-		var fl := _hit_flash_timer[i]
+		var fl := fl_arr[i]
 		if fl > 0.0:
-			_hit_flash_timer[i] = maxf(0.0, fl - safe_dt)
-		var atk_cd := _u_attack_cd[i]
+			fl_arr[i] = maxf(0.0, fl - safe_dt)
+		var atk_cd := atk_arr[i]
 		if atk_cd > 0.0:
 			atk_cd = maxf(0.0, atk_cd - safe_dt)
-			_u_attack_cd[i] = atk_cd
-		if _u_dodge_cd[i] > 0.0:
-			_u_dodge_cd[i] = maxf(0.0, _u_dodge_cd[i] - safe_dt)
-		var spar_cd := _u_sparring_cd[i]
+			atk_arr[i] = atk_cd
+		if dodge_arr[i] > 0.0:
+			dodge_arr[i] = maxf(0.0, dodge_arr[i] - safe_dt)
+		var spar_cd := spar_arr[i]
 		if spar_cd > 0.0:
 			spar_cd = maxf(0.0, spar_cd - safe_dt)
-			_u_sparring_cd[i] = spar_cd
-		if _u_acq_cd[i] > 0.0:
-			_u_acq_cd[i] = maxf(0.0, _u_acq_cd[i] - safe_dt)
-		if _u_goal_cd[i] > 0.0:
-			_u_goal_cd[i] = maxf(0.0, _u_goal_cd[i] - safe_dt)
+			spar_arr[i] = spar_cd
+		if acq_arr[i] > 0.0:
+			acq_arr[i] = maxf(0.0, acq_arr[i] - safe_dt)
+		if goal_arr[i] > 0.0:
+			goal_arr[i] = maxf(0.0, goal_arr[i] - safe_dt)
 
 		var flags := 0
-		var has_st := _u_has_status[i] != 0
+		var has_st := st_arr[i] != 0
 		if has_st:
 			flags = _decay_unit_status(i, fac, safe_dt)
 			if (flags & ST_GLITCHED) != 0:
@@ -4239,13 +4453,13 @@ func _batch_timers_and_dots(n: int, safe_dt: float) -> void:
 			if (flags & ST_INVULN) == 0:
 				if is_inf and fac != FACTION_SPORE:
 					hp_val -= (virus_dps * (0.38 if fac == FACTION_ROBOT else 1.0)) * safe_dt
-				if _u_corrode_timer[i] > 0.0:
+				if corr_arr[i] > 0.0:
 					hp_val -= (corr_dps * (0.55 if fac == FACTION_ROBOT and not is_gl and (flags & ST_EMP) == 0 else 1.0)) * safe_dt
 				if is_gl and fac == FACTION_ROBOT:
 					hp_val -= 6.5 * safe_dt
-			_hp[i] = hp_val
+			hp_arr[i] = hp_val
 			if hp_val <= 0.0:
-				_u_step_alive[i] = 0
+				st_alive[i] = 0
 				_cur_any_died = true
 				continue
 
@@ -4255,10 +4469,10 @@ func _batch_timers_and_dots(n: int, safe_dt: float) -> void:
 		var hung := hunger_arr[cid] if (cid >= 0 and cid < MAX_CITIES) else 0.0
 		if cid >= 0 and role == ROLE_SOLDIER and atk_cd <= 0.0 and spar_cd <= 0.0 and (flags & (ST_ALERTED | ST_INFECTED | ST_GLITCHED)) == 0 and f2 == 0 and hp_val > 55.0 and hung < 0.45:
 			f2 |= ST2_CAN_SPAR
-		_u_step_alive[i] = 1
-		_u_step_flags[i] = flags
-		_u_step_flags2[i] = f2
-		_u_step_hunger[i] = hung
+		st_alive[i] = 1
+		st_flags[i] = flags
+		st_f2[i] = f2
+		st_hung[i] = hung
 
 
 func _run_unit_boids_scan(i: int, rng_px: float, flags: int) -> void:
@@ -4301,20 +4515,27 @@ func _batch_boids_and_combat(n: int) -> void:
 	var boids_ax := _u_boids_ax
 	var boids_ay := _u_boids_ay
 	var t_idx := _tick_idx
+	var check_freeze := _any_unit_frozen
+	var st_masks := _u_status_mask
+	var has_fauna: bool = _traits_fauna != null and int(_traits_fauna._f_count) > 0
 
 	for i in range(n):
-		if st_alive[i] == 0:
+		if st_alive[i] == 0 or (check_freeze and (st_masks[i] & (STATUS_CRYO_BIT | STATUS_SLEEP_BIT)) != 0):
+			_u_step_enemy_idx[i] = -1
 			continue
 		var flags := int(st_flags[i])
 		var f2 := int(st_f2[i])
 		var role := int(role_arr[i])
 		var cid := cid_arr[i]
+		var c_tier: int = int(_city_tech_tier[cid]) if (cid >= 0 and cid < _city_tech_tier.size()) else 0
+		var cp_key: int = (int(_u_faction_id[i]) << 10) | (role << 6) | (c_tier << 2) | (1 if (flags & ST_EMP) != 0 else 0) | (2 if (flags & ST_INFECTED) != 0 else 0)
 		var cp: Vector3 = _u_combat_params[i]
-		if cp.x <= 0.0 or ((i + t_idx) & 7) == 0 or (flags & (ST_EMP | ST_INFECTED)) != 0:
+		if cp.x <= 0.0 or _u_cp_key[i] != cp_key:
 			_cur_is_emp = (flags & ST_EMP) != 0
 			_cur_is_infected = (flags & ST_INFECTED) != 0
 			cp = _combat_ai.compute_combat_params(self, i)
 			_u_combat_params[i] = cp
+			_u_cp_key[i] = cp_key
 		var rng_px := cp.x
 		_u_step_range_px[i] = rng_px
 
@@ -4365,7 +4586,7 @@ func _batch_boids_and_combat(n: int) -> void:
 		if enemy_idx >= 0:
 			_u_target_idx[i] = enemy_idx
 			_u_target_uid[i] = uid_arr[enemy_idx]
-		elif _u_acq_cd[i] <= 0.0 and (role == ROLE_SOLDIER or in_reg[i] != 0 or (flags & (ST_INFECTED | ST_GLITCHED)) != 0 or ((flags & ST_ALERTED) != 0 and ((i + t_idx) & 3) == 0)):
+		elif _u_acq_cd[i] <= 0.0 and ((flags & (ST_INFECTED | ST_GLITCHED)) != 0 or (((i + t_idx) & 1) == 0 and (role == ROLE_SOLDIER or in_reg[i] != 0 or ((flags & ST_ALERTED) != 0 and ((i + t_idx) & 3) == 0)))):
 			_cur_enemy_idx = -1
 			_cur_is_infected = (flags & ST_INFECTED) != 0
 			_cur_is_glitched = (flags & ST_GLITCHED) != 0
@@ -4389,11 +4610,40 @@ func _batch_boids_and_combat(n: int) -> void:
 		elif (f2 & ST2_CAN_SPAR) != 0 and _u_step_spar_idx[i] >= 0 and _u_step_spar_d2[i] <= 100.0:
 			_cur_spar_d2 = _u_step_spar_d2[i]
 			_combat_ai.execute_sparring(self, i, _u_step_spar_idx[i])
+		elif has_fauna and enemy_idx < 0 and _u_attack_cd[i] <= 0.0 and ((i + t_idx) & 3) == 0:
+			_try_attack_hostile_fauna(i, rng_px, cp)
 
 		_u_step_enemy_idx[i] = enemy_idx
 		_u_step_enemy_d2[i] = enemy_d2
 		_u_step_enemy_x[i] = enemy_x
 		_u_step_enemy_y[i] = enemy_y
+
+
+func _try_attack_hostile_fauna(i: int, rng_px: float, cp: Vector3) -> void:
+	var pos := Vector2(_px[i], _py[i])
+	var f_tgt: Dictionary = _traits_fauna.find_nearest_hostile_fauna(pos, rng_px + 6.0, false)
+	if not bool(f_tgt.get("found", false)):
+		return
+	var tgt_pos: Vector2 = f_tgt["pos"]
+	var dmg_mul: float = _u_dmg_mul[i] if i < _u_dmg_mul.size() else 1.0
+	var dmg: float = cp.z * dmg_mul
+	_u_attack_cd[i] = maxf(cp.y, 0.35)
+	_facing[i] = 1.0 if tgt_pos.x >= pos.x else -1.0
+	_traits_fauna.damage_fauna_at(self, tgt_pos, 7.0, dmg, i)
+	_record_memory(i, MEM_FOUGHT)
+	var delta := tgt_pos - pos
+	var d_len := delta.length()
+	var dir := delta / maxf(d_len, 0.01)
+	var p_dst := pos + dir * minf(d_len, 34.0)
+	if int(_u_faction_id[i]) == FACTION_ROBOT or int(_u_role[i]) == ROLE_SOLDIER:
+		_beam_starts.append(pos + Vector2(0.0, -2.5))
+		_beam_ends.append(p_dst + Vector2(0.0, -2.0))
+		_beam_colors.append(BEAM_COL_ROBOT if int(_u_faction_id[i]) == FACTION_ROBOT else BEAM_COL_HUMAN)
+		_beam_widths.append(1.4)
+		_beam_heavy.append(0)
+	elif _fx != null and _skirmish_fx_budget > 0:
+		_skirmish_fx_budget -= 1
+		_fx.emit_spark_arc(p_dst, dir, BEAM_COL_HUMAN)
 
 
 func _scan_unit_neighbors(i: int) -> void:
@@ -4427,7 +4677,7 @@ func _scan_unit_neighbors(i: int) -> void:
 	var fv_y := 0.0
 	var flock_count := 0
 	var checked := 0
-	var nb_cap := 4 if (cid >= 0 and not is_combat and not _cur_is_war and not _cur_is_infected and not _cur_is_glitched) else mini(_k_nb_cap, 6)
+	var nb_cap := 4 if (_sim_pace_mult >= 10.0 or (cid >= 0 and not is_combat and not _cur_is_war and not _cur_is_infected and not _cur_is_glitched)) else mini(_k_nb_cap, 6)
 	var c_scan_r := maxf(28.0, _cur_range_px) if is_combat_scan else (maxf(_cur_range_px, 12.0) if fac != FACTION_NONE else 12.0)
 	var combat_scan_r2 := c_scan_r * c_scan_r
 	var mut_i := (role == ROLE_MUTANT or fac == FACTION_MUTANT)
@@ -4545,6 +4795,9 @@ func _batch_environment(n: int, safe_dt: float) -> void:
 	var w_rad := _w_rad
 	var w_fire := _w_fire
 	var has_w_env := not w_temp.is_empty() and not w_rad.is_empty() and not w_fire.is_empty()
+	var check_freeze := _any_unit_frozen
+	var st_masks := _u_status_mask
+	var spd_muls := _u_spd_mul
 
 	for i in range(n):
 		if _u_step_alive[i] == 0:
@@ -4564,6 +4817,9 @@ func _batch_environment(n: int, safe_dt: float) -> void:
 			spd_t *= (0.40 if fac == FACTION_ROBOT else 0.72)
 		if (flags & ST_EMP) != 0:
 			spd_t *= 0.72
+		spd_t *= spd_muls[i]
+		if check_freeze and (st_masks[i] & (STATUS_CRYO_BIT | STATUS_SLEEP_BIT)) != 0:
+			spd_t = 0.0
 		_u_step_spd_tgt[i] = spd_t
 		if _world == null:
 			_u_step_flags2[i] = int(_u_step_flags2[i]) | ST2_HOT_DONE
@@ -4591,7 +4847,9 @@ func _batch_environment(n: int, safe_dt: float) -> void:
 			else:
 				_sample_unit_world_env(i, px, py)
 
-		if tier <= TIER_SHALLOW:
+		if tier == TIER_SHALLOW and _cur_frost_tiles != 0 and _is_ice_bridge_tile(px, py):
+			_u_step_spd_tgt[i] = spd_t * 1.12
+		elif tier <= TIER_SHALLOW:
 			var w_res := _run_water_step(i, safe_dt, base_speed)
 			if w_res <= 0:
 				if w_res < 0:
@@ -4631,62 +4889,66 @@ func _batch_cool_regen_and_roads(n: int, safe_dt: float) -> void:
 	var road_len := road_mask.size()
 	var full_road := road_len >= map_w * map_h
 	var zone_road := not full_road and _zone_w > 0 and _zone_h > 0 and road_len >= _zone_w * _zone_h
+	var hp_bon_arr := _u_hp_bonus
+	var high_pace := _sim_pace_mult >= 10.0
+	var reg_dt := safe_dt * 4.0 if high_pace else safe_dt
 
 	for i in range(n):
 		if _u_step_alive[i] == 0 or (int(_u_step_flags2[i]) & (ST2_IN_WATER | ST2_HOT_DONE)) != 0:
+			continue
+		var px_f := _px[i]
+		var py_f := _py[i]
+		var px := clampi(int(px_f), 0, map_w - 1)
+		var py := clampi(int(py_f), 0, map_h - 1)
+		var spd_t := _u_step_spd_tgt[i]
+		var cid := _u_city_id[i]
+		if cid >= 0 and ((full_road and road_mask[py * map_w + px] != 0) or (zone_road and road_mask[clampi(py >> 3, 0, _zone_h - 1) * _zone_w + clampi(px >> 3, 0, _zone_w - 1)] != 0)):
+			_u_step_spd_tgt[i] = spd_t * _k_road_bonus
+		if high_pace and ((i + t_idx) & 3) != 0:
 			continue
 		var hp_val := _hp[i]
 		var fac := int(_u_faction_id[i])
 		var role := int(_u_role[i])
 		var flags := int(_u_step_flags[i])
-		var spd_t := _u_step_spd_tgt[i]
 		var biome := int(_u_biome[i])
 		var rad_v := _u_rad_now[i]
-		var px_f := _px[i]
-		var py_f := _py[i]
-		var px := clampi(int(px_f), 0, map_w - 1)
-		var py := clampi(int(py_f), 0, map_h - 1)
-		var biodome_on := (_has_any_biodome and fac == FACTION_HUMAN and (hp_val < 100.0 or rad_v > 0.16) and _is_inside_biodome(px_f, py_f))
+		var max_hp := maxf(25.0, (130.0 if role == ROLE_MUTANT else 100.0) + hp_bon_arr[i])
+		var biodome_on := (_has_any_biodome and fac == FACTION_HUMAN and (hp_val < max_hp or rad_v > 0.16) and _is_inside_biodome(px_f, py_f))
 
 		if fac == FACTION_ROBOT:
-			_u_lava_grace[i] = minf(2.4, _u_lava_grace[i] + safe_dt * 0.45)
+			_u_lava_grace[i] = minf(2.4, _u_lava_grace[i] + reg_dt * 0.45)
 			if _any_rain_zone and _is_in_rain_zone(px_f, py_f) and not _is_in_power_grid(px_f, py_f):
-				hp_val = _apply_robot_rain_hit(i, safe_dt, hp_val)
-				spd_t *= 0.38
+				hp_val = _apply_robot_rain_hit(i, reg_dt, hp_val)
+				_u_step_spd_tgt[i] *= 0.38
 				_u_step_flags[i] = flags | ST_RAIN_STUN
 			elif (flags & ST_RAIN_STUN) != 0:
-				spd_t *= 0.48
+				_u_step_spd_tgt[i] *= 0.48
 			elif rad_v > 0.06:
-				hp_val = minf(100.0, hp_val + (6.0 + rad_v * 18.0) * safe_dt)
-				spd_t *= 1.18
-			elif hp_val < 100.0:
-				hp_val = minf(100.0, hp_val + 2.5 * safe_dt)
+				hp_val = minf(max_hp, hp_val + (6.0 + rad_v * 18.0) * reg_dt)
+				_u_step_spd_tgt[i] *= 1.18
+			elif hp_val < max_hp:
+				hp_val = minf(max_hp, hp_val + 2.5 * reg_dt)
 		elif fac == FACTION_SPORE:
 			var wet := (biome == BIOME_LUSH or biome == BIOME_CRYSTAL)
 			if not wet and _has_world_moisture and ((i + t_idx) & 7) == 0:
 				wet = float(_world.get_moisture(px, py)) > 0.48
-			if hp_val < 100.0:
-				hp_val = minf(100.0, hp_val + ((_k_spore_regen if wet else 5.0) * safe_dt))
+			if hp_val < max_hp:
+				hp_val = minf(max_hp, hp_val + ((_k_spore_regen if wet else 5.0) * reg_dt))
 		elif role == ROLE_MUTANT:
-			if hp_val < 130.0:
-				hp_val = minf(130.0, hp_val + ((9.0 if rad_v > 0.05 else 3.5) * safe_dt))
-		elif hp_val < 100.0 and rad_v < 0.20:
-			hp_val = minf(100.0, hp_val + (11.2 if biodome_on else 8.0) * safe_dt)
+			if hp_val < max_hp:
+				hp_val = minf(max_hp, hp_val + ((9.0 if rad_v > 0.05 else 3.5) * reg_dt))
+		elif hp_val < max_hp and rad_v < 0.20:
+			hp_val = minf(max_hp, hp_val + (11.2 if biodome_on else 8.0) * reg_dt)
 
 		if _law_rad_mutations and role != ROLE_MUTANT and fac != FACTION_ROBOT and (rad_v > 0.16 or _u_rad_exp[i] > 0.0):
-			hp_val = _step_rad_mutation(i, safe_dt, biodome_on)
+			hp_val = _step_rad_mutation(i, reg_dt, biodome_on)
 		_hp[i] = hp_val
 		if hp_val <= 0.0:
 			_u_step_alive[i] = 0
 			_cur_any_died = true
 			continue
-
-		var cid := _u_city_id[i]
-		if cid >= 0 and ((full_road and road_mask[py * map_w + px] != 0) or (zone_road and road_mask[clampi(py >> 3, 0, _zone_h - 1) * _zone_w + clampi(px >> 3, 0, _zone_w - 1)] != 0)):
-			spd_t *= _k_road_bonus
-		_u_step_spd_tgt[i] = spd_t
-		if (_cur_scan_budget > 0 and biome == BIOME_CRYSTAL) or (_cur_dust_budget > 0 and (int(_u_tier[i]) == TIER_SAND or biome == BIOME_RUST or biome == BIOME_SCORCHED)) or (cid < 0 and ((i + t_idx) & 3) == 0):
-			_apply_cool_fx_and_lookahead(i, safe_dt, cid)
+		if (not high_pace and ((_cur_scan_budget > 0 and biome == BIOME_CRYSTAL) or (_cur_dust_budget > 0 and (int(_u_tier[i]) == TIER_SAND or biome == BIOME_RUST or biome == BIOME_SCORCHED)))) or (cid < 0 and ((i + t_idx) & 3) == 0):
+			_apply_cool_fx_and_lookahead(i, reg_dt, cid)
 
 
 func _refresh_unit_tile_cache(i: int, px: int, py: int) -> int:
@@ -4844,6 +5106,8 @@ func _apply_unit_hot_env(i: int, safe_dt: float, biodome_on: bool) -> bool:
 		burn_dmg = 28.0 * safe_dt * (1.85 if on_lava else 0.45)
 	elif biodome_on:
 		burn_dmg *= 0.55
+	if i < _u_trait_mask.size() and (_u_trait_mask[i] & (TR_ASHBORN_BIT | TR_PYRO_BIT | TR_IMMORTAL_BIT)) != 0:
+		burn_dmg = 0.0
 	var hp_val := _hp[i] - burn_dmg
 	_hp[i] = hp_val
 	var px_f := _px[i]
@@ -4879,6 +5143,8 @@ func _apply_robot_rain_hit(i: int, safe_dt: float, hp_val: float) -> float:
 
 
 func _step_rad_mutation(i: int, safe_dt: float, biodome_on: bool) -> float:
+	if i < _u_trait_mask.size() and (_u_trait_mask[i] & (TR_RAD_IMMUNE_BIT | TR_IMMORTAL_BIT)) != 0:
+		return _hp[i]
 	var rad_v := _u_rad_now[i]
 	if rad_v > 0.16:
 		_u_rad_exp[i] += rad_v * (0.25 if biodome_on else 0.55) * safe_dt
@@ -4893,12 +5159,13 @@ func _apply_cool_fx_and_lookahead(i: int, safe_dt: float, cid: int) -> void:
 	var px_f := _px[i]
 	var py_f := _py[i]
 	var biome := int(_u_biome[i])
-	if _cur_scan_budget > 0 and biome == BIOME_CRYSTAL and _fx != null and _rng.randf() < safe_dt * 0.65:
-		_cur_scan_budget -= 1
-		_fx.spawn_burst(Vector2(px_f, py_f - 2.0), 1, Color(0.32, 0.95, 1.0, 0.9), 8.0, 0.50, -6.0)
-	elif _cur_dust_budget > 0 and (int(_u_tier[i]) == TIER_SAND or biome == BIOME_RUST or biome == BIOME_SCORCHED) and _fx != null and _rng.randf() < safe_dt * 0.35:
-		_cur_dust_budget -= 1
-		_fx.spawn_burst(Vector2(px_f, py_f + 2.5), 1, Color(0.76, 0.65, 0.52, 0.42), 5.0, 0.30, -4.0)
+	if _zoom_lod_val > 1.85 and _sim_pace_mult < 10.0:
+		if _cur_scan_budget > 0 and biome == BIOME_CRYSTAL and _fx != null and _rng.randf() < safe_dt * 0.65:
+			_cur_scan_budget -= 1
+			_fx.spawn_burst(Vector2(px_f, py_f - 2.0), 1, Color(0.32, 0.95, 1.0, 0.9), 8.0, 0.50, -6.0)
+		elif _cur_dust_budget > 0 and (int(_u_tier[i]) == TIER_SAND or biome == BIOME_RUST or biome == BIOME_SCORCHED) and _fx != null and _rng.randf() < safe_dt * 0.35:
+			_cur_dust_budget -= 1
+			_fx.spawn_burst(Vector2(px_f, py_f + 2.5), 1, Color(0.76, 0.65, 0.52, 0.42), 5.0, 0.30, -4.0)
 	if cid < 0 and ((i + _tick_idx) & 3) == 0:
 		var vx := _vx[i]
 		var vy := _vy[i]
@@ -4907,17 +5174,19 @@ func _apply_cool_fx_and_lookahead(i: int, safe_dt: float, cid: int) -> void:
 			var inv_vl := 1.0 / sqrt(v_len2)
 			var fx_d := vx * inv_vl
 			var fy_d := vy * inv_vl
-			var pt := _get_tile_tier(clampi(int(px_f + fx_d * 7.5), 0, _map_w - 1), clampi(int(py_f + fy_d * 7.5), 0, _map_h - 1))
-			if pt <= TIER_SHALLOW or pt >= TIER_SUMMIT:
+			var lx := clampi(int(px_f + fx_d * 7.5), 0, _map_w - 1)
+			var ly := clampi(int(py_f + fy_d * 7.5), 0, _map_h - 1)
+			var pt := _get_tile_tier(lx, ly)
+			if not _is_passable_tier(lx, ly, pt):
 				var w_avoid := _k_water_avoid
 				var fwd := Vector2(fx_d, fy_d)
 				var left := fwd.rotated(-1.25)
 				var right := fwd.rotated(1.25)
-				if _get_tile_tier(clampi(int(px_f + left.x * 5.0), 0, _map_w - 1), clampi(int(py_f + left.y * 5.0), 0, _map_h - 1)) > TIER_SHALLOW:
+				if _is_walkable_tile(clampi(int(px_f + left.x * 5.0), 0, _map_w - 1), clampi(int(py_f + left.y * 5.0), 0, _map_h - 1)):
 					_u_step_ax[i] += left.x * w_avoid
 					_u_step_ay[i] += left.y * w_avoid
 					_wander_angle[i] = atan2(left.y, left.x)
-				elif _get_tile_tier(clampi(int(px_f + right.x * 5.0), 0, _map_w - 1), clampi(int(py_f + right.y * 5.0), 0, _map_h - 1)) > TIER_SHALLOW:
+				elif _is_walkable_tile(clampi(int(px_f + right.x * 5.0), 0, _map_w - 1), clampi(int(py_f + right.y * 5.0), 0, _map_h - 1)):
 					_u_step_ax[i] += right.x * w_avoid
 					_u_step_ay[i] += right.y * w_avoid
 					_wander_angle[i] = atan2(right.y, right.x)
@@ -4967,7 +5236,7 @@ func _batch_combat_and_regiment_steer(n: int, safe_dt: float) -> void:
 				_u_task[i] = TASK_IDLE
 		elif need_retreat and kb <= 0.02:
 			_apply_retreat_steer(i, px_f, py_f)
-		elif enemy_idx >= 0 and ((role == ROLE_SOLDIER or role == ROLE_MUTANT) or (flags & (ST_WAR | ST_INFECTED | ST_GLITCHED)) != 0 or (st_e_d2[i] <= 256.0 and (flags & ST_ALERTED) != 0)):
+		elif enemy_idx >= 0 and (role != ROLE_BUILDER or (flags & (ST_INFECTED | ST_GLITCHED)) != 0 or st_e_d2[i] <= 64.0) and ((role == ROLE_SOLDIER or role == ROLE_MUTANT) or (flags & (ST_WAR | ST_INFECTED | ST_GLITCHED)) != 0 or (st_e_d2[i] <= 256.0 and (flags & ST_ALERTED) != 0)):
 			if kb <= 0.02:
 				_u_alert_layer[i] = LAYER_COMBAT
 				var ed2 := st_e_d2[i]
@@ -5067,9 +5336,11 @@ func _batch_routine_and_avoid_steer(n: int, safe_dt: float) -> void:
 	var ay_a := _u_step_ay
 	_u_step_ax = PackedFloat32Array()
 	_u_step_ay = PackedFloat32Array()
+	var check_freeze := _any_unit_frozen
+	var st_masks := _u_status_mask
 
 	for i in range(n):
-		if st_alive[i] == 0:
+		if st_alive[i] == 0 or (check_freeze and (st_masks[i] & (STATUS_CRYO_BIT | STATUS_SLEEP_BIT)) != 0):
 			continue
 		var f2 := int(_u_step_flags2[i])
 		var kb := kb_arr[i]
@@ -5142,9 +5413,13 @@ func _batch_routine_and_avoid_steer(n: int, safe_dt: float) -> void:
 			var b_px := clampi(int(_px[i]), 0, map_w - 1)
 			var b_py := clampi(int(_py[i]), 0, map_h - 1)
 			if (bld_occ[b_py * map_w + b_px] & 1) != 0:
-				var b_av := _u_bld_avoid[i] if (((i + t_idx) & 3) != 0 and i < _u_bld_avoid.size()) else _calc_step_bld_avoid(i, cid)
-				ax_a[i] += b_av.x * 76.0
-				ay_a[i] += b_av.y * 76.0
+				var tp_b := _u_target_pos[i]
+				var b_dx := tp_b.x - _px[i]
+				var b_dy := tp_b.y - _py[i]
+				if not (int(role_arr[i]) == ROLE_BUILDER and int(_u_task[i]) == TASK_MOVE_GOAL and (b_dx * b_dx + b_dy * b_dy) <= 324.0):
+					var b_av := _u_bld_avoid[i] if (((i + t_idx) & 3) != 0 and i < _u_bld_avoid.size()) else _calc_step_bld_avoid(i, cid)
+					ax_a[i] += b_av.x * 76.0
+					ay_a[i] += b_av.y * 76.0
 
 	_u_step_ax = ax_a
 	_u_step_ay = ay_a
@@ -5225,9 +5500,7 @@ func _batch_integrate_positions(n: int, safe_dt: float) -> void:
 	n = mini(n, _unit_count)
 	var st_alive := _u_step_alive
 	var st_f2 := _u_step_flags2
-	var role_arr := _u_role
 	var cid_arr := _u_city_id
-	var task_arr := _u_task
 	var bld_occ := _bld_tile_occ
 	var map_w := _map_w
 	var map_h := _map_h
@@ -5237,9 +5510,17 @@ func _batch_integrate_positions(n: int, safe_dt: float) -> void:
 	var poss_move := _possess_move
 	var poss_moving := poss_move.length_squared() > 0.0001
 	var blend_vel := _cur_blend_vel
+	var check_freeze := _any_unit_frozen
+	var st_masks := _u_status_mask
 
 	for i in range(n):
 		if st_alive[i] == 0:
+			continue
+		if check_freeze and (st_masks[i] & (STATUS_CRYO_BIT | STATUS_SLEEP_BIT)) != 0:
+			_vx[i] = 0.0
+			_vy[i] = 0.0
+			_u_step_ax[i] = 0.0
+			_u_step_ay[i] = _knockback_timer[i]
 			continue
 		var f2 := int(st_f2[i])
 		var kb := _knockback_timer[i]
@@ -5298,7 +5579,7 @@ func _batch_integrate_positions(n: int, safe_dt: float) -> void:
 			var ny := clampi(int(ny_f), 0, map_h - 1)
 			if nx != cx_cur or ny != cy_cur:
 				var nt := _get_tile_tier(nx, ny)
-				if nt > TIER_SHALLOW and nt < TIER_SUMMIT:
+				if _is_passable_tier(nx, ny, nt):
 					_u_last_tile[i] = ny * map_w + nx
 					_u_tier[i] = nt
 				else:
@@ -5326,12 +5607,39 @@ func _batch_integrate_positions(n: int, safe_dt: float) -> void:
 		_vy[i] = vy
 		_u_step_ax[i] = spd
 		_u_step_ay[i] = kb
-		if cid >= 0 and int(role_arr[i]) != ROLE_MUTANT and spd > 2.5 and int(task_arr[i]) != TASK_HARVEST and i < _u_step_timer.size():
+		if cid >= 0 and spd > 2.5 and int(_u_role[i]) != ROLE_MUTANT and int(_u_task[i]) != TASK_HARVEST:
 			_u_step_timer[i] -= safe_dt
 			if _u_step_timer[i] <= 0.0:
-				_u_step_timer[i] = 0.35
-				if _has_record_foot_step and _civ != null:
-					_civ.call("record_foot_step", Vector2(nx_f, ny_f), cid)
+				_record_unit_footstep(i, cid)
+
+
+func _batch_integrate_z(n: int, safe_dt: float) -> void:
+	n = mini(n, _u_pos_z.size())
+	var pz_arr := _u_pos_z
+	var vz_arr := _u_vel_z
+	var still_z := false
+	for i in range(n):
+		var pz := pz_arr[i]
+		var vz := vz_arr[i]
+		if pz <= 0.0 and vz <= 0.0:
+			continue
+		vz -= Z_GRAVITY * safe_dt
+		pz += vz * safe_dt
+		if pz <= 0.0:
+			pz_arr[i] = 0.0
+			vz_arr[i] = 0.0
+		else:
+			pz_arr[i] = minf(pz, Z_MAX)
+			vz_arr[i] = vz
+			still_z = true
+	_any_z_active = still_z
+
+
+func _record_unit_footstep(i: int, cid: int) -> void:
+	_u_step_timer[i] = 0.35
+	var full_road := _road_mask.size() >= _map_w * _map_h
+	if _has_record_foot_step and _civ != null and not (full_road and _road_mask[clampi(int(_py[i]), 0, _map_h - 1) * _map_w + clampi(int(_px[i]), 0, _map_w - 1)] >= 2):
+		_civ.call("record_foot_step", Vector2(_px[i], _py[i]), cid)
 
 
 func _batch_pack_unit_mm(n: int, safe_dt: float) -> void:
@@ -5348,16 +5656,24 @@ func _batch_pack_unit_mm(n: int, safe_dt: float) -> void:
 	var fac_arr := _u_faction_id
 	var cid_arr := _u_city_id
 	var task_arr := _u_task
+	var carry_arr := _u_carry_type
 	var fl_arr := _hit_flash_timer
 	var fire_arr := _u_fire_now
 	var tint_arr := _suit_tint
 	var harv_t := _cur_harv_t
 	var harv_frame := _cur_harv_frame
 	var upload_colors := _cur_upload_colors
-	var sim_t := _sim_time
 	var mm_buf := _unit_mm_buf
 	_unit_mm_buf = PackedFloat32Array()
 	n = mini(n, mm_buf.size() >> 4)
+	var any_z := _any_z_active
+	var pz_arr := _u_pos_z
+	var any_sc := _any_scale_traits
+	var scale_dirty := _mm_scale_dirty
+	var tm_arr := _u_trait_mask
+	var check_freeze := _any_unit_frozen
+	var st_masks := _u_status_mask
+	var can_sleep_col := _unit_atlas_cols >= 43
 
 	for i in range(n):
 		if st_alive[i] == 0:
@@ -5388,19 +5704,17 @@ func _batch_pack_unit_mm(n: int, safe_dt: float) -> void:
 		elif cid >= 0 and u_task == TASK_HARVEST:
 			var ht := harv_t + pt_u
 			squash = 1.0 + 0.10 * (1.0 - 2.0 * absf(2.0 * (ht - float(int(ht))) - 1.0))
-		var custom_g := minf(spd * 0.025, 1.8)
 		var fl := fl_arr[i]
-		if fl > 0.005:
-			custom_g = -2.0 - clampf(fl / 0.16, 0.20, 1.0)
-		elif (f2 & ST2_POSSESSED) != 0:
-			custom_g = -2.0 - (0.28 + 0.16 * sin(sim_t * 9.0))
-		elif (f2 & ST2_ON_LAVA) != 0 or fire_arr[i] > 0.15:
-			custom_g = 2.0 + clampf(maxf(fire_arr[i], 0.55 if (f2 & ST2_ON_LAVA) != 0 else 0.25), 0.15, 1.0)
-		elif (flags & (ST_GLITCHED | ST_RAIN_STUN)) != 0:
-			custom_g = -2.0 - (0.26 + 0.20 * sin(sim_t * 16.0 + float(i & 7)))
-		elif (flags & ST_INF_RAW) != 0:
-			custom_g = -2.0 - (0.18 + 0.12 * sin(sim_t * 8.0 + float(i & 7)))
+		var fire_v := fire_arr[i]
+		var pz_hit := any_z and pz_arr[i] >= 1.0
+		var custom_g := minf(spd * 0.025, 1.8)
+		if pz_hit or fl > 0.005 or fire_v > 0.15 or (flags & (ST_GLITCHED | ST_RAIN_STUN | ST_INF_RAW)) != 0 or (f2 & (ST2_POSSESSED | ST2_ON_LAVA)) != 0:
+			custom_g = _calc_unit_fx_custom_g(i, spd, flags, f2)
 		var off := i * 16
+		if any_sc or scale_dirty:
+			var u_sc := 1.0 if not any_sc else (1.24 if (tm_arr[i] & TR_GIGANTISM_BIT) != 0 else (0.78 if (tm_arr[i] & TR_TINY_BIT) != 0 else 1.0))
+			mm_buf[off] = u_sc
+			mm_buf[off + 5] = u_sc
 		mm_buf[off + 3] = px_arr[i]
 		mm_buf[off + 7] = py_arr[i] - 3.2
 		if upload_colors:
@@ -5412,8 +5726,55 @@ func _batch_pack_unit_mm(n: int, safe_dt: float) -> void:
 		mm_buf[off + 12] = ph
 		mm_buf[off + 13] = custom_g
 		mm_buf[off + 14] = facing_val * squash
-		mm_buf[off + 15] = float(_pick_unit_col(int(fac_arr[i]), int(role_arr[i]), u_task, spd, kb, pt_i, harv_frame, i))
+		var fac_i := int(fac_arr[i])
+		var role_i := int(role_arr[i])
+		var col_idx: int
+		if check_freeze and can_sleep_col and (st_masks[i] & STATUS_SLEEP_BIT) != 0:
+			col_idx = 42
+		elif role_i == ROLE_MUTANT or fac_i == FACTION_MUTANT:
+			col_idx = UCOL_MUTANT_CRYSTAL_A + (pt_i & 1)
+		elif kb > 0.14 and fac_i != FACTION_ROBOT and fac_i != FACTION_SPORE:
+			col_idx = UCOL_HUMAN_JETPACK
+		elif fac_i == FACTION_ROBOT:
+			col_idx = UCOL_ROBOT_CARGO if u_task == TASK_HAUL_DEPOT else (UCOL_ROBOT_HEAVY_A + ((pt_i & 1) if (spd > 2.5 or u_task == TASK_PATROL) else 0) if role_i == ROLE_SOLDIER else (UCOL_ROBOT_DRONE_A + ((pt_i ^ i) & 1) if role_i == ROLE_FARMER else UCOL_ROBOT_WALKER_A + ((harv_frame + i) & 1 if u_task == TASK_HARVEST else ((pt_i & 1) if spd > 2.5 else 0))))
+		elif fac_i == FACTION_SPORE:
+			col_idx = UCOL_SPORE_CARGO if u_task == TASK_HAUL_DEPOT else (UCOL_SPORE_STALKER_A + ((pt_i & 1) if (spd > 2.5 or u_task == TASK_PATROL) else 0) if role_i == ROLE_SOLDIER else UCOL_SPORE_CRAWLER_A + ((harv_frame + i) & 1 if u_task == TASK_HARVEST else ((pt_i & 1) if spd > 2.5 else 0)))
+		elif u_task == TASK_HAUL_DEPOT:
+			col_idx = UCOL_HUMAN_CARGO
+		elif u_task == TASK_HARVEST:
+			col_idx = UCOL_HUMAN_ENGINEER if role_i == ROLE_BUILDER else UCOL_HUMAN_WORK
+		elif role_i == ROLE_SOLDIER:
+			col_idx = UCOL_HUMAN_SOLDIER_A + ((pt_i & 1) if (spd > 2.5 or u_task == TASK_PATROL) else 0)
+		else:
+			col_idx = UCOL_HUMAN_ENGINEER if role_i == ROLE_BUILDER else (UCOL_HUMAN_FARMER if role_i == ROLE_FARMER else UCOL_HUMAN_WALK_A + ((pt_i & 1) if spd > 3.0 else 0))
+		var c_type := int(carry_arr[i])
+		mm_buf[off + 15] = float(col_idx + (c_type + 1) * 100) if (u_task == TASK_HAUL_DEPOT and c_type < 6) else float(col_idx)
+	_mm_scale_dirty = any_sc
 	_unit_mm_buf = mm_buf
+
+
+func _calc_unit_fx_custom_g(i: int, spd: float, flags: int, f2: int) -> float:
+	if _any_z_active and _u_pos_z[i] >= 1.0:
+		return minf(spd * 0.025, 1.5) + floorf(clampf(_u_pos_z[i], 0.0, Z_MAX)) * 4.0
+	var fl := _hit_flash_timer[i]
+	if fl > 0.005:
+		return -2.0 - clampf(fl / 0.16, 0.20, 1.0)
+	if (f2 & ST2_POSSESSED) != 0:
+		return -2.0 - (0.28 + 0.16 * sin(_sim_time * 9.0))
+	var fire_v := _u_fire_now[i]
+	if (f2 & ST2_ON_LAVA) != 0 or fire_v > 0.15:
+		return 2.0 + clampf(maxf(fire_v, 0.55 if (f2 & ST2_ON_LAVA) != 0 else 0.25), 0.15, 1.0)
+	if (flags & (ST_GLITCHED | ST_RAIN_STUN)) != 0:
+		return -2.0 - (0.26 + 0.20 * sin(_sim_time * 16.0 + float(i & 7)))
+	if (flags & ST_INF_RAW) != 0:
+		return -2.0 - (0.18 + 0.12 * sin(_sim_time * 8.0 + float(i & 7)))
+	return minf(spd * 0.025, 1.8)
+
+
+func _pack_unit_col_val(col_idx: int, u_task: int, carry_type: int) -> float:
+	if u_task == TASK_HAUL_DEPOT and carry_type < 6:
+		return float(col_idx + (carry_type + 1) * 100)
+	return float(col_idx)
 
 
 func _bounce_world_bounds(i: int, npos: Vector2) -> Vector2:
@@ -5440,14 +5801,14 @@ func _resolve_step_tile_wall(i: int, npos: Vector2, cur_c: Vector2i) -> Vector2:
 	var px_f := _px[i]
 	var py_f := _py[i]
 	var tx_t := _get_tile_tier(nx, cur_c.y)
-	if tx_t > TIER_SHALLOW and tx_t < TIER_SUMMIT:
+	if _is_passable_tier(nx, cur_c.y, tx_t):
 		ny_f = py_f
 		_cur_vy = -_cur_vy
 		_u_last_tile[i] = cur_c.y * _map_w + nx
 		_u_tier[i] = tx_t
 	else:
 		var ty_t := _get_tile_tier(cur_c.x, ny)
-		if ty_t > TIER_SHALLOW and ty_t < TIER_SUMMIT:
+		if _is_passable_tier(cur_c.x, ny, ty_t):
 			nx_f = px_f
 			_cur_vx = -_cur_vx
 			_u_last_tile[i] = ny * _map_w + cur_c.x
@@ -5500,16 +5861,17 @@ func _step_deferred_mortality() -> void:
 			var cause := DEATH_COMBAT
 			if _u_biome[k] == BIOME_LAVA or _u_fire_now[k] > 0.14 or _u_temp[k] > hot_thresh:
 				cause = DEATH_BURN
-			elif _u_tier[k] <= TIER_SHALLOW:
+			elif _u_tier[k] < TIER_SHALLOW or (_u_tier[k] == TIER_SHALLOW and (_cur_frost_tiles == 0 or not _is_ice_bridge_tile(int(_px[k]), int(_py[k])))):
 				cause = DEATH_DROWN
 			var prev_last := _unit_count - 1
 			_kill_unit(k, cause)
-			if k < _unit_count and prev_last != k:
-				var src_off := prev_last * 16
-				var dst_off := k * 16
-				for m in range(16):
-					_unit_mm_buf[dst_off + m] = _unit_mm_buf[src_off + m]
-			continue
+			if _unit_count <= prev_last:
+				if k < _unit_count and prev_last != k:
+					var src_off := prev_last * 16
+					var dst_off := k * 16
+					for m in range(16):
+						_unit_mm_buf[dst_off + m] = _unit_mm_buf[src_off + m]
+				continue
 		k += 1
 
 
@@ -5561,15 +5923,20 @@ func _cleanup_dead_units_after_aoe(cause: int) -> void:
 		if _hp[k] <= 0.0:
 			var prev_last := _unit_count - 1
 			_kill_unit(k, cause)
-			if k < _unit_count and prev_last != k:
-				var src_off := prev_last * 16
-				var dst_off := k * 16
-				for m in range(16):
-					_unit_mm_buf[dst_off + m] = _unit_mm_buf[src_off + m]
-			continue
+			if _unit_count <= prev_last:
+				if k < _unit_count and prev_last != k:
+					var src_off := prev_last * 16
+					var dst_off := k * 16
+					for m in range(16):
+						_unit_mm_buf[dst_off + m] = _unit_mm_buf[src_off + m]
+				continue
 		k += 1
 	if _mm_units != null and _mm_units.multimesh != null:
-		_mm_units.multimesh.visible_instance_count = _unit_count
+		var f_vis := 0
+		if _traits_fauna != null and _traits_fauna._f_count > 0:
+			_traits_fauna._pack_fauna_mm(self, _unit_count)
+			f_vis = mini(_traits_fauna._f_count, MAX_FAUNA)
+		_mm_units.multimesh.visible_instance_count = _unit_count + f_vis
 		_mm_units.multimesh.buffer = _unit_mm_buf
 	_rebuild_spatial_hash()
 
@@ -5624,6 +5991,8 @@ func _apply_ion_storm_unit_effects(world_pos: Vector2, radius: float) -> void:
 									_hp[u] -= 10.0
 									if _hp[u] <= 0.0:
 										any_died = true
+										if u < _u_last_attacker_uid.size():
+											_u_last_attacker_uid[u] = -1
 								if chain_sources.size() < 3:
 									chain_sources.append(u)
 				u = _unit_next[u]
@@ -5696,30 +6065,13 @@ func _chain_ion_arcs(chain_sources: Array[int]) -> bool:
 				_hp[tgt] -= dmg_arc
 				if _hp[tgt] <= 0.0:
 					any_died = true
+					if tgt < _u_last_attacker_uid.size():
+						_u_last_attacker_uid[tgt] = -1
 			if _fx != null:
 				var adiff := Vector2(_px[tgt] - sx, _py[tgt] - sy)
 				var adir := adiff.normalized() if adiff.length_squared() > 0.01 else Vector2.RIGHT
 				_fx.emit_spark_arc(Vector2(sx, sy - 2.0), adir, Color(0.45, 0.95, 1.0, 0.95))
 	return any_died
-
-
-func _sync_cargo_multimesh() -> void:
-	if _mm_cargo == null or _mm_cargo.multimesh == null or not _mm_cargo.visible:
-		return
-	var cmm := _mm_cargo.multimesh
-	var hauler_n := 0
-	var cargo_cols_len := CARGO_COLORS.size()
-	for i in range(_unit_count):
-		if _u_city_id[i] >= 0 and _u_task[i] == TASK_HAUL_DEPOT and _u_carry_type[i] != CARRY_NONE:
-			var bob := sin(_phase[i] * 2.0) * 0.45
-			var ct := clampi(int(_u_carry_type[i]), 0, cargo_cols_len - 1)
-			cmm.set_instance_transform_2d(hauler_n, Transform2D(0.0, Vector2(_px[i], _py[i] - 6.8 + bob)))
-			cmm.set_instance_color(hauler_n, CARGO_COLORS[ct])
-			cmm.set_instance_custom_data(hauler_n, Color(_phase[i], 0.0, 1.0, float(UCOL_CARGO_PIP)))
-			hauler_n += 1
-			if hauler_n >= MAX_UNITS:
-				break
-	cmm.visible_instance_count = hauler_n
 
 
 func _step_flora(dt: float) -> void:
@@ -5756,6 +6108,10 @@ func _sync_unit_multimesh() -> void:
 
 		var col_idx := _pick_unit_col(int(_u_faction_id[i]), int(_u_role[i]), task, spd, kb, pt_i, harv_frame, i)
 		var off := i * 16
+		var tm := _u_trait_mask[i] if i < _u_trait_mask.size() else 0
+		var u_sc := 1.24 if (tm & TR_GIGANTISM_BIT) != 0 else (0.78 if (tm & TR_TINY_BIT) != 0 else 1.0)
+		_unit_mm_buf[off] = u_sc
+		_unit_mm_buf[off + 5] = u_sc
 		_unit_mm_buf[off + 3] = _px[i]
 		_unit_mm_buf[off + 7] = _py[i] + offset_y
 		if upload_colors:
@@ -5765,26 +6121,34 @@ func _sync_unit_multimesh() -> void:
 			_unit_mm_buf[off + 10] = c.b
 			_unit_mm_buf[off + 11] = c.a
 		_unit_mm_buf[off + 12] = ph
-		var flash_t := _hit_flash_timer[i]
-		var custom_g := minf(spd * 0.025, 1.8)
-		if flash_t > 0.005:
-			custom_g = -2.0 - clampf(flash_t / 0.16, 0.20, 1.0)
-		elif _u_uid[i] == _possessed_uid:
-			custom_g = -2.0 - (0.28 + 0.16 * sin(_sim_time * 9.0))
-		elif _u_fire_now[i] > 0.25:
-			custom_g = 2.0 + clampf(_u_fire_now[i], 0.15, 1.0)
-		elif i < _u_glitch_timer.size() and _u_glitch_timer[i] > 0.0:
-			custom_g = -2.0 - (0.26 + 0.20 * sin(_sim_time * 16.0 + float(i & 7)))
-		elif i < _u_infected_timer.size() and _u_infected_timer[i] > 0.0:
-			custom_g = -2.0 - (0.18 + 0.12 * sin(_sim_time * 8.0 + float(i & 7)))
+		var pz := _u_pos_z[i] if i < _u_pos_z.size() else 0.0
+		var custom_g := minf(spd * 0.025, 1.5)
+		if pz >= 1.0:
+			custom_g += floorf(clampf(pz, 0.0, Z_MAX)) * 4.0
+		else:
+			custom_g = minf(spd * 0.025, 1.8)
+			var flash_t := _hit_flash_timer[i]
+			if flash_t > 0.005:
+				custom_g = -2.0 - clampf(flash_t / 0.16, 0.20, 1.0)
+			elif _u_uid[i] == _possessed_uid:
+				custom_g = -2.0 - (0.28 + 0.16 * sin(_sim_time * 9.0))
+			elif _u_fire_now[i] > 0.25:
+				custom_g = 2.0 + clampf(_u_fire_now[i], 0.15, 1.0)
+			elif i < _u_glitch_timer.size() and _u_glitch_timer[i] > 0.0:
+				custom_g = -2.0 - (0.26 + 0.20 * sin(_sim_time * 16.0 + float(i & 7)))
+			elif i < _u_infected_timer.size() and _u_infected_timer[i] > 0.0:
+				custom_g = -2.0 - (0.18 + 0.12 * sin(_sim_time * 8.0 + float(i & 7)))
 		_unit_mm_buf[off + 13] = custom_g
 		_unit_mm_buf[off + 14] = _facing[i] * squash
-		_unit_mm_buf[off + 15] = float(col_idx)
+		_unit_mm_buf[off + 15] = _pack_unit_col_val(col_idx, task, int(_u_carry_type[i]))
 
+	var f_vis := 0
+	if _traits_fauna != null and _traits_fauna._f_count > 0:
+		_traits_fauna._pack_fauna_mm(self, _unit_count)
+		f_vis = mini(_traits_fauna._f_count, MAX_FAUNA)
+	mm.visible_instance_count = _unit_count + f_vis
 	mm.buffer = _unit_mm_buf
 	_unit_colors_dirty = false
-	_sync_cargo_multimesh()
-	_sync_ground_shadows()
 
 
 func _sync_flora_multimesh() -> void:
@@ -5814,8 +6178,6 @@ func _sync_flora_multimesh() -> void:
 				ak += 1
 		_flora_has_anim = (_flora_anim_count > 0)
 		_flora_custom_dirty = _flora_has_anim
-		_flora_shadows_dirty = true
-		_sync_ground_shadows()
 		return
 
 	if (_flora_custom_dirty or _flora_has_anim) and _flora_anim_count > 0:
@@ -5840,55 +6202,6 @@ func _sync_flora_multimesh() -> void:
 		_flora_custom_dirty = _flora_has_anim
 	else:
 		_flora_custom_dirty = false
-	if _flora_shadows_dirty or _shadows_dirty:
-		_sync_ground_shadows()
-
-
-func _flora_shadow_scale(col: int) -> Vector2:
-	match col:
-		FLORA_TREE_LUSH, FLORA_FROST_PINE, FLORA_TREE_CHARRED, FLORA_BURNING_BUSH:
-			return Vector2(1.45, 1.05)
-		FLORA_CRYSTAL_TALL, FLORA_BOULDER, FLORA_CRYSTAL_CLUSTER, FLORA_SPORE_POD:
-			return Vector2(1.22, 0.90)
-		FLORA_SHROOM_LUSH, FLORA_RUST_SCRUB, FLORA_CRYSTAL_SMALL:
-			return Vector2(0.95, 0.74)
-		_:
-			return Vector2(0.72, 0.58)
-
-
-func _sync_ground_shadows() -> void:
-	if _shadow_group == null or not _shadow_group.visible or _mm_ground_shadows == null or _mm_ground_shadows.multimesh == null:
-		_shadows_dirty = true
-		return
-	var shadow_mm := _mm_ground_shadows.multimesh
-	var cap := shadow_mm.instance_count
-	if _shadow_mm_buf.size() != cap * 8:
-		return
-	var flora_vis := mini(mini(_flora_count, _flora_pos.size()), cap)
-	if _flora_shadows_dirty or _shadow_flora_count != flora_vis:
-		for f in range(flora_vis):
-			var fp := _flora_pos[f]
-			var sc := _flora_shadow_scale(int(_flora_col[f]))
-			var sb := f * 8
-			_shadow_mm_buf[sb] = sc.x
-			_shadow_mm_buf[sb + 3] = fp.x
-			_shadow_mm_buf[sb + 5] = sc.y
-			_shadow_mm_buf[sb + 7] = fp.y + 0.2
-		_shadow_flora_count = flora_vis
-		_flora_shadows_dirty = false
-
-	var unit_vis := mini(_unit_count, cap - flora_vis)
-	for i in range(unit_vis):
-		var s := 1.02 if int(_u_role[i]) == ROLE_MUTANT else 0.85
-		var sb := (flora_vis + i) * 8
-		_shadow_mm_buf[sb] = s
-		_shadow_mm_buf[sb + 3] = _px[i]
-		_shadow_mm_buf[sb + 5] = s * 0.80
-		_shadow_mm_buf[sb + 7] = _py[i] + 0.6
-
-	shadow_mm.visible_instance_count = flora_vis + unit_vis
-	shadow_mm.buffer = _shadow_mm_buf
-	_shadows_dirty = false
 
 
 func get_unit_count() -> int:
@@ -5938,7 +6251,7 @@ func _build_inspect_dict(idx: int) -> Dictionary:
 	var role := int(_u_role[idx])
 	var task := int(_u_task[idx])
 	var carry_type := int(_u_carry_type[idx])
-	var max_hp := 130.0 if role == ROLE_MUTANT else 100.0
+	var max_hp := get_unit_max_hp(idx)
 	var mem_out: Array[String] = []
 	if idx >= 0 and idx < _u_mem_count.size():
 		var cnt := mini(int(_u_mem_count[idx]), MEMORY_SLOTS)
@@ -5949,7 +6262,7 @@ func _build_inspect_dict(idx: int) -> Dictionary:
 			var m_type := int(_u_mem_type[base + slot])
 			if m_type > 0 and m_type < MEM_NAMES_RU.size():
 				mem_out.append("[%dс] %s" % [int(_u_mem_time[base + slot]), MEM_NAMES_RU[m_type]])
-	return {
+	var d := {
 		"found": true,
 		"uid": _u_uid[idx],
 		"unit_idx": idx,
@@ -5971,35 +6284,42 @@ func _build_inspect_dict(idx: int) -> Dictionary:
 		"mutated": role == ROLE_MUTANT,
 		"kills": _u_kills[idx],
 		"dodges": _u_dodges[idx] if idx < _u_dodges.size() else 0,
+		"notable_idx": _u_notable_idx[idx] if idx < _u_notable_idx.size() else -1,
 		"possessed": _u_uid[idx] == _possessed_uid,
 		"memory": mem_out,
 	}
+	if _traits_fauna != null:
+		return _traits_fauna.enrich_unit_inspect(self, idx, d)
+	return d
 
 
 func inspect_unit_at(world_pos: Vector2) -> Dictionary:
-	if _unit_count <= 0:
-		return {"found": false}
-	if _spatial_hash_dirty:
-		_rebuild_spatial_hash()
 	var search_r := 14.0
 	var best_d2 := search_r * search_r
 	var best_idx := -1
-	var min_cx := clampi(int(world_pos.x - search_r) >> 4, 0, _grid_w - 1)
-	var max_cx := clampi(int(world_pos.x + search_r) >> 4, 0, _grid_w - 1)
-	var min_cy := clampi(int(world_pos.y - search_r) >> 4, 0, _grid_h - 1)
-	var max_cy := clampi(int(world_pos.y + search_r) >> 4, 0, _grid_h - 1)
-	for cy in range(min_cy, max_cy + 1):
-		var row_off := cy * _grid_w
-		for cx in range(min_cx, max_cx + 1):
-			var u := _cell_head[row_off + cx]
-			while u != -1:
-				var dx := _px[u] - world_pos.x
-				var dy := _py[u] - world_pos.y
-				var d2 := dx * dx + dy * dy
-				if d2 <= best_d2:
-					best_d2 = d2
-					best_idx = u
-				u = _unit_next[u]
+	if _unit_count > 0:
+		if _spatial_hash_dirty:
+			_rebuild_spatial_hash()
+		var min_cx := clampi(int(world_pos.x - search_r) >> 4, 0, _grid_w - 1)
+		var max_cx := clampi(int(world_pos.x + search_r) >> 4, 0, _grid_w - 1)
+		var min_cy := clampi(int(world_pos.y - search_r) >> 4, 0, _grid_h - 1)
+		var max_cy := clampi(int(world_pos.y + search_r) >> 4, 0, _grid_h - 1)
+		for cy in range(min_cy, max_cy + 1):
+			var row_off := cy * _grid_w
+			for cx in range(min_cx, max_cx + 1):
+				var u := _cell_head[row_off + cx]
+				while u != -1:
+					var dx := _px[u] - world_pos.x
+					var dy := _py[u] - world_pos.y
+					var d2 := dx * dx + dy * dy
+					if d2 <= best_d2:
+						best_d2 = d2
+						best_idx = u
+					u = _unit_next[u]
+	if _traits_fauna != null and _traits_fauna._f_count > 0:
+		var f_res: Dictionary = _traits_fauna.inspect_fauna_at(world_pos, 16.0 if best_idx < 0 else sqrt(best_d2))
+		if bool(f_res.get("found", false)):
+			return f_res
 	if best_idx < 0:
 		return {"found": false}
 	return _build_inspect_dict(best_idx)
@@ -6007,6 +6327,8 @@ func inspect_unit_at(world_pos: Vector2) -> Dictionary:
 
 func inspect_unit_by_id(uid: int) -> Dictionary:
 	if not _uid_to_idx.has(uid):
+		if _traits_fauna != null:
+			return _traits_fauna.inspect_fauna_by_id(uid)
 		return {"found": false}
 	var idx: int = int(_uid_to_idx[uid])
 	if idx < 0 or idx >= _unit_count:
@@ -6016,6 +6338,8 @@ func inspect_unit_by_id(uid: int) -> Dictionary:
 
 func get_unit_follow_pos(uid: int) -> Vector2:
 	if not _uid_to_idx.has(uid):
+		if _traits_fauna != null:
+			return _traits_fauna.get_fauna_pos_by_uid(uid)
 		return Vector2(-1.0, -1.0)
 	var idx: int = int(_uid_to_idx[uid])
 	if idx < 0 or idx >= _unit_count:
@@ -6063,22 +6387,26 @@ func bless_or_mutate_area(world_pos: Vector2, radius: float, bless: bool) -> int
 								_u_carry_type[u] = CARRY_NONE
 								_u_carry_amt[u] = 0.0
 								_u_beacon_pos[u] = Vector2(-1.0, -1.0)
-								_hp[u] = 100.0
+								_hp[u] = get_unit_max_hp(u)
 								_suit_tint[u] = _compute_worker_tint(SUIT_PALETTE[u % SUIT_PALETTE.size()], ROLE_FREE, FACTION_NONE)
 								_unit_colors_dirty = true
 							else:
-								_hp[u] = 100.0
+								_hp[u] = get_unit_max_hp(u)
+							if _traits_fauna != null:
+								_traits_fauna.clear_status(self, u, 4)
+								_traits_fauna.clear_status(self, u, 1)
+								_traits_fauna.apply_status(self, u, 6, 8.0)
 							affected += 1
 						else:
 							if _u_faction_id[u] == FACTION_ROBOT:
-								_hp[u] = 100.0
+								_hp[u] = get_unit_max_hp(u)
 								_hit_flash_timer[u] = 0.28
 								affected += 1
 							elif _u_role[u] != ROLE_MUTANT:
 								_mutate_unit(u, false)
 								affected += 1
 							else:
-								_hp[u] = 130.0
+								_hp[u] = get_unit_max_hp(u)
 								_hit_flash_timer[u] = 0.25
 								affected += 1
 					u = _unit_next[u]
@@ -6189,6 +6517,7 @@ func get_unit_stats() -> Dictionary:
 		"dodges": _total_dodges,
 		"max_shot_dist": _max_shot_dist,
 		"banners": get_army_banners().size(),
+		"fauna": _traits_fauna._f_count if _traits_fauna != null else 0,
 	}
 
 
@@ -6222,10 +6551,12 @@ func count_water_stranded_units() -> int:
 		var px := clampi(int(_px[i]), 0, map_w_m1)
 		var py := clampi(int(_py[i]), 0, map_h_m1)
 		if has_is_water:
-			if _world.is_water(px, py):
+			if _world.is_water(px, py) and not _is_ice_bridge_tile(px, py):
 				stranded += 1
-		elif _get_tile_tier(px, py) <= TIER_SHALLOW:
-			stranded += 1
+		else:
+			var wt := _get_tile_tier(px, py)
+			if wt <= TIER_SHALLOW and not (wt == TIER_SHALLOW and _is_ice_bridge_tile(px, py)):
+				stranded += 1
 	return stranded
 
 
@@ -6333,7 +6664,6 @@ func transfer_squad_portal(src_pos: Vector2, dst_pos: Vector2, city_id: int) -> 
 
 	_rebuild_spatial_hash()
 	_pos_dirty = true
-	_shadows_dirty = true
 	return transferred
 
 
@@ -6453,7 +6783,6 @@ func plant_bio_seeder(world_pos: Vector2, radius: float) -> int:
 			_mm_units.multimesh.visible_instance_count = _unit_count
 		_unit_colors_dirty = true
 		_spatial_hash_dirty = true
-		_shadows_dirty = true
 
 	var flora_added := 0
 	var max_flora_add := mini(8, MAX_FLORA - _flora_count)
@@ -6574,11 +6903,16 @@ func _apply_ext_dmg_unit(u: int, dir_fall: Vector3, spec: Dictionary) -> bool:
 		_vx[u] += dir_fall.x * imp
 		_vy[u] += dir_fall.y * imp
 		_knockback_timer[u] = maxf(_knockback_timer[u], 0.18)
+		if u < _u_vel_z.size():
+			_u_vel_z[u] = maxf(_u_vel_z[u], clampf(imp * 0.35, 12.0, 52.0))
+			_any_z_active = true
+	if _hp[u] <= 0.0 and u < _u_last_attacker_uid.size():
+		_u_last_attacker_uid[u] = -1
 	return _hp[u] <= 0.0
 
 
 func apply_external_damage(world_pos: Vector2, radius: float, spec: Dictionary) -> int:
-	if _unit_count <= 0:
+	if _unit_count <= 0 and (_traits_fauna == null or _traits_fauna._f_count <= 0):
 		return 0
 	var burn: float = float(spec.get("burn", 0.0))
 	var target_idx: int = int(spec.get("unit_idx", -1))
@@ -6593,7 +6927,7 @@ func apply_external_damage(world_pos: Vector2, radius: float, spec: Dictionary) 
 				var pdir := pvec.normalized() if pvec.length_squared() > 0.01 else Vector2.RIGHT
 				any_died = _apply_ext_dmg_unit(target_idx, Vector3(pdir.x, pdir.y, 1.0), spec)
 				hits = 1
-	else:
+	elif _unit_count > 0:
 		if _spatial_hash_dirty:
 			_rebuild_spatial_hash()
 		var r := maxf(radius, 4.0)
@@ -6622,4 +6956,810 @@ func apply_external_damage(world_pos: Vector2, radius: float, spec: Dictionary) 
 
 	if any_died:
 		_cleanup_dead_units_after_aoe(DEATH_BURN if burn > 0.0 else DEATH_COMBAT)
+	if target_idx < 0 and _traits_fauna != null and _traits_fauna._f_count > 0:
+		hits += _traits_fauna.damage_fauna_at(self, world_pos, maxf(radius, 4.0), float(spec.get("damage", 24.0)), -1)
 	return hits
+
+
+func avatar_action(aim_pos: Vector2, is_alt: bool) -> int:
+	_ensure_layers()
+	if _possessed_uid < 0:
+		return 0
+	if not _uid_to_idx.has(_possessed_uid):
+		if _traits_fauna != null and _traits_fauna.has_fauna_uid(_possessed_uid):
+			return _traits_fauna.boss_avatar_action(self, _possessed_uid, aim_pos, is_alt)
+		return 0
+	var idx: int = int(_uid_to_idx[_possessed_uid])
+	if idx < 0 or idx >= _unit_count or _hp[idx] <= 0.0:
+		return 0
+	if is_alt:
+		return _avatar_gesture(idx, aim_pos)
+	return _avatar_strike(idx, aim_pos)
+
+
+func _avatar_gesture(idx: int, aim_pos: Vector2) -> int:
+	var p_uid: int = _u_uid[idx]
+	var pos := Vector2(_px[idx], _py[idx])
+	var cid: int = _u_city_id[idx]
+	var fac: int = int(_u_faction_id[idx])
+	var role: int = int(_u_role[idx])
+	var gesture_res: int = 0
+	if _has_try_avatar_gesture and _civ != null:
+		gesture_res = int(_civ.call("try_avatar_gesture", p_uid, pos))
+	idx = int(_uid_to_idx.get(p_uid, -1))
+	if idx < 0 or idx >= _unit_count:
+		return gesture_res
+	cid = _u_city_id[idx]
+	if _spatial_hash_dirty:
+		_rebuild_spatial_hash()
+	var rallied: int = 0
+	var r2: float = 576.0
+	var rally_tgt: Vector2 = aim_pos if (aim_pos != Vector2.ZERO and aim_pos.distance_squared_to(pos) <= r2 and _is_walkable_pos(aim_pos)) else pos
+	var min_cx := clampi(int(pos.x - 24.0) >> 4, 0, _grid_w - 1)
+	var max_cx := clampi(int(pos.x + 24.0) >> 4, 0, _grid_w - 1)
+	var min_cy := clampi(int(pos.y - 24.0) >> 4, 0, _grid_h - 1)
+	var max_cy := clampi(int(pos.y + 24.0) >> 4, 0, _grid_h - 1)
+	for cy in range(min_cy, max_cy + 1):
+		var row_off := cy * _grid_w
+		for cx in range(min_cx, max_cx + 1):
+			var j := _cell_head[row_off + cx]
+			while j != -1:
+				if j != idx and _hp[j] > 0.0:
+					var same_side: bool = (cid >= 0 and _u_city_id[j] == cid) or (cid < 0 and _u_city_id[j] < 0 and int(_u_faction_id[j]) == fac and fac <= FACTION_SPORE)
+					if same_side and (_u_role[j] != ROLE_MUTANT or role == ROLE_MUTANT):
+						var dx := _px[j] - pos.x
+						var dy := _py[j] - pos.y
+						if dx * dx + dy * dy <= r2:
+							_u_target_pos[j] = rally_tgt
+							if _u_city_id[j] >= 0 and _u_task[j] != TASK_HAUL_DEPOT:
+								_u_task[j] = TASK_PATROL
+								_u_work_timer[j] = 3.5
+								_u_goal_cd[j] = 0.0
+							_hit_flash_timer[j] = maxf(_hit_flash_timer[j], 0.14)
+							rallied += 1
+				j = _unit_next[j]
+	_hit_flash_timer[idx] = maxf(_hit_flash_timer[idx], 0.18)
+	if _fx != null:
+		_fx.spawn_shockwave(pos, 24.0, Color("#FFE156") if gesture_res > 0 else Color("#45E9FF"), 0.28)
+		if gesture_res == 2 and _fx.has_method("spawn_reaction_strip"):
+			_fx.call("spawn_reaction_strip", pos + Vector2(0.0, -8.0), STRIP_RELIC_DIAMOND)
+		_fx.play_sfx("skirmish", pos.x)
+	return gesture_res if gesture_res > 0 else rallied
+
+
+func _avatar_strike(idx: int, aim_pos: Vector2) -> int:
+	if _possess_cd > 0.0:
+		return 0
+	_possess_cd = 0.45
+	var p_uid: int = _u_uid[idx]
+	var pos := Vector2(_px[idx], _py[idx])
+	var fac: int = int(_u_faction_id[idx])
+	var role: int = int(_u_role[idx])
+	var my_cid: int = _u_city_id[idx]
+	var delta: Vector2 = aim_pos - pos
+	var d_len: float = delta.length()
+	var dir: Vector2 = (delta / d_len) if d_len > 0.2 else Vector2(_facing[idx], 0.0)
+	_facing[idx] = 1.0 if dir.x >= 0.0 else -1.0
+
+	var reach: float = 42.0 if fac == FACTION_ROBOT else (32.0 if (fac == FACTION_SPORE or role == ROLE_MUTANT) else 38.0)
+	var impact_raw: Vector2 = pos + dir * minf(d_len if d_len > 0.2 else 22.0, reach)
+	var impact_pt := Vector2(clampf(impact_raw.x, 2.0, float(_map_w - 3)), clampf(impact_raw.y, 2.0, float(_map_h - 3)))
+
+	var bcol: Color = BEAM_COL_MUTANT if role == ROLE_MUTANT else (BEAM_COL_ROBOT if fac == FACTION_ROBOT else (BEAM_COL_SPORE if fac == FACTION_SPORE else BEAM_COL_HUMAN))
+	var is_heavy: int = 1 if fac == FACTION_ROBOT else 0
+	var p_src := Vector2(pos.x, pos.y - 2.5)
+	var p_dst := Vector2(impact_pt.x, impact_pt.y - 2.0)
+	_beam_starts.append(p_src)
+	_beam_ends.append(p_dst)
+	_beam_colors.append(bcol)
+	_beam_widths.append(2.2 if is_heavy != 0 else 1.8)
+	_beam_heavy.append(is_heavy)
+	if fac == FACTION_ROBOT:
+		var perp := Vector2(-dir.y, dir.x) * 1.6
+		_beam_starts.append(p_src + perp)
+		_beam_ends.append(p_dst + perp)
+		_beam_colors.append(bcol)
+		_beam_widths.append(1.5)
+		_beam_heavy.append(1)
+
+	var dmg: float = 46.0 if fac == FACTION_ROBOT else (34.0 if (fac == FACTION_SPORE or role == ROLE_MUTANT) else 38.0)
+	var kb: float = 44.0 if fac == FACTION_ROBOT else 26.0
+	var hit_r: float = 18.0 if (fac == FACTION_ROBOT or fac == FACTION_SPORE) else 16.0
+	var hits: int = _avatar_hit_enemies(p_uid, fac, impact_pt, hit_r, dmg, kb)
+	hits += _avatar_break_flora(impact_pt, my_cid)
+
+	if _has_try_avatar_gesture and _civ != null and _has_get_active_plot_count and int(_civ.call("get_active_plot_count")) > 0:
+		if my_cid >= 0 or not _has_can_settle_near or not bool(_civ.call("can_settle_near", impact_pt)):
+			if int(_civ.call("try_avatar_gesture", p_uid, impact_pt)) == 1:
+				hits += 1
+
+	var self_idx := int(_uid_to_idx.get(p_uid, -1))
+	if self_idx >= 0 and self_idx < _unit_count:
+		_hit_flash_timer[self_idx] = maxf(_hit_flash_timer[self_idx], 0.18)
+		if hits > 0:
+			_record_memory(self_idx, MEM_FOUGHT)
+	if _fx != null:
+		_fx.spawn_shockwave(impact_pt, hit_r, bcol, 0.22)
+		_fx.spawn_burst(impact_pt, 8, bcol, 32.0, 0.28, 0.0)
+		_fx.play_sfx("laser_heavy" if fac == FACTION_ROBOT else "laser_light", impact_pt.x)
+	return hits
+
+
+func _avatar_hit_enemies(p_uid: int, att_fac: int, impact_pt: Vector2, hit_r: float, dmg: float, kb: float) -> int:
+	var self_idx: int = int(_uid_to_idx.get(p_uid, -1))
+	if self_idx < 0 or self_idx >= _unit_count:
+		return 0
+	var r2: float = hit_r * hit_r
+	var struck: int = 0
+	var mark_uid: int = -1
+	var i: int = _unit_count - 1
+	while i >= 0:
+		if _u_uid[i] != p_uid and _hp[i] > 0.0:
+			var dvec := Vector2(_px[i] - impact_pt.x, _py[i] - impact_pt.y)
+			var d2: float = dvec.length_squared()
+			if d2 <= r2 and _are_units_hostile(self_idx, i):
+				var pdir := dvec.normalized() if d2 > 0.01 else Vector2.RIGHT.rotated(_rng.randf_range(0.0, TAU))
+				_vx[i] += pdir.x * kb
+				_vy[i] += pdir.y * kb
+				_vel[i] = Vector2(_vx[i], _vy[i])
+				_knockback_timer[i] = maxf(_knockback_timer[i], 0.22)
+				if i < _u_last_attacker_uid.size():
+					_u_last_attacker_uid[i] = p_uid
+				_hp[i] -= dmg
+				_hit_flash_timer[i] = maxf(_hit_flash_timer[i], 0.18)
+				if att_fac == FACTION_SPORE and i < _u_corrode_timer.size():
+					_u_corrode_timer[i] = maxf(_u_corrode_timer[i], 4.0)
+					_u_has_status[i] = 1
+				struck += 1
+				if _hp[i] <= 0.0:
+					if self_idx >= 0 and self_idx < _unit_count:
+						_u_kills[self_idx] += 1
+					_kill_unit(i, DEATH_COMBAT)
+					self_idx = int(_uid_to_idx.get(p_uid, -1))
+				elif mark_uid < 0:
+					mark_uid = _u_uid[i]
+		i -= 1
+	if _traits_fauna != null and _traits_fauna._f_count > 0:
+		struck += _traits_fauna.damage_fauna_at(self, impact_pt, hit_r, dmg, self_idx)
+	if att_fac == FACTION_SPORE and mark_uid >= 0 and _uid_to_idx.has(mark_uid):
+		var m_slot: int = int(_uid_to_idx[mark_uid])
+		var s_cid: int = _u_city_id[self_idx] if (self_idx >= 0 and self_idx < _unit_count) else -1
+		for k in range(_unit_count):
+			if _u_uid[k] != p_uid and int(_u_faction_id[k]) == FACTION_SPORE and (s_cid < 0 or _u_city_id[k] == s_cid):
+				if Vector2(_px[k] - impact_pt.x, _py[k] - impact_pt.y).length_squared() <= 784.0:
+					_u_target_idx[k] = m_slot
+					_u_target_uid[k] = mark_uid
+	return struck
+
+
+func _avatar_break_flora(impact_pt: Vector2, my_cid: int) -> int:
+	var struck: int = 0
+	var r2: float = 100.0
+	var f: int = _flora_count - 1
+	while f >= 0:
+		var fp := _flora_pos[f]
+		if fp.distance_squared_to(impact_pt) <= r2:
+			var fc := int(_flora_col[f])
+			if fc == FLORA_CRYSTAL_SMALL or fc == FLORA_CRYSTAL_TALL or fc == FLORA_CRYSTAL_CLUSTER or fc == FLORA_BOULDER:
+				struck += 1
+				if _fx != null:
+					_fx.emit_spark_arc(fp, Vector2.UP, Color(0.55, 0.92, 1.0, 1.0))
+					_fx.spawn_burst(fp + Vector2(0.0, -3.0), 4, Color(0.65, 0.94, 1.0, 0.92), 20.0, 0.26, -12.0)
+				if my_cid >= 0:
+					_deposit_to_civ(my_cid, RES_ENERGY if fc != FLORA_BOULDER else RES_ORE, 2.0)
+				_remove_flora_slot(f)
+			else:
+				_flora_shake[f] = 1.0
+				_flora_spring[f] = 0.68
+				_flora_spring_vel[f] = 4.2
+				mark_flora_anim(f)
+		f -= 1
+	return struck
+
+
+func pack_state() -> PackedByteArray:
+	_ensure_layers()
+	var buf := StreamPeerBuffer.new()
+	buf.put_32(SAVE_MAGIC_RAW)
+	buf.put_u16(SAVE_VERSION)
+	buf.put_u16(_map_w)
+	buf.put_u16(_map_h)
+	buf.put_32(_next_uid)
+	buf.put_32(_possessed_uid)
+	buf.put_float(_sim_time)
+	buf.put_32(_tick_idx)
+	buf.put_32(_target_pop_count)
+	buf.put_32(_death_count)
+	buf.put_32(_skirmish_count)
+	buf.put_32(_total_dodges)
+	buf.put_float(_max_shot_dist)
+	buf.put_float(_sim_pace_mult)
+	buf.put_float(_flora_mul)
+	buf.put_float(_crop_mul)
+	buf.put_float(_age_tint.x)
+	buf.put_float(_age_tint.y)
+	buf.put_float(_age_tint.z)
+	buf.put_float(_age_tint_strength)
+	buf.put_u8(1 if _any_infected_unit else 0)
+	buf.put_u8(1 if _any_glitched_unit else 0)
+	_pack_units_to_buf(buf)
+	_pack_flora_to_buf(buf)
+	_pack_regiments_to_buf(buf)
+	if _traits_fauna != null:
+		_traits_fauna.pack_ext_state(self, buf)
+	var raw: PackedByteArray = buf.data_array
+	var comp: PackedByteArray = raw.compress(FileAccess.COMPRESSION_ZSTD)
+	if comp.is_empty():
+		return raw
+	var out := StreamPeerBuffer.new()
+	out.put_32(SAVE_MAGIC_ZSTD)
+	out.put_u32(raw.size())
+	out.put_data(comp)
+	return out.data_array
+
+
+func _pack_units_to_buf(buf: StreamPeerBuffer) -> void:
+	var n: int = mini(_unit_count, MAX_UNITS)
+	buf.put_u16(n)
+	for i in range(n):
+		buf.put_32(_u_uid[i])
+		buf.put_32(_u_city_id[i])
+		buf.put_u8(_u_faction_id[i])
+		buf.put_u8(_u_role[i])
+		buf.put_u8(_u_task[i])
+		buf.put_u8(_u_alert_layer[i])
+		buf.put_32(_u_notable_idx[i] if i < _u_notable_idx.size() else -1)
+		buf.put_32(_u_last_attacker_uid[i] if i < _u_last_attacker_uid.size() else -1)
+		buf.put_float(_px[i])
+		buf.put_float(_py[i])
+		buf.put_float(_vx[i])
+		buf.put_float(_vy[i])
+		buf.put_float(_hp[i])
+		buf.put_float(_phase[i])
+		buf.put_float(_facing[i])
+		buf.put_float(_wander_angle[i])
+		buf.put_float(_knockback_timer[i])
+		buf.put_float(_hit_flash_timer[i])
+		var sc: Color = _suit_tint[i]
+		buf.put_float(sc.r)
+		buf.put_float(sc.g)
+		buf.put_float(sc.b)
+		buf.put_float(sc.a)
+		buf.put_float(_u_target_pos[i].x)
+		buf.put_float(_u_target_pos[i].y)
+		buf.put_float(_u_depot_pos[i].x)
+		buf.put_float(_u_depot_pos[i].y)
+		buf.put_float(_u_beacon_pos[i].x)
+		buf.put_float(_u_beacon_pos[i].y)
+		buf.put_32(_u_flora_idx[i])
+		buf.put_u8(_u_carry_type[i])
+		buf.put_float(_u_carry_amt[i])
+		buf.put_float(_u_work_timer[i])
+		buf.put_float(_u_stuck_timer[i])
+		buf.put_float(_u_detour_timer[i])
+		buf.put_float(_u_detour_dir[i].x)
+		buf.put_float(_u_detour_dir[i].y)
+		buf.put_float(_u_detour_side[i])
+		buf.put_float(_u_last_dist[i])
+		buf.put_float(_u_settle_timer[i])
+		buf.put_float(_u_step_timer[i])
+		buf.put_float(_u_goal_cd[i])
+		buf.put_32(_u_kills[i])
+		buf.put_32(_u_dodges[i])
+		buf.put_32(_u_target_uid[i])
+		buf.put_32(_u_target_idx[i])
+		buf.put_float(_u_attack_cd[i])
+		buf.put_float(_u_dodge_cd[i])
+		buf.put_float(_u_sparring_cd[i])
+		buf.put_float(_u_acq_cd[i])
+		buf.put_float(_u_rad_exp[i])
+		buf.put_float(_u_rad_now[i])
+		buf.put_float(_u_fire_now[i])
+		buf.put_float(_u_lava_grace[i])
+		buf.put_float(_u_glitch_timer[i])
+		buf.put_float(_u_infected_timer[i])
+		buf.put_float(_u_corrode_timer[i])
+		buf.put_float(_u_invuln_timer[i])
+		buf.put_float(_u_latent_timer[i])
+		buf.put_float(_u_rain_stun_timer[i])
+		buf.put_u8(_u_has_status[i])
+		buf.put_u8(_u_in_regiment[i])
+		buf.put_u8(_u_mem_head[i])
+		buf.put_u8(_u_mem_count[i])
+		var mem_b := i * MEMORY_SLOTS
+		for m in range(MEMORY_SLOTS):
+			buf.put_u8(_u_mem_type[mem_b + m])
+			buf.put_float(_u_mem_time[mem_b + m])
+
+
+func _pack_flora_to_buf(buf: StreamPeerBuffer) -> void:
+	var nf: int = mini(_flora_count, MAX_FLORA)
+	buf.put_u16(nf)
+	for f in range(nf):
+		buf.put_float(_flora_pos[f].x)
+		buf.put_float(_flora_pos[f].y)
+		buf.put_u8(_flora_col[f])
+		buf.put_float(_flora_sway_phase[f])
+		buf.put_float(_flora_shake[f])
+		buf.put_float(_flora_spring[f])
+		buf.put_float(_flora_spring_vel[f])
+		buf.put_float(_flora_burn[f])
+		buf.put_float(_flora_grow[f])
+		buf.put_float(_flora_grow_rate[f] if f < _flora_grow_rate.size() else 1.0)
+		var ft: Color = _flora_tint[f]
+		buf.put_float(ft.r)
+		buf.put_float(ft.g)
+		buf.put_float(ft.b)
+		buf.put_float(ft.a)
+
+
+func _pack_regiments_to_buf(buf: StreamPeerBuffer) -> void:
+	if _combat_ai == null:
+		buf.put_u16(0)
+		return
+	buf.put_u16(MAX_CITIES)
+	for c in range(MAX_CITIES):
+		buf.put_u8(_combat_ai._reg_active[c])
+		buf.put_u8(_combat_ai._reg_state[c])
+		buf.put_32(_combat_ai._reg_leader_uid[c])
+		buf.put_float(_combat_ai._reg_gather_timer[c])
+
+
+func unpack_state(blob: PackedByteArray) -> bool:
+	_ensure_layers()
+	if blob.size() < 8:
+		return false
+	var outer := StreamPeerBuffer.new()
+	outer.data_array = blob
+	outer.seek(0)
+	var magic: int = outer.get_32()
+	var raw: PackedByteArray = blob
+	if magic == SAVE_MAGIC_ZSTD:
+		var raw_sz: int = outer.get_u32()
+		if raw_sz <= 0 or raw_sz > 16777216:
+			return false
+		var comp_len: int = blob.size() - 8
+		if comp_len <= 0:
+			return false
+		var comp_res: Array = outer.get_data(comp_len)
+		if int(comp_res[0]) != OK:
+			return false
+		raw = (comp_res[1] as PackedByteArray).decompress(raw_sz, FileAccess.COMPRESSION_ZSTD)
+		if raw.size() != raw_sz:
+			return false
+	elif magic != SAVE_MAGIC_RAW:
+		return false
+	if raw.size() < 76:
+		return false
+
+	var buf := StreamPeerBuffer.new()
+	buf.data_array = raw
+	buf.seek(0)
+	if buf.get_32() != SAVE_MAGIC_RAW:
+		return false
+	var ver: int = buf.get_u16()
+	if ver != 1 and ver != SAVE_VERSION:
+		return false
+	var w: int = buf.get_u16()
+	var h: int = buf.get_u16()
+	if w != _map_w or h != _map_h:
+		return false
+
+	_next_uid = maxi(1, buf.get_32())
+	_possessed_uid = buf.get_32()
+	_possess_move = Vector2.ZERO
+	_possess_pulse = false
+	_possess_cd = 0.0
+	_sim_time = buf.get_float()
+	_tick_idx = buf.get_32()
+	_target_pop_count = buf.get_32()
+	_death_count = buf.get_32()
+	_skirmish_count = buf.get_32()
+	_total_dodges = buf.get_32()
+	_max_shot_dist = buf.get_float()
+	_sim_pace_mult = clampf(buf.get_float(), 0.05, 80.0)
+	var fl_m: float = buf.get_float()
+	var cr_m: float = buf.get_float()
+	var at_col := Color(buf.get_float(), buf.get_float(), buf.get_float(), 1.0)
+	var at_str: float = buf.get_float()
+	set_cosmic_age_mods(fl_m, cr_m, at_col, at_str)
+	_any_infected_unit = buf.get_u8() != 0
+	_any_glitched_unit = buf.get_u8() != 0
+
+	if not _unpack_units_from_buf(buf):
+		return false
+	if not _unpack_flora_from_buf(buf):
+		return false
+	_unpack_regiments_from_buf(buf)
+	if ver >= 2 and _traits_fauna != null:
+		_traits_fauna.unpack_ext_state(self, buf)
+	else:
+		_reset_ext_arrays_for_v1()
+	if _possessed_uid >= 0 and not _uid_to_idx.has(_possessed_uid) and (_traits_fauna == null or not _traits_fauna.has_fauna_uid(_possessed_uid)):
+		_possessed_uid = -1
+
+	_beam_starts.clear()
+	_beam_ends.clear()
+	_beam_colors.clear()
+	_beam_widths.clear()
+	_beam_heavy.clear()
+	_proj_src.clear()
+	_proj_dst.clear()
+	_proj_kind_dmg.clear()
+	_proj_owner.clear()
+	_clear_tc()
+	_w_cache_owner = null
+	_refresh_world_caches()
+	_spatial_hash_dirty = true
+	_flora_hash_dirty = true
+	_flora_dirty_all = true
+	_unit_colors_dirty = true
+	_pos_dirty = true
+	if _mm_units != null and _mm_units.multimesh != null:
+		_mm_units.multimesh.instance_count = MAX_UNITS + MAX_FAUNA
+		var f_vis := mini(_traits_fauna._f_count, MAX_FAUNA) if _traits_fauna != null else 0
+		_mm_units.multimesh.visible_instance_count = _unit_count + f_vis
+	_rebuild_spatial_hash()
+	_sync_unit_multimesh()
+	_sync_flora_multimesh()
+	return true
+
+
+func _reset_ext_arrays_for_v1() -> void:
+	if _traits_fauna != null:
+		_traits_fauna.reset_all()
+		_traits_fauna.resize_unit_ext(_unit_count)
+	_u_pos_z.fill(0.0)
+	_u_vel_z.fill(0.0)
+	_u_trait_mask.fill(0)
+	_u_status_mask.fill(0)
+	_u_dmg_mul.fill(1.0)
+	_u_hp_bonus.fill(0.0)
+	_u_spd_mul.fill(1.0)
+	_u_armor_mul.fill(1.0)
+	_u_dodge_bonus.fill(0.0)
+	_u_crit_chance.fill(0.05)
+	_any_z_active = false
+	_any_unit_frozen = false
+	_any_scale_traits = false
+	_mm_scale_dirty = true
+
+
+func _unpack_units_from_buf(buf: StreamPeerBuffer) -> bool:
+	if buf.get_available_bytes() < 2:
+		return false
+	var n: int = buf.get_u16()
+	if n > MAX_UNITS or buf.get_available_bytes() < n * 265:
+		return false
+	_unit_count = n
+	_resize_unit_arrays(n)
+	_uid_to_idx.clear()
+	_city_pop_counts.resize(MAX_CITIES)
+	_city_pop_counts.fill(0)
+	for i in range(n):
+		var uid: int = buf.get_32()
+		var cid: int = buf.get_32()
+		_u_uid[i] = uid
+		_uid_to_idx[uid] = i
+		_u_city_id[i] = cid
+		if cid >= 0 and cid < MAX_CITIES:
+			_city_pop_counts[cid] += 1
+		_u_faction_id[i] = buf.get_u8()
+		_u_role[i] = buf.get_u8()
+		_u_task[i] = buf.get_u8()
+		_u_alert_layer[i] = buf.get_u8()
+		_u_notable_idx[i] = buf.get_32()
+		_u_last_attacker_uid[i] = buf.get_32()
+		_px[i] = buf.get_float()
+		_py[i] = buf.get_float()
+		_vx[i] = buf.get_float()
+		_vy[i] = buf.get_float()
+		_pos[i] = Vector2(_px[i], _py[i])
+		_vel[i] = Vector2(_vx[i], _vy[i])
+		_acc[i] = Vector2.ZERO
+		_hp[i] = buf.get_float()
+		_phase[i] = buf.get_float()
+		_facing[i] = buf.get_float()
+		var w_ang: float = buf.get_float()
+		_wander_angle[i] = w_ang
+		_u_wan_ang[i] = w_ang
+		_u_wan_dx[i] = cos(w_ang)
+		_u_wan_dy[i] = sin(w_ang)
+		_knockback_timer[i] = buf.get_float()
+		_hit_flash_timer[i] = buf.get_float()
+		_suit_tint[i] = Color(buf.get_float(), buf.get_float(), buf.get_float(), buf.get_float())
+		_u_target_pos[i] = Vector2(buf.get_float(), buf.get_float())
+		_u_depot_pos[i] = Vector2(buf.get_float(), buf.get_float())
+		_u_beacon_pos[i] = Vector2(buf.get_float(), buf.get_float())
+		_u_flora_idx[i] = buf.get_32()
+		_u_carry_type[i] = buf.get_u8()
+		_u_carry_amt[i] = buf.get_float()
+		_u_work_timer[i] = buf.get_float()
+		_u_stuck_timer[i] = buf.get_float()
+		_u_detour_timer[i] = buf.get_float()
+		_u_detour_dir[i] = Vector2(buf.get_float(), buf.get_float())
+		_u_detour_side[i] = buf.get_float()
+		_u_last_dist[i] = buf.get_float()
+		_u_settle_timer[i] = buf.get_float()
+		_u_step_timer[i] = buf.get_float()
+		_u_goal_cd[i] = buf.get_float()
+		_u_kills[i] = buf.get_32()
+		_u_dodges[i] = buf.get_32()
+		_u_target_uid[i] = buf.get_32()
+		_u_target_idx[i] = buf.get_32()
+		_u_attack_cd[i] = buf.get_float()
+		_u_dodge_cd[i] = buf.get_float()
+		_u_sparring_cd[i] = buf.get_float()
+		_u_acq_cd[i] = buf.get_float()
+		_u_rad_exp[i] = buf.get_float()
+		_u_rad_now[i] = buf.get_float()
+		_u_fire_now[i] = buf.get_float()
+		_u_lava_grace[i] = buf.get_float()
+		_u_glitch_timer[i] = buf.get_float()
+		_u_infected_timer[i] = buf.get_float()
+		_u_corrode_timer[i] = buf.get_float()
+		_u_invuln_timer[i] = buf.get_float()
+		_u_latent_timer[i] = buf.get_float()
+		_u_rain_stun_timer[i] = buf.get_float()
+		_u_has_status[i] = buf.get_u8()
+		_u_in_regiment[i] = buf.get_u8()
+		_u_mem_head[i] = buf.get_u8()
+		_u_mem_count[i] = buf.get_u8()
+		var mem_b := i * MEMORY_SLOTS
+		for m in range(MEMORY_SLOTS):
+			_u_mem_type[mem_b + m] = buf.get_u8()
+			_u_mem_time[mem_b + m] = buf.get_float()
+		_u_last_tile[i] = -1
+		_u_tier[i] = TIER_SOIL_LOW
+		_u_biome[i] = BIOME_RUST
+		_u_temp[i] = 22.0
+		_u_grad_x[i] = 0.0
+		_u_grad_y[i] = 0.0
+		_u_boids_ax[i] = 0.0
+		_u_boids_ay[i] = 0.0
+		_u_steer_dir[i] = Vector2.ZERO
+		_u_bld_avoid[i] = Vector2.ZERO
+		_u_combat_params[i] = Vector3(-1.0, 0.0, 0.0)
+		_u_cp_key[i] = -1
+		_unit_next[i] = -1
+		_macro_next[i] = -1
+	return true
+
+
+func _unpack_flora_from_buf(buf: StreamPeerBuffer) -> bool:
+	if buf.get_available_bytes() < 2:
+		return false
+	var nf: int = buf.get_u16()
+	if nf > MAX_FLORA or buf.get_available_bytes() < nf * 53:
+		return false
+	_flora_count = nf
+	_ensure_flora_arrays()
+	_flora_active_custom.fill(0)
+	_flora_anim_count = 0
+	_flora_has_anim = false
+	for f in range(nf):
+		_flora_pos[f] = Vector2(buf.get_float(), buf.get_float())
+		_flora_col[f] = buf.get_u8()
+		_flora_sway_phase[f] = buf.get_float()
+		_flora_shake[f] = buf.get_float()
+		_flora_spring[f] = buf.get_float()
+		_flora_spring_vel[f] = buf.get_float()
+		_flora_burn[f] = buf.get_float()
+		_flora_grow[f] = buf.get_float()
+		_flora_grow_rate[f] = buf.get_float()
+		_flora_tint[f] = Color(buf.get_float(), buf.get_float(), buf.get_float(), buf.get_float())
+		if _flora_burn[f] > 0.0 or _flora_shake[f] > 0.0 or absf(_flora_spring[f] - 1.0) > 0.002:
+			mark_flora_anim(f)
+	return true
+
+
+func _unpack_regiments_from_buf(buf: StreamPeerBuffer) -> void:
+	if _combat_ai == null:
+		return
+	_combat_ai.reset_state()
+	if buf.get_available_bytes() < 2:
+		return
+	var rc: int = buf.get_u16()
+	if buf.get_available_bytes() < rc * 10:
+		return
+	for c in range(rc):
+		var r_act: int = buf.get_u8()
+		var r_st: int = buf.get_u8()
+		var r_uid: int = buf.get_32()
+		var r_gt: float = buf.get_float()
+		if c < MAX_CITIES:
+			_combat_ai._reg_active[c] = r_act
+			_combat_ai._reg_state[c] = r_st
+			_combat_ai._reg_leader_uid[c] = r_uid
+			_combat_ai._reg_gather_timer[c] = r_gt
+	_combat_ai._order_refresh_cd = 0.0
+	_combat_ai._reg_assign_cd = 0.0
+
+
+func get_save_state() -> Dictionary:
+	return {"version": SAVE_VERSION, "blob": pack_state()}
+
+
+func load_save_state(state: Variant) -> bool:
+	if state is PackedByteArray:
+		return unpack_state(state as PackedByteArray)
+	if state is Dictionary and (state as Dictionary).has("blob"):
+		var b: Variant = (state as Dictionary)["blob"]
+		if b is PackedByteArray:
+			return unpack_state(b as PackedByteArray)
+	return false
+
+
+func spawn_fauna(world_pos: Vector2, kind_id: int, count: int = 1) -> int:
+	_ensure_layers()
+	if _traits_fauna == null:
+		return 0
+	var added: int = _traits_fauna.spawn_fauna(self, world_pos, kind_id, count)
+	if added > 0 and _mm_units != null and _mm_units.multimesh != null:
+		_ensure_unit_mm_buf(_mm_units.multimesh)
+		_traits_fauna._pack_fauna_mm(self, _unit_count)
+		_mm_units.multimesh.visible_instance_count = _unit_count + mini(_traits_fauna._f_count, MAX_FAUNA)
+		_mm_units.multimesh.buffer = _unit_mm_buf
+	return added
+
+
+func get_fauna_count() -> int:
+	return _traits_fauna._f_count if _traits_fauna != null else 0
+
+
+func apply_trait_rain(world_pos: Vector2, radius: float, trait_id: int) -> int:
+	_ensure_layers()
+	if _traits_fauna == null:
+		return 0
+	return _traits_fauna.apply_trait_rain(self, world_pos, radius, trait_id)
+
+
+func apply_gear_rain(world_pos: Vector2, radius: float, tier_hint: int = -1) -> int:
+	_ensure_layers()
+	if _traits_fauna == null:
+		return 0
+	return _traits_fauna.apply_gear_rain(self, world_pos, radius, tier_hint)
+
+
+func apply_monolith_uplift(world_pos: Vector2, radius: float) -> int:
+	_ensure_layers()
+	if _traits_fauna == null:
+		return 0
+	var made: int = _traits_fauna.apply_monolith_uplift(self, world_pos, radius)
+	if made > 0:
+		_spatial_hash_dirty = true
+		_unit_colors_dirty = true
+		_sync_unit_multimesh()
+	return made
+
+
+func set_unit_custom_name(uid: int, new_name: String) -> bool:
+	_ensure_layers()
+	if _traits_fauna == null:
+		return false
+	if _uid_to_idx.has(uid):
+		var idx: int = int(_uid_to_idx[uid])
+		if idx >= 0 and idx < _unit_count and idx < _traits_fauna._u_custom_name.size():
+			_traits_fauna._u_custom_name[idx] = new_name.strip_edges().left(32)
+			return true
+	return _traits_fauna.set_fauna_custom_name(uid, new_name)
+
+
+func toggle_unit_trait(uid: int, trait_id: int) -> bool:
+	_ensure_layers()
+	if _traits_fauna == null:
+		return false
+	return _traits_fauna.toggle_unit_trait(self, uid, trait_id)
+
+
+func damage_fauna_at(world_pos: Vector2, radius: float, damage: float) -> int:
+	if _traits_fauna == null or _traits_fauna._f_count <= 0:
+		return 0
+	return _traits_fauna.damage_fauna_at(self, world_pos, radius, damage, -1)
+
+
+func find_nearest_hostile_fauna(world_pos: Vector2, max_range: float, include_peaceful: bool = false) -> Dictionary:
+	if _traits_fauna == null or _traits_fauna._f_count <= 0:
+		return {"found": false}
+	return _traits_fauna.find_nearest_hostile_fauna(world_pos, max_range, include_peaceful)
+
+
+func queue_projectile(src_dst: Rect2, kind_and_dmg: Vector2, owner_fac: int = -1) -> void:
+	if _proj_src.size() >= 192:
+		return
+	_proj_src.append(src_dst.position)
+	_proj_dst.append(src_dst.size)
+	_proj_kind_dmg.append(kind_and_dmg)
+	_proj_owner.append(owner_fac)
+
+
+func pop_fired_projectiles() -> Dictionary:
+	var out := {
+		"src": _proj_src,
+		"dst": _proj_dst,
+		"kind_dmg": _proj_kind_dmg,
+		"owner": _proj_owner,
+	}
+	_proj_src = PackedVector2Array()
+	_proj_dst = PackedVector2Array()
+	_proj_kind_dmg = PackedVector2Array()
+	_proj_owner = PackedInt32Array()
+	return out
+
+
+func apply_magnet_step(world_pos: Vector2, radius: float, impulse_and_hold: Vector3) -> int:
+	_ensure_layers()
+	var r := maxf(radius, 4.0)
+	var r2 := r * r
+	var hold := impulse_and_hold.z > 0.5
+	var imp := Vector2(impulse_and_hold.x, impulse_and_hold.y).limit_length(180.0)
+	var mw := float(_map_w - 4)
+	var mh := float(_map_h - 4)
+	var cnt := 0
+	for u in range(_unit_count):
+		var dx := _px[u] - world_pos.x
+		var dy := _py[u] - world_pos.y
+		var is_held := u < _u_status_mask.size() and (_u_status_mask[u] & STATUS_MAG_BIT) != 0
+		if dx * dx + dy * dy <= r2 or (not hold and is_held):
+			if hold:
+				_px[u] = clampf(lerpf(_px[u], world_pos.x, 0.28), 3.0, mw)
+				_py[u] = clampf(lerpf(_py[u], world_pos.y, 0.28), 3.0, mh)
+				_pos[u] = Vector2(_px[u], _py[u])
+				if u < _u_pos_z.size():
+					_u_pos_z[u] = lerpf(_u_pos_z[u], 12.0, 0.35)
+					_u_vel_z[u] = 0.0
+				_vx[u] = imp.x * 0.45
+				_vy[u] = imp.y * 0.45
+				_knockback_timer[u] = maxf(_knockback_timer[u], 0.20)
+				if u < _u_status_mask.size():
+					_u_status_mask[u] |= STATUS_MAG_BIT
+			else:
+				_vx[u] += imp.x
+				_vy[u] += imp.y
+				_vel[u] = Vector2(_vx[u], _vy[u])
+				if u < _u_vel_z.size():
+					_u_vel_z[u] = maxf(_u_vel_z[u], clampf(26.0 + imp.length() * 0.3, 24.0, 62.0))
+				_knockback_timer[u] = maxf(_knockback_timer[u], 0.45)
+				if u < _u_status_mask.size():
+					_u_status_mask[u] &= ~STATUS_MAG_BIT
+			cnt += 1
+	if _traits_fauna != null and _traits_fauna._f_count > 0:
+		cnt += _traits_fauna.apply_magnet_fauna(self, world_pos, r, impulse_and_hold)
+	if cnt > 0:
+		_spatial_hash_dirty = true
+		_any_z_active = true
+	return cnt
+
+
+func apply_kinetic_flick(world_pos: Vector2, radius: float, impulse: Vector2) -> int:
+	_ensure_layers()
+	var r := maxf(radius, 4.0)
+	var r2 := r * r
+	var base_dir := impulse
+	if base_dir.length_squared() >= 0.01 and base_dir.length() <= 2.0:
+		base_dir = base_dir.normalized() * 95.0
+	base_dir = base_dir.limit_length(220.0)
+	var cnt := 0
+	for u in range(_unit_count):
+		var dx := _px[u] - world_pos.x
+		var dy := _py[u] - world_pos.y
+		if dx * dx + dy * dy <= r2:
+			var push := base_dir
+			if push.length_squared() < 0.01:
+				var d := Vector2(dx, dy)
+				push = (d.normalized() if d.length_squared() > 0.01 else Vector2.RIGHT) * 85.0
+			_vx[u] += push.x
+			_vy[u] += push.y
+			_vel[u] = Vector2(_vx[u], _vy[u])
+			if u < _u_vel_z.size():
+				_u_vel_z[u] = maxf(_u_vel_z[u], clampf(32.0 + push.length() * 0.25, 32.0, Z_MAX))
+			_knockback_timer[u] = maxf(_knockback_timer[u], 0.40)
+			_hit_flash_timer[u] = maxf(_hit_flash_timer[u], 0.14)
+			cnt += 1
+	if _traits_fauna != null and _traits_fauna._f_count > 0:
+		cnt += _traits_fauna.apply_flick_fauna(world_pos, r, impulse)
+	if cnt > 0:
+		_any_z_active = true
+		if _fx != null:
+			_fx.spawn_shockwave(world_pos, minf(r * 0.8, 28.0), Color(0.95, 0.82, 0.35, 0.9), 0.24)
+	return cnt
