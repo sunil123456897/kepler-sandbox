@@ -3,6 +3,8 @@ extends RefCounted
 signal laws_changed(laws: Dictionary)
 signal chronicle_focus_requested(world_pos: Vector2)
 signal chronicle_event_logged(ev_kind: String)
+signal laws_panel_toggled(is_open: bool)
+signal history_item_clicked(entry: Dictionary)
 
 const LAW_SPECS: Array[Dictionary] = [
 	{
@@ -162,6 +164,7 @@ var _style_chronicle: StyleBoxFlat
 var _style_chronicle_row: StyleBoxFlat
 var _style_chronicle_hover: StyleBoxFlat
 var _scroll_theme: Theme
+var _close_modals_cb: Callable = Callable()
 
 
 func _init() -> void:
@@ -208,6 +211,7 @@ func dispose() -> void:
 	_chronicle_box = null
 	_btn_laws = null
 	_hud_root = null
+	_close_modals_cb = Callable()
 
 
 func get_laws() -> Dictionary:
@@ -228,6 +232,10 @@ func reset_all_laws_default() -> void:
 	laws_changed.emit(get_laws())
 
 
+func set_modal_close_callback(cb: Callable) -> void:
+	_close_modals_cb = cb
+
+
 func is_laws_panel_open() -> bool:
 	return _laws_open
 
@@ -237,12 +245,19 @@ func toggle_laws_panel() -> void:
 
 
 func set_laws_panel_open(open: bool) -> void:
+	var changed: bool = (_laws_open != open)
 	_laws_open = open
 	if _laws_panel != null:
 		_laws_panel.visible = open
+		if open and _hud_root != null and _laws_panel.get_parent() == _hud_root:
+			_hud_root.move_child(_laws_panel, _hud_root.get_child_count() - 1)
 	if _btn_laws != null:
 		_btn_laws.button_pressed = open
 	_refresh_button_indicator()
+	if open and _close_modals_cb.is_valid():
+		_close_modals_cb.call()
+	if changed:
+		laws_panel_toggled.emit(open)
 
 
 func hide_laws_for_capture() -> void:
@@ -310,29 +325,33 @@ func push_chronicle_events(events: Array) -> void:
 		var txt: String = str(ev.get("text", "")).strip_edges()
 		if txt == "":
 			continue
-		var pos_v: Variant = ev.get("pos", Vector2(320.0, 180.0))
-		var pos: Vector2 = pos_v if pos_v is Vector2 else Vector2(320.0, 180.0)
+		var pos_v: Variant = ev.get("pos", null)
+		var has_pos: bool = pos_v is Vector2
 		var col_v: Variant = ev.get("color", Color("#7CE7FF"))
 		var col: Color = col_v if col_v is Color else Color("#7CE7FF")
 		var ev_kind: String = str(ev.get("kind", "")).strip_edges()
 		var cat: String = _resolve_event_category(str(ev.get("category", "")), ev_kind, txt)
 		var inferred_kind: String = ev_kind if ev_kind != "" else _infer_event_kind(cat, txt)
-		_chronicle_entries.append({
+		var entry_toast: Dictionary = {
 			"text": txt,
-			"pos": pos,
 			"color": col,
 			"age": 0.0,
-		})
-		_history_seq += 1
-		_history_log.append({
-			"seq": _history_seq,
+		}
+		var entry_hist: Dictionary = {
+			"seq": _history_seq + 1,
 			"text": txt,
-			"pos": pos,
 			"color": col,
 			"category": cat,
 			"kind": inferred_kind,
 			"time_sec": _history_clock,
-		})
+		}
+		if has_pos:
+			var pos: Vector2 = pos_v as Vector2
+			entry_toast["pos"] = pos
+			entry_hist["pos"] = pos
+		_chronicle_entries.append(entry_toast)
+		_history_seq += 1
+		_history_log.append(entry_hist)
 		while _history_log.size() > MAX_HISTORY_LOG:
 			_history_log.remove_at(0)
 		chronicle_event_logged.emit(inferred_kind)
@@ -708,8 +727,17 @@ func _on_chronicle_row_clicked(slot_idx: int) -> void:
 	if slot_idx < 0 or slot_idx >= _chronicle_entries.size():
 		return
 	var entry: Dictionary = _chronicle_entries[_chronicle_entries.size() - 1 - slot_idx]
-	var target_pos: Vector2 = entry.get("pos", Vector2(320.0, 180.0))
+	on_history_item_clicked(entry)
+
+
+func on_history_item_clicked(entry: Dictionary) -> bool:
+	var raw_pos: Variant = entry.get("pos", null)
+	if not (raw_pos is Vector2):
+		return false
+	var target_pos: Vector2 = raw_pos as Vector2
 	chronicle_focus_requested.emit(target_pos)
+	history_item_clicked.emit(entry.duplicate())
+	return true
 
 
 func _refresh_chronicle_ui() -> void:
@@ -733,9 +761,12 @@ func _refresh_chronicle_ui() -> void:
 		var fade_t: float = clampf((age - CHRONICLE_HOLD_SEC) / CHRONICLE_FADE_SEC, 0.0, 1.0)
 		var alpha: float = 1.0 - fade_t * fade_t
 		max_alpha = maxf(max_alpha, alpha)
+		var has_pos: bool = entry.get("pos", null) is Vector2
 		row_btn.visible = true
 		row_btn.text = str(entry["text"])
 		row_btn.modulate = Color(1.0, 1.0, 1.0, alpha)
+		row_btn.tooltip_text = "Клик: перелёт камеры к месту события" if has_pos else "Глобальное событие сектора"
+		row_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if has_pos else Control.CURSOR_ARROW
 		var tick: ColorRect = row_btn.get_node_or_null("AccentTick") as ColorRect
 		if tick != null:
 			tick.color = entry.get("color", Color("#7CE7FF"))

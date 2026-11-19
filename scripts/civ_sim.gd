@@ -94,7 +94,31 @@ const TUNING_KNOBS := {
 	"AI_GLITCH_LOYALTY_HIT": 42.0,
 	"ECOLOGY_BATCH_INTERVAL_SEC": 1.25,
 	"SMOKE_PUFF_INTERVAL_SEC": 0.45,
+	"WITNESS_SOLAR_THRESH": 25.0,
+	"WITNESS_SKEPTIC_THRESH": -25.0,
+	"WITNESS_DECAY_PER_SEC": 0.15,
+	"AA_INTERCEPT_MIN_Z": 14.0,
+	"AA_ENERGY_COST": 2.5,
+	"AA_MAX_PER_TICK": 4,
 }
+
+enum WitnessKind {
+	BLESS = 0,
+	MONOLITH = 1,
+	ORBITAL = 2,
+	METEOR = 3,
+	GLITCH = 4,
+	SHIELD_SAVE = 5,
+}
+
+enum DoctrineId {
+	NEUTRAL = 0,
+	SOLAR_CULT = 1,
+	TECH_SKEPTICS = 2,
+	ORBITAL_WARDENS = 3,
+}
+
+const DOCTRINE_NAMES_RU := ["Нейтралитет", "Солярный культ", "Техно-скептики", "Стражи Орбиты"]
 
 enum Faction {
 	HUMAN = 0,
@@ -161,7 +185,7 @@ const ATLAS_COLS: int = 60
 const MAX_SHIPS: int = 32
 const BUILDING_CELL_PX: float = 24.0
 const SAVE_MAGIC: int = 0x43495632 # "CIV2"
-const SAVE_VERSION: int = 7
+const SAVE_VERSION: int = 8
 
 const SHUTTLE_KIND_COLONIZE: int = 0
 const SHUTTLE_KIND_SUPPLY: int = 1
@@ -317,6 +341,10 @@ var _city_spore_creep_cd: PackedFloat32Array
 var _city_drill_dep_mul: PackedFloat32Array
 var _city_credits: PackedFloat32Array
 var _city_hq_level: PackedByteArray
+var _city_doctrine_heat: PackedFloat32Array
+var _city_doctrine_id: PackedByteArray
+var _city_witness_counts: PackedInt32Array
+var _city_shield_saved_cnt: PackedInt32Array
 var _tmp_city_drill_cnt: PackedInt32Array
 var _tmp_city_drill_sum: PackedFloat32Array
 
@@ -415,6 +443,11 @@ var _spring_indices: PackedInt32Array
 var _spring_dirty_ids: PackedInt32Array
 var _shield_cache_dirty: bool = true
 var _shield_indices: PackedInt32Array
+var _turret_cache_dirty: bool = true
+var _turret_indices: PackedInt32Array
+var _aa_battery_cache_dirty: bool = true
+var _aa_battery_indices: PackedInt32Array
+var _aa_intercepts_total: int = 0
 var _drill_cache_dirty: bool = true
 var _drill_indices: PackedInt32Array
 var _drill_pace_acc: float = 0.0
@@ -432,9 +465,14 @@ var _fx_has_play_sfx: bool = false
 var _fx_has_campfire_ember: bool = false
 var _fx_has_emit_build_pop: bool = false
 var _fx_has_spawn_reaction_strip: bool = false
+var _fx_has_emit_laser_tracer: bool = false
+var _fx_has_spawn_shockwave: bool = false
+var _fx_has_emit_water_wake: bool = false
 var _world_has_apply_ecology_batch: bool = false
 var _world_has_get_fire: bool = false
 var _world_has_get_moisture: bool = false
+var _world_has_get_drop_count: bool = false
+var _world_has_intercept_sky_drops: bool = false
 var _bld_anim_step: int = -1
 var _goal_version: int = 0
 var _pushed_goal_version: int = -1
@@ -586,9 +624,14 @@ func _exit_tree() -> void:
 	_fx_has_campfire_ember = false
 	_fx_has_emit_build_pop = false
 	_fx_has_spawn_reaction_strip = false
+	_fx_has_emit_laser_tracer = false
+	_fx_has_spawn_shockwave = false
+	_fx_has_emit_water_wake = false
 	_world_has_apply_ecology_batch = false
 	_world_has_get_fire = false
 	_world_has_get_moisture = false
+	_world_has_get_drop_count = false
+	_world_has_intercept_sky_drops = false
 	_last_pushed_physics = null
 	_goal_buffers.clear()
 	_ecology_events_scratch.clear()
@@ -899,6 +942,10 @@ func _alloc_city_and_kingdom_buffers() -> void:
 	_city_drill_dep_mul.resize(_max_cities)
 	_city_credits.resize(_max_cities)
 	_city_hq_level.resize(_max_cities)
+	_city_doctrine_heat.resize(_max_cities)
+	_city_doctrine_id.resize(_max_cities)
+	_city_witness_counts.resize(_max_cities)
+	_city_shield_saved_cnt.resize(_max_cities)
 	_tmp_city_drill_cnt.resize(_max_cities)
 	_tmp_city_drill_sum.resize(_max_cities)
 
@@ -1039,13 +1086,26 @@ func _reset_state_arrays() -> void:
 	_spring_dirty_ids.clear()
 	_shield_cache_dirty = true
 	_shield_indices.clear()
+	_turret_cache_dirty = true
+	_turret_indices.clear()
+	_aa_battery_cache_dirty = true
+	_aa_battery_indices.clear()
+	_aa_intercepts_total = 0
 	_drill_cache_dirty = true
 	_drill_indices.clear()
 	_drill_pace_acc = 0.0
 	_drill_active_cnt = 0
+	_reset_doctrine_arrays()
 	_bld_anim_step = -1
 	if _mm_buildings != null and _mm_buildings.multimesh != null:
 		_mm_buildings.multimesh.visible_instance_count = 0
+
+
+func _reset_doctrine_arrays() -> void:
+	_city_doctrine_heat.fill(0.0)
+	_city_doctrine_id.fill(DoctrineId.NEUTRAL)
+	_city_witness_counts.fill(0)
+	_city_shield_saved_cnt.fill(0)
 
 
 func _reset_zone_and_city_arrays() -> void:
@@ -1209,7 +1269,8 @@ func _build_buildings_layer() -> void:
 		_bld_atlas_cols = tex_cols
 
 	_mm_buildings = MultiMeshInstance2D.new()
-	_mm_buildings.z_index = 1
+	_mm_buildings.z_as_relative = false
+	_mm_buildings.z_index = 2
 	_mm_buildings.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_mm_buildings.texture = _atlas_tex
 	_bld_mat = ShaderMaterial.new()
@@ -1261,9 +1322,14 @@ func bind_systems(world: Node2D, physics: Node2D, fx: Node2D = null) -> void:
 	_fx_has_campfire_ember = _fx != null and _fx.has_method("emit_campfire_ember")
 	_fx_has_emit_build_pop = _fx != null and _fx.has_method("emit_build_pop")
 	_fx_has_spawn_reaction_strip = _fx != null and _fx.has_method("spawn_reaction_strip")
+	_fx_has_emit_laser_tracer = _fx != null and _fx.has_method("emit_laser_tracer")
+	_fx_has_spawn_shockwave = _fx != null and _fx.has_method("spawn_shockwave")
+	_fx_has_emit_water_wake = _fx != null and _fx.has_method("emit_water_wake")
 	_world_has_apply_ecology_batch = _world != null and _world.has_method("apply_civ_ecology_batch")
 	_world_has_get_fire = _world != null and _world.has_method("get_fire")
 	_world_has_get_moisture = _world != null and _world.has_method("get_moisture")
+	_world_has_get_drop_count = _world != null and _world.has_method("get_drop_count")
+	_world_has_intercept_sky_drops = _world != null and _world.has_method("intercept_sky_drops")
 
 	if _world != null:
 		var mw_v: Variant = _world.get("map_w")
@@ -1444,6 +1510,10 @@ func _init_city_record(cid: int, safe_pos: Vector2, f_clamped: int, kingdom_id: 
 	_city_drill_dep_mul[cid] = 1.0
 	_city_credits[cid] = 10.0
 	_city_hq_level[cid] = 0
+	_city_doctrine_heat[cid] = 0.0
+	_city_doctrine_id[cid] = DoctrineId.NEUTRAL
+	_city_witness_counts[cid] = 0
+	_city_shield_saved_cnt[cid] = 0
 
 	if kingdom_id >= 0 and kingdom_id < _max_cities and _kingdom_active[kingdom_id] != 0:
 		_diplomacy.assign_city_to_kingdom(self, cid, kingdom_id)
@@ -1608,8 +1678,14 @@ func _place_building(city_id: int, bld_type: int, pos: Vector2, quiet_audio: boo
 	_spring_cache_dirty = true
 	if bld_type == BuildingType.SHIELD_PYLON:
 		_shield_cache_dirty = true
+		_aa_battery_cache_dirty = true
+	elif bld_type == BuildingType.DEFENSE_TURRET:
+		_turret_cache_dirty = true
+		_aa_battery_cache_dirty = true
 	elif bld_type == BuildingType.DRILL:
 		_drill_cache_dirty = true
+	if bld_type == BuildingType.SHIELD_PYLON or bld_type == BuildingType.MONOLITH:
+		_recompute_city_doctrine(city_id, true)
 	_bld_footprints_dirty = true
 	_goals_dirty = true
 	if bld_type == BuildingType.BIODOME:
@@ -1646,6 +1722,8 @@ func _remove_building(bidx: int) -> void:
 	if bidx < 0 or bidx >= _bld_count:
 		return
 	_shield_cache_dirty = true
+	_turret_cache_dirty = true
+	_aa_battery_cache_dirty = true
 	_drill_cache_dirty = true
 	_spring_cache_dirty = true
 	var cid: int = _bld_city_id[bidx]
@@ -1935,6 +2013,9 @@ func _recompute_city_tech(city_id: int) -> void:
 	if tier != prev_tier:
 		_city_tech_tier[city_id] = tier
 		_light_goals_dirty = true
+		_aa_battery_cache_dirty = true
+		if tier >= 3 and prev_tier < 3:
+			_recompute_city_doctrine(city_id, true)
 		if tier > prev_tier:
 			_city_proj_retry[city_id] = 0.0
 		if tier >= 2 and prev_tier < 2:
@@ -2059,6 +2140,8 @@ func _pick_tier2_building(city_id: int, f_id: int) -> int:
 	var domes: int = _city_bld_counts[base_b + BuildingType.BIODOME]
 	if solars < 1:
 		return BuildingType.SOLAR_ARRAY
+	if int(_city_doctrine_id[city_id]) == DoctrineId.TECH_SKEPTICS and _city_bld_counts[base_b + BuildingType.DEFENSE_TURRET] < 1:
+		return BuildingType.DEFENSE_TURRET
 	if f_id == Faction.ROBOT and drills < 2:
 		return BuildingType.DRILL
 	if f_id != Faction.ROBOT and domes == 0:
@@ -2101,6 +2184,7 @@ func _pick_tier34_building(cid: int, f_id: int, tier: int, city_total: int) -> i
 	var pylons: int = _city_bld_counts[base_b + BuildingType.SHIELD_PYLON]
 	var gates: int = _city_bld_counts[base_b + BuildingType.QUANTUM_GATE]
 	var pylon_cap: int = 2 if (_city_zones_count[cid] >= 16 or tier >= 3) else 1
+	var is_skeptic: bool = int(_city_doctrine_id[cid]) == DoctrineId.TECH_SKEPTICS
 
 	if pylons < 1:
 		return BuildingType.SHIELD_PYLON
@@ -2108,6 +2192,11 @@ func _pick_tier34_building(cid: int, f_id: int, tier: int, city_total: int) -> i
 		return BuildingType.LAUNCHPAD
 	if reactors < 1:
 		return BuildingType.FUSION_REACTOR
+	if is_skeptic:
+		if pylons < mini(3, pylon_cap + 1):
+			return BuildingType.SHIELD_PYLON
+		if _city_bld_counts[base_b + BuildingType.DEFENSE_TURRET] < 3:
+			return BuildingType.DEFENSE_TURRET
 	if tier >= 4 and gates < 1 and _city_energy[cid] >= _k_gate_e_min:
 		return BuildingType.QUANTUM_GATE
 	if f_id != Faction.ROBOT and tents > 0 and domes < 4:
@@ -2273,6 +2362,7 @@ func step_civ(dt: float) -> void:
 	if _meta != null:
 		_meta.step_meta_and_fleet(self, safe_dt, pace_dt)
 	_step_shield_pylons(pace_dt)
+	_step_aa_interception()
 	var springs_moved: bool = _step_building_springs(safe_dt) if _has_bld_springs else false
 	if _border_dirty:
 		_territory.flush_dirty_borders(self, false)
@@ -2403,6 +2493,11 @@ func _step_single_city(cid: int, pace_dt: float) -> void:
 		_city_war_cooldown[cid] = maxf(0.0, _city_war_cooldown[cid] - pace_dt)
 	if _city_shuttle_cd[cid] > 0.0:
 		_city_shuttle_cd[cid] = maxf(0.0, _city_shuttle_cd[cid] - pace_dt)
+	var doc_heat: float = _city_doctrine_heat[cid]
+	if absf(doc_heat) > 0.001:
+		_city_doctrine_heat[cid] = move_toward(doc_heat, 0.0, 0.15 * pace_dt)
+		if ((_sim_tick_idx + cid) & 15) == 0:
+			_recompute_city_doctrine(cid, false)
 
 	if _physics_has_get_city_pop and (_sim_pace_mult < 10.0 or ((_sim_tick_idx + cid) & 3) == 0):
 		var live_pop: int = int(_physics.get_city_pop(cid))
@@ -2503,8 +2598,12 @@ func _step_city_economy(cid: int, pace_dt: float) -> float:
 
 	var wood_burn: float = minf(_city_wood[cid], float(campfires) * 0.10 * pace_dt) if (f_id != Faction.ROBOT and campfires > 0) else 0.0
 	_city_wood[cid] = maxf(0.0, _city_wood[cid] - wood_burn)
+	var doc_id: int = int(_city_doctrine_id[cid])
+	var doc_solar_mul: float = 1.15 if doc_id == DoctrineId.SOLAR_CULT else 1.0
+	var doc_crop_mul: float = _crop_mul * (1.15 if doc_id == DoctrineId.SOLAR_CULT else 1.0)
+	var mono_sci_mul: float = 1.35 if doc_id == DoctrineId.ORBITAL_WARDENS else 1.0
 	var cf_rate: float = 0.85 if f_id == Faction.ROBOT else (0.50 if wood_burn > 0.0 else 0.25)
-	var solar_boost: float = _solar_mul * (1.18 if (f_id == Faction.ROBOT and int(_city_tech_tier[cid]) >= 5) else 1.0)
+	var solar_boost: float = _solar_mul * doc_solar_mul * (1.18 if (f_id == Faction.ROBOT and int(_city_tech_tier[cid]) >= 5) else 1.0)
 	var energy_gain: float = (float(campfires) * cf_rate + float(solars) * 2.5 * solar_boost + rad_e) * pace_dt + reactor_e
 	var e_avail: float = _city_energy[cid] + energy_gain
 	var dome_need: float = float(domes) * 0.65 * pace_dt
@@ -2517,13 +2616,13 @@ func _step_city_economy(cid: int, pace_dt: float) -> float:
 	if int(_city_tech_tier[cid]) >= 1 and f_id != Faction.ROBOT:
 		if _city_farm_scan_cd[cid] > 0.0:
 			_city_farm_scan_cd[cid] -= pace_dt
-			farm_food = float(_city_farm_count[cid]) * 0.42 * _crop_mul * pace_dt
+			farm_food = float(_city_farm_count[cid]) * 0.42 * doc_crop_mul * pace_dt
 		else:
-			farm_food = _territory.step_city_farms(self, cid, Vector2(pace_dt, _crop_mul))
+			farm_food = _territory.step_city_farms(self, cid, Vector2(pace_dt, doc_crop_mul))
 	var forage_food: float = 0.25 * pace_dt if (f_id != Faction.ROBOT and campfires > 0) else 0.0
-	var food_gain: float = (float(domes) * 1.45 * dome_eff * _crop_mul * pace_dt + farm_food + forage_food) if f_id != Faction.ROBOT else 0.0
+	var food_gain: float = (float(domes) * 1.45 * dome_eff * doc_crop_mul * pace_dt + farm_food + forage_food) if f_id != Faction.ROBOT else 0.0
 	var food_upkeep: float = (float(pop - 6) * (0.04 if f_id == Faction.HUMAN else 0.028) * pace_dt) if (f_id != Faction.ROBOT and pop > 6) else 0.0
-	var sci_gain: float = (0.10 + float(pop) * 0.022 + float(tents) * 0.04 + float(domes) * 0.22 + float(reactors) * 0.55 + float(archives) * 0.30 + float(monoliths) * 0.45) * pace_dt
+	var sci_gain: float = (0.10 + float(pop) * 0.022 + float(tents) * 0.04 + float(domes) * 0.22 + float(reactors) * 0.55 + float(archives) * 0.30 + float(monoliths) * 0.45 * mono_sci_mul) * pace_dt
 	var credit_gain: float = (float(hubs) * 0.85 + float(pop) * 0.015 + float(int(_city_tech_tier[cid])) * 0.08) * pace_dt
 
 	_city_ore[cid] = minf(cap, maxf(0.0, ore_pool - reactor_ore_used))
@@ -3141,12 +3240,7 @@ func _remove_shuttle(si: int) -> void:
 
 
 func _step_shield_pylons(pace_dt: float) -> void:
-	if _shield_cache_dirty:
-		_shield_cache_dirty = false
-		_shield_indices.clear()
-		for bi in range(_bld_count):
-			if _bld_type[bi] == BuildingType.SHIELD_PYLON:
-				_shield_indices.append(bi)
+	_ensure_shield_cache()
 	if _shield_indices.is_empty():
 		return
 	var base_rate: float = _k_shield_recharge
@@ -3165,8 +3259,9 @@ func _step_shield_pylons(pace_dt: float) -> void:
 			var take_e: float = minf(full_e, _city_energy[cid])
 			if take_e > 0.001 and consume_city_energy(cid, take_e):
 				var e_mul: float = clampf(0.5 + _city_energy[cid] * 0.04, 0.5, 2.0)
+				var doc_mul: float = 1.35 if int(_city_doctrine_id[cid]) == DoctrineId.TECH_SKEPTICS else 1.0
 				var ratio: float = clampf(take_e / maxf(full_e, 0.0001), 0.0, 1.0)
-				var new_ch: float = minf(1.0, ch + base_rate * solar_boost * e_mul * pace_dt * ratio)
+				var new_ch: float = minf(1.0, ch + base_rate * solar_boost * e_mul * doc_mul * pace_dt * ratio)
 				_bld_shield_charge[i] = new_ch
 				if ch < 0.25 and new_ch >= 0.25:
 					_buildings_dirty = true
@@ -3629,6 +3724,10 @@ func _clear_collapsed_city_state(cid: int) -> void:
 	_city_energy_net[cid] = 0.0
 	_city_credits[cid] = 0.0
 	_city_hq_level[cid] = 0
+	_city_doctrine_heat[cid] = 0.0
+	_city_doctrine_id[cid] = DoctrineId.NEUTRAL
+	_city_witness_counts[cid] = 0
+	_city_shield_saved_cnt[cid] = 0
 	_diplo_dirty_seq += 1
 	_goals_dirty = true
 
@@ -3704,6 +3803,7 @@ func _refresh_goal_buffers() -> void:
 		_goal_buffers["city_loyalty"] = _city_loyalty
 		_goal_buffers["city_is_rebel"] = _city_is_rebel
 		_goal_buffers["city_emp_timer"] = _city_emp_timer
+		_goal_buffers["city_doctrine_id"] = _city_doctrine_id
 		_goal_buffers["version"] = _goal_version
 		_goals_dirty = false
 		_light_goals_dirty = false
@@ -3754,44 +3854,318 @@ func get_primary_city_pos() -> Vector2:
 	return pos_v as Vector2 if pos_v is Vector2 else Vector2(float(_map_w) * 0.5, float(_map_h) * 0.5)
 
 
+func _ensure_shield_cache() -> void:
+	if not _shield_cache_dirty:
+		return
+	_shield_cache_dirty = false
+	_shield_indices.clear()
+	for bi in range(_bld_count):
+		if int(_bld_type[bi]) == BuildingType.SHIELD_PYLON:
+			_shield_indices.append(bi)
+
+
+func _ensure_turret_cache() -> void:
+	if not _turret_cache_dirty:
+		return
+	_turret_cache_dirty = false
+	_turret_indices.clear()
+	for bi in range(_bld_count):
+		if int(_bld_type[bi]) == BuildingType.DEFENSE_TURRET:
+			_turret_indices.append(bi)
+
+
+func _ensure_aa_battery_cache() -> void:
+	if not _aa_battery_cache_dirty:
+		return
+	_aa_battery_cache_dirty = false
+	_ensure_shield_cache()
+	_ensure_turret_cache()
+	_aa_battery_indices.clear()
+	for si in range(_shield_indices.size()):
+		var bi: int = _shield_indices[si]
+		var cid: int = _bld_city_id[bi]
+		if _bld_hp[bi] > 0.0 and cid >= 0 and cid < _max_cities and _city_active[cid] != 0 and int(_city_tech_tier[cid]) >= 3:
+			_aa_battery_indices.append(bi)
+			if _aa_battery_indices.size() >= 32:
+				return
+	for ti in range(_turret_indices.size()):
+		var bi2: int = _turret_indices[ti]
+		var cid2: int = _bld_city_id[bi2]
+		if _bld_hp[bi2] > 0.0 and cid2 >= 0 and cid2 < _max_cities and _city_active[cid2] != 0 and int(_city_tech_tier[cid2]) >= 3:
+			_aa_battery_indices.append(bi2)
+			if _aa_battery_indices.size() >= 32:
+				return
+
+
+func record_cursor_witness(world_pos: Vector2, radius: float, witness_kind: int) -> int:
+	_ensure_initialized()
+	var delta: float = 0.0
+	match witness_kind:
+		WitnessKind.BLESS:
+			delta = 14.0
+		WitnessKind.MONOLITH:
+			delta = 24.0
+		WitnessKind.ORBITAL:
+			delta = -36.0
+		WitnessKind.METEOR:
+			delta = -28.0
+		WitnessKind.GLITCH:
+			delta = -22.0
+		WitnessKind.SHIELD_SAVE:
+			delta = 8.0
+	var eff_r: float = maxf(8.0, radius) + 44.0
+	var eff_r2: float = eff_r * eff_r
+	var zone_cid: int = get_zone_owner_at(world_pos)
+	var main_cid: int = -1
+	var main_d2: float = 1e18
+	for cid in range(_max_cities):
+		if _city_active[cid] == 0:
+			continue
+		var d2: float = _city_center[cid].distance_squared_to(world_pos)
+		if cid == zone_cid or d2 <= eff_r2:
+			_city_doctrine_heat[cid] = clampf(_city_doctrine_heat[cid] + delta, -100.0, 100.0)
+			_city_witness_counts[cid] += 1
+			if witness_kind == WitnessKind.SHIELD_SAVE:
+				_city_shield_saved_cnt[cid] += 1
+			_recompute_city_doctrine(cid, true)
+			if d2 < main_d2:
+				main_d2 = d2
+				main_cid = cid
+	return int(_city_doctrine_id[main_cid]) if main_cid >= 0 else DoctrineId.NEUTRAL
+
+
+func _recompute_city_doctrine(cid: int, emit_events: bool) -> void:
+	if cid < 0 or cid >= _max_cities or _city_active[cid] == 0:
+		return
+	var prev_doc: int = int(_city_doctrine_id[cid])
+	var heat: float = _city_doctrine_heat[cid]
+	var solar_th: float = float(TUNING_KNOBS["WITNESS_SOLAR_THRESH"])
+	var skep_th: float = float(TUNING_KNOBS["WITNESS_SKEPTIC_THRESH"])
+	var base_b: int = cid * BLD_TYPE_COUNT
+	var has_warden_kit: bool = (
+		int(_city_tech_tier[cid]) >= 3
+		and _city_bld_counts[base_b + BuildingType.MONOLITH] > 0
+		and _city_bld_counts[base_b + BuildingType.SHIELD_PYLON] > 0
+	)
+	var next_doc: int = DoctrineId.NEUTRAL
+	if heat <= skep_th:
+		next_doc = DoctrineId.TECH_SKEPTICS
+	elif has_warden_kit and (absf(heat) < solar_th or _city_shield_saved_cnt[cid] >= 2):
+		next_doc = DoctrineId.ORBITAL_WARDENS
+	elif heat >= solar_th:
+		next_doc = DoctrineId.SOLAR_CULT
+	if next_doc == prev_doc:
+		return
+	_city_doctrine_id[cid] = next_doc
+	_light_goals_dirty = true
+	_aa_battery_cache_dirty = true
+	if next_doc == DoctrineId.SOLAR_CULT:
+		_city_loyalty[cid] = minf(100.0, _city_loyalty[cid] + 12.0)
+	if next_doc != DoctrineId.NEUTRAL:
+		if _meta != null:
+			_meta.on_city_doctrine_changed(self, cid, next_doc)
+		if _diplomacy != null:
+			_diplomacy.on_city_doctrine_changed(self, cid, next_doc)
+		if emit_events and _diplomacy != null:
+			var dcol := Color("#FFD84A") if next_doc == DoctrineId.SOLAR_CULT else (Color("#38F0FF") if next_doc == DoctrineId.TECH_SKEPTICS else Color("#B86BFF"))
+			_diplomacy.push_chronicle("Доктрина %s: %s" % [_city_name[cid], DOCTRINE_NAMES_RU[next_doc]], _city_center[cid], dcol)
+
+
+func _apply_solar_monolith_inspiration() -> void:
+	if _physics == null or _bld_count <= 0:
+		return
+	var tf_v: Variant = _physics.get("_traits_fauna")
+	if not (tf_v is RefCounted):
+		return
+	var tf: RefCounted = tf_v as RefCounted
+	if not tf.has_method("apply_status"):
+		return
+	var u_cnt: int = int(_physics._unit_count)
+	if u_cnt <= 0:
+		return
+	var gw: int = int(_physics._grid_w)
+	var gh: int = int(_physics._grid_h)
+	var cell_head: PackedInt32Array = _physics._cell_head
+	var unit_next: PackedInt32Array = _physics._unit_next
+	if cell_head.size() != gw * gh or unit_next.size() < u_cnt:
+		return
+	for bi in range(_bld_count):
+		if int(_bld_type[bi]) != BuildingType.MONOLITH or _bld_hp[bi] <= 0.0:
+			continue
+		var cid: int = _bld_city_id[bi]
+		if cid < 0 or cid >= _max_cities or _city_active[cid] == 0 or int(_city_doctrine_id[cid]) != DoctrineId.SOLAR_CULT:
+			continue
+		_inspire_soldiers_near_monolith(_bld_pos[bi], cid, tf, cell_head, unit_next, gw, gh, u_cnt)
+
+
+func _inspire_soldiers_near_monolith(mpos: Vector2, cid: int, tf: RefCounted, cell_head: PackedInt32Array, unit_next: PackedInt32Array, gw: int, gh: int, u_cnt: int) -> void:
+	var min_cx: int = clampi(int(mpos.x - 36.0) >> 4, 0, gw - 1)
+	var max_cx: int = clampi(int(mpos.x + 36.0) >> 4, 0, gw - 1)
+	var min_cy: int = clampi(int(mpos.y - 36.0) >> 4, 0, gh - 1)
+	var max_cy: int = clampi(int(mpos.y + 36.0) >> 4, 0, gh - 1)
+	for cy in range(min_cy, max_cy + 1):
+		var row_c: int = cy * gw
+		for cx in range(min_cx, max_cx + 1):
+			var u: int = cell_head[row_c + cx]
+			var guard: int = 0
+			while u >= 0 and u < u_cnt and guard < 64:
+				if _physics._hp[u] > 0.0 and _physics._u_city_id[u] == cid and int(_physics._u_role[u]) == 4:
+					var dx: float = _physics._px[u] - mpos.x
+					var dy: float = _physics._py[u] - mpos.y
+					if dx * dx + dy * dy <= 36.0 * 36.0:
+						tf.apply_status(_physics, u, 6, 6.0)
+				u = unit_next[u]
+				guard += 1
+
+
+func get_aa_batteries() -> Array[Dictionary]:
+	_ensure_initialized()
+	_ensure_aa_battery_cache()
+	var out: Array[Dictionary] = []
+	if _aa_battery_indices.is_empty():
+		return out
+	var cost_e: float = float(TUNING_KNOBS["AA_ENERGY_COST"])
+	for ai in range(_aa_battery_indices.size()):
+		var bi: int = _aa_battery_indices[ai]
+		if bi < 0 or bi >= _bld_count or _bld_hp[bi] <= 0.0:
+			continue
+		var cid: int = _bld_city_id[bi]
+		if cid < 0 or cid >= _max_cities or _city_active[cid] == 0:
+			continue
+		var tier: int = int(_city_tech_tier[cid])
+		if tier < 3 or _city_emp_timer[cid] > 0.0 or _city_energy[cid] < cost_e:
+			continue
+		var bt: int = int(_bld_type[bi])
+		var rng_px: float = 52.0
+		if bt == BuildingType.DEFENSE_TURRET:
+			rng_px = 46.0 + float(tier - 3) * 6.0
+			if int(_city_doctrine_id[cid]) == DoctrineId.ORBITAL_WARDENS:
+				rng_px += 12.0
+		out.append({"pos": _bld_pos[bi] + Vector2(0.0, -4.0), "range": rng_px, "city_id": cid, "kind": bt})
+	return out
+
+
+func consume_aa_shot(city_id: int, bat_pos: Vector2, sky_pos: Vector2) -> bool:
+	_ensure_initialized()
+	var cost_e: float = float(TUNING_KNOBS["AA_ENERGY_COST"])
+	if city_id >= 0 and city_id < _max_cities and _city_active[city_id] != 0:
+		if not consume_city_energy(city_id, cost_e) and _city_energy[city_id] > 0.0:
+			consume_city_energy(city_id, _city_energy[city_id])
+	_aa_intercepts_total += 1
+	record_cursor_witness(bat_pos, 12.0, WitnessKind.SHIELD_SAVE)
+	var col: Color = _get_city_border_color(city_id)
+	if _fx != null:
+		if _fx_has_emit_laser_tracer:
+			_fx.emit_laser_tracer(bat_pos, sky_pos, col)
+		if _fx_has_spawn_shockwave:
+			_fx.spawn_shockwave(sky_pos, 10.0, col, 0.20)
+		if _fx_has_spawn_reaction_strip:
+			_fx.call("spawn_reaction_strip", bat_pos + Vector2(0.0, -7.0), 5)
+	return true
+
+
+func _step_aa_interception() -> void:
+	if _world == null or not _world_has_get_drop_count or not _world_has_intercept_sky_drops:
+		return
+	if int(_world.call("get_drop_count")) <= 0:
+		return
+	var bats: Array[Dictionary] = get_aa_batteries()
+	if bats.is_empty():
+		return
+	var hits_v: Variant = _world.call("intercept_sky_drops", bats, int(TUNING_KNOBS["AA_MAX_PER_TICK"]))
+	if not (hits_v is Array):
+		return
+	for item in (hits_v as Array):
+		if item is Dictionary:
+			var hd: Dictionary = item as Dictionary
+			var sky_v: Variant = hd.get("sky_pos", hd.get("pos", Vector2.ZERO))
+			consume_aa_shot(int(hd.get("city_id", -1)), Vector2(hd.get("battery_pos", Vector2.ZERO)), Vector2(sky_v))
+
+
 func try_intercept_orbital_impact(world_pos: Vector2, impact_radius: float) -> Dictionary:
 	_ensure_initialized()
+	_ensure_shield_cache()
 	var shield_r: float = _k_shield_r
 	var eff_r: float = shield_r + maxf(0.0, impact_radius) * _k_shield_impact_mul
 	var eff_r2: float = eff_r * eff_r
 	var min_charge: float = _k_shield_min_ch
 	var best_i: int = -1
 	var best_d2: float = eff_r2 + 0.001
-	for i in range(_bld_count):
-		if _bld_type[i] == BuildingType.SHIELD_PYLON and _bld_hp[i] > 0.0 and _bld_shield_charge[i] >= min_charge:
+	for si in range(_shield_indices.size()):
+		var i: int = _shield_indices[si]
+		if i < _bld_count and _bld_hp[i] > 0.0 and _bld_shield_charge[i] >= min_charge:
 			var d2: float = _bld_pos[i].distance_squared_to(world_pos)
 			if d2 <= eff_r2 and d2 < best_d2:
 				best_d2 = d2
 				best_i = i
-	if best_i < 0:
+	if best_i >= 0:
+		_bld_shield_charge[best_i] = maxf(0.0, _bld_shield_charge[best_i] - _k_shield_cost)
+		_bld_shield_flash[best_i] = 1.0
+		_bld_spring[best_i] = 1.24
+		_bld_spring_vel[best_i] = 2.5
+		_has_bld_springs = true
+		_spring_cache_dirty = true
+		_shield_blocked_total += 1
+		_buildings_dirty = true
+		var ppos: Vector2 = _bld_pos[best_i]
+		record_cursor_witness(ppos, shield_r, WitnessKind.SHIELD_SAVE)
+		if _physics != null and _physics.has_method("notify_shield_saved"):
+			_physics.call("notify_shield_saved", ppos, shield_r)
+		if _fx != null and _fx_has_spawn_burst:
+			_fx.spawn_burst(ppos, 10, Color(0.42, 0.92, 1.45, 1.0), 30.0, 0.40, 12.0)
+		return {"intercepted": true, "pylon_pos": ppos, "city_id": int(_bld_city_id[best_i]), "radius": shield_r, "charge_left": _bld_shield_charge[best_i]}
+	return _try_turret_intercept_orbital(world_pos)
+
+
+func _try_turret_intercept_orbital(world_pos: Vector2) -> Dictionary:
+	_ensure_turret_cache()
+	if _turret_indices.is_empty():
 		return {"intercepted": false}
-	_bld_shield_charge[best_i] = maxf(0.0, _bld_shield_charge[best_i] - _k_shield_cost)
-	_bld_shield_flash[best_i] = 1.0
-	_bld_spring[best_i] = 1.24
-	_bld_spring_vel[best_i] = 2.5
+	var best_ti: int = -1
+	var best_d2: float = 32.0 * 32.0 + 0.001
+	for k in range(_turret_indices.size()):
+		var ti: int = _turret_indices[k]
+		if ti >= _bld_count or _bld_hp[ti] <= 0.0:
+			continue
+		var cid: int = _bld_city_id[ti]
+		if cid < 0 or cid >= _max_cities or _city_active[cid] == 0 or _city_emp_timer[cid] > 0.0 or int(_city_tech_tier[cid]) < 3:
+			continue
+		var doc: int = int(_city_doctrine_id[cid])
+		if doc != DoctrineId.TECH_SKEPTICS and doc != DoctrineId.ORBITAL_WARDENS:
+			continue
+		if _city_energy[cid] < 3.5:
+			continue
+		var d2: float = _bld_pos[ti].distance_squared_to(world_pos)
+		if d2 <= 32.0 * 32.0 and d2 < best_d2:
+			best_d2 = d2
+			best_ti = ti
+	if best_ti < 0:
+		return {"intercepted": false}
+	var win_cid: int = _bld_city_id[best_ti]
+	if not consume_city_energy(win_cid, 3.5) or _rng.randf() >= 0.65:
+		return {"intercepted": false}
+	var tpos: Vector2 = _bld_pos[best_ti] + Vector2(0.0, -4.0)
+	_aa_intercepts_total += 1
+	_bld_shake[best_ti] = 2.0
 	_has_bld_springs = true
 	_spring_cache_dirty = true
-	_shield_blocked_total += 1
-	_buildings_dirty = true
-	var ppos: Vector2 = _bld_pos[best_i]
-	if _physics != null and _physics.has_method("notify_shield_saved"):
-		_physics.call("notify_shield_saved", ppos, shield_r)
-	if _fx != null and _fx_has_spawn_burst:
-		_fx.spawn_burst(ppos, 10, Color(0.42, 0.92, 1.45, 1.0), 30.0, 0.40, 12.0)
-	return {"intercepted": true, "pylon_pos": ppos, "city_id": int(_bld_city_id[best_i]), "radius": shield_r, "charge_left": _bld_shield_charge[best_i]}
+	record_cursor_witness(tpos, 16.0, WitnessKind.SHIELD_SAVE)
+	if _fx != null:
+		if _fx_has_emit_laser_tracer:
+			_fx.emit_laser_tracer(tpos, world_pos, _get_city_border_color(win_cid))
+		if _fx_has_spawn_burst:
+			_fx.spawn_burst(world_pos, 8, Color(0.45, 0.92, 1.45, 1.0), 24.0, 0.35, 10.0)
+	return {"intercepted": true, "pylon_pos": tpos, "city_id": win_cid, "radius": 32.0, "aa_turret": true}
 
 
 func get_shield_pylons() -> Array[Dictionary]:
 	_ensure_initialized()
+	_ensure_shield_cache()
 	var out: Array[Dictionary] = []
 	var shield_r: float = _k_shield_r
-	for i in range(_bld_count):
-		if _bld_type[i] != BuildingType.SHIELD_PYLON:
+	for si in range(_shield_indices.size()):
+		var i: int = _shield_indices[si]
+		if i < 0 or i >= _bld_count:
 			continue
 		var cid: int = clampi(int(_bld_city_id[i]), 0, _max_cities - 1)
 		out.append({"pos": _bld_pos[i], "radius": shield_r, "charge": _bld_shield_charge[i], "flash": _bld_shield_flash[i], "faction": int(_city_faction[cid]), "city_id": cid})
@@ -3919,9 +4293,19 @@ func try_avatar_gesture(uid: int, world_pos: Vector2) -> int:
 	return _diplomacy.try_avatar_gesture(self, uid, world_pos)
 
 
+func on_boss_slain(world_pos: Vector2, killer_uid: int, species_id: int) -> void:
+	_ensure_initialized()
+	_diplomacy.on_boss_slain(self, world_pos, killer_uid, species_id)
+
+
+func get_active_ship_wakes() -> Array[Dictionary]:
+	_ensure_initialized()
+	return _meta.get_active_ship_wakes() if _meta != null else []
+
+
 func get_notables_summary() -> Array[Dictionary]:
 	_ensure_initialized()
-	return _diplomacy.get_notables_summary()
+	return _diplomacy.get_notables_summary(self)
 
 
 func pin_notable(uid: int, pinned: bool) -> bool:
@@ -4020,6 +4404,9 @@ func _build_city_inspect_dict(cid: int) -> Dictionary:
 		"culture_id": _meta.get_city_culture_id(cid) if _meta != null else -1,
 		"culture_name": _meta.get_city_culture_name(cid) if _meta != null else "",
 		"creed_name": _meta.get_city_creed_name(cid) if _meta != null else "",
+		"doctrine": int(_city_doctrine_id[cid]),
+		"doctrine_name": DOCTRINE_NAMES_RU[clampi(int(_city_doctrine_id[cid]), 0, DOCTRINE_NAMES_RU.size() - 1)],
+		"doctrine_heat": snappedf(_city_doctrine_heat[cid], 0.1),
 		"ships": _meta.get_city_ship_count(cid) if _meta != null else 0,
 		"army": _meta.get_city_army_info(cid) if _meta != null else {},
 		"codices_count": _meta.get_city_book_count(cid) if _meta != null else 0,
@@ -4200,6 +4587,7 @@ func get_civ_stats() -> Dictionary:
 		"shuttles_total": _total_shuttles_launched,
 		"shield_pylons": int(cs["pylons"]),
 		"shield_blocked": _shield_blocked_total,
+		"aa_intercepts": _aa_intercepts_total,
 		"quantum_gates": int(cs["gates"]),
 		"supply_deliveries": _supply_deliveries,
 		"clashes": _border_clash_count,
@@ -4680,6 +5068,7 @@ func pack_state() -> PackedByteArray:
 	_pack_entities_and_diplo(buf)
 	_pack_v6_extensions(buf)
 	_pack_v7_extensions(buf)
+	_pack_v8_extensions(buf)
 	return buf.data_array
 
 
@@ -4866,6 +5255,15 @@ func unpack_state(blob: PackedByteArray) -> bool:
 		_unpack_v7_extensions(buf)
 	else:
 		_hydrate_meta_for_legacy_save()
+	if ver >= 8 and buf.get_available_bytes() > 0:
+		_unpack_v8_extensions(buf)
+	else:
+		_reset_doctrine_arrays()
+		_aa_intercepts_total = 0
+
+	_turret_cache_dirty = true
+	_aa_battery_cache_dirty = true
+	_drill_cache_dirty = true
 
 	_city_proj_retry.fill(0.0)
 	_city_tech_dirty.fill(1)
@@ -5147,3 +5545,33 @@ func _hydrate_meta_for_legacy_save() -> void:
 	for cid in range(_max_cities):
 		if _city_active[cid] != 0:
 			_meta.on_city_created(self, cid, _city_overlord[cid])
+
+
+func _pack_v8_extensions(buf: StreamPeerBuffer) -> void:
+	buf.put_u16(_max_cities)
+	for c in range(_max_cities):
+		buf.put_u8(_city_doctrine_id[c])
+		buf.put_float(_city_doctrine_heat[c])
+		buf.put_u16(clampi(_city_witness_counts[c], 0, 65535))
+		buf.put_u16(clampi(_city_shield_saved_cnt[c], 0, 65535))
+	buf.put_32(_aa_intercepts_total)
+
+
+func _unpack_v8_extensions(buf: StreamPeerBuffer) -> void:
+	if buf.get_available_bytes() < 2:
+		return
+	var mc: int = buf.get_u16()
+	for c in range(mc):
+		if buf.get_available_bytes() < 9:
+			return
+		var did: int = clampi(buf.get_u8(), 0, DoctrineId.ORBITAL_WARDENS)
+		var dht: float = clampf(buf.get_float(), -100.0, 100.0)
+		var wcnt: int = buf.get_u16()
+		var scnt: int = buf.get_u16()
+		if c < _max_cities:
+			_city_doctrine_id[c] = did
+			_city_doctrine_heat[c] = dht
+			_city_witness_counts[c] = wcnt
+			_city_shield_saved_cnt[c] = scnt
+	if buf.get_available_bytes() >= 4:
+		_aa_intercepts_total = maxi(0, buf.get_32())

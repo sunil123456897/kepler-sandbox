@@ -48,6 +48,7 @@ const PLOT_ASCEND_MONOLITH: int = 10
 const PLOT_REFORM_SUCCESSION: int = 11
 
 const BLD_CAMPFIRE: int = 0
+const BLD_SHIELD_PYLON: int = 8
 const BLD_DOCK: int = 10
 const BLD_BARRACKS: int = 11
 const BLD_DEFENSE_TURRET: int = 12
@@ -86,6 +87,11 @@ const STRIP_PLOT_CODEX: int = 26
 const STRIP_KING_CROWN: int = 27
 const STRIP_LEADER_STAR: int = 28
 const STRIP_PORTAL: int = 11
+
+const DOC_NEUTRAL: int = 0
+const DOC_SOLAR_CULT: int = 1
+const DOC_TECH_SKEPTICS: int = 2
+const DOC_ORBITAL_WARDENS: int = 3
 
 const WAR_TYPE_NAMES_RU := ["Завоевание", "Мятеж", "Злоба", "Коалиция", "Тотальная"]
 const SHIP_TYPE_NAMES_RU := ["Рыбак", "Торговец", "Десантный катер"]
@@ -152,6 +158,8 @@ var _ship_phase: PackedFloat32Array
 var _ship_facing: PackedFloat32Array
 var _ship_troop_count: PackedInt32Array
 var _ship_troop_uids: PackedInt32Array
+var _ship_wake_cd: PackedFloat32Array
+var _ship_wake_dir: PackedVector2Array
 
 # Wars (MAX_WARS = 16, 4x16-bit masks per side = 64 kingdoms)
 var _war_active: PackedByteArray
@@ -274,16 +282,11 @@ var _fleet_ai_pace_acc: float = 0.0
 var _meta_raw_cd: float = 0.0
 var _meta_pace_acc: float = 0.0
 var _meta_city_cursor: int = 0
-var _turret_raw_cd: float = 0.0
-var _turret_pace_acc: float = 0.0
+var _boss_scan_timer: float = 0.0
 var _hist_raw_cd: float = 0.0
 var _hist_pace_acc: float = 0.0
 var _ship_active_count: int = 0
 var _fleet_step_idx: int = 0
-var _tmp_a_sol: PackedInt32Array
-var _tmp_a_best_u: PackedInt32Array
-var _tmp_a_best_sc: PackedInt32Array
-var _tmp_a_cap_alive: PackedByteArray
 var _tmp_k_pop: PackedInt32Array
 var _tmp_k_cit: PackedInt32Array
 var _tmp_k_zon: PackedInt32Array
@@ -323,6 +326,8 @@ func _alloc_fleet_and_wars() -> void:
 	_ship_facing.resize(MAX_SHIPS)
 	_ship_troop_count.resize(MAX_SHIPS)
 	_ship_troop_uids.resize(MAX_SHIPS * MAX_SHIP_TROOPS)
+	_ship_wake_cd.resize(MAX_SHIPS)
+	_ship_wake_dir.resize(MAX_SHIPS)
 
 	_war_active.resize(MAX_WARS)
 	_war_type.resize(MAX_WARS)
@@ -436,10 +441,6 @@ func _alloc_history_buffers() -> void:
 	_hist_k_buf.resize(MAX_KINGDOMS * HIST_SCALES * HIST_K_METRICS * HIST_SAMPLES)
 	_hist_k_head.resize(MAX_KINGDOMS * HIST_SCALES)
 	_hist_k_cnt.resize(MAX_KINGDOMS * HIST_SCALES)
-	_tmp_a_sol.resize(MAX_CITIES)
-	_tmp_a_best_u.resize(MAX_CITIES)
-	_tmp_a_best_sc.resize(MAX_CITIES)
-	_tmp_a_cap_alive.resize(MAX_CITIES)
 	_tmp_k_pop.resize(MAX_KINGDOMS)
 	_tmp_k_cit.resize(MAX_KINGDOMS)
 	_tmp_k_zon.resize(MAX_KINGDOMS)
@@ -471,6 +472,8 @@ func reset_all(seed_val: int = 20261114) -> void:
 	_ship_facing.fill(1.0)
 	_ship_troop_count.fill(0)
 	_ship_troop_uids.fill(-1)
+	_ship_wake_cd.fill(0.0)
+	_ship_wake_dir.fill(Vector2.ZERO)
 	_ship_active_count = 0
 
 	_war_active.fill(0)
@@ -594,8 +597,7 @@ func _reset_noosphere_and_history() -> void:
 	_meta_raw_cd = 0.25
 	_meta_pace_acc = 0.0
 	_meta_city_cursor = 0
-	_turret_raw_cd = 0.20
-	_turret_pace_acc = 0.0
+	_boss_scan_timer = 0.0
 	_hist_raw_cd = 0.0
 	_hist_pace_acc = 0.0
 
@@ -1256,6 +1258,8 @@ func _spawn_ship(civ: Node2D, cid: int, kind: int, water_pos: Vector2) -> int:
 	_ship_phase[slot] = _meta_rng.randf_range(0.0, TAU)
 	_ship_facing[slot] = 1.0
 	_ship_troop_count[slot] = 0
+	_ship_wake_cd[slot] = 0.0
+	_ship_wake_dir[slot] = Vector2.ZERO
 	var base: int = slot * MAX_SHIP_TROOPS
 	for k in range(MAX_SHIP_TROOPS):
 		_ship_troop_uids[base + k] = -1
@@ -1307,7 +1311,25 @@ func request_troop_ferry(civ: Node2D, city_id: int, dst_pos: Vector2) -> bool:
 	_ship_dropoff_shore[ship_idx] = drop_shore
 	_ship_wait_t[ship_idx] = 0.0
 	_ship_troop_count[ship_idx] = 0
+	civ._diplomacy.mark_orders_dirty()
 	return true
+
+
+func get_city_loading_shore(cid: int) -> Vector2:
+	for s in range(MAX_SHIPS):
+		if _ship_active[s] != 0 and _ship_city_id[s] == cid and int(_ship_kind[s]) == SHIP_TROOP and int(_ship_state[s]) == SHIP_STATE_LOADING:
+			return _ship_pickup_shore[s]
+	return Vector2(-1.0, -1.0)
+
+
+func get_active_ship_wakes() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _ship_active_count <= 0:
+		return out
+	for s in range(MAX_SHIPS):
+		if _ship_active[s] != 0 and _ship_wake_dir[s] != Vector2.ZERO:
+			out.append({"pos": _ship_pos[s], "dir": _ship_wake_dir[s]})
+	return out
 
 
 func _steer_ship_water(civ: Node2D, s: int, goal: Vector2, speed: float, pace_dt: float) -> float:
@@ -1315,6 +1337,7 @@ func _steer_ship_water(civ: Node2D, s: int, goal: Vector2, speed: float, pace_dt
 	var delta: Vector2 = goal - pos
 	var dist: float = delta.length()
 	if dist <= 3.0:
+		_ship_wake_dir[s] = Vector2.ZERO
 		return dist
 	var base_ang: float = delta.angle()
 	var step_len: float = minf(dist, minf(speed * pace_dt, 20.0))
@@ -1327,12 +1350,40 @@ func _steer_ship_water(civ: Node2D, s: int, goal: Vector2, speed: float, pace_dt
 			chosen_dir = Vector2(cos(ang), sin(ang))
 			break
 	if chosen_dir == Vector2.ZERO:
+		_ship_wake_dir[s] = Vector2.ZERO
 		_ship_wait_t[s] += pace_dt
 		return dist
 	_ship_pos[s] = pos + chosen_dir * step_len
+	_ship_wake_dir[s] = chosen_dir
 	if absf(chosen_dir.x) > 0.08:
 		_ship_facing[s] = 1.0 if chosen_dir.x >= 0.0 else -1.0
+	if civ._sim_pace_mult < 10.0:
+		_ship_wake_cd[s] -= pace_dt / maxf(1.0, civ._sim_pace_mult)
+		if _ship_wake_cd[s] <= 0.0:
+			_ship_wake_cd[s] = 0.18
+			if civ._fx != null and civ._fx_has_emit_water_wake:
+				civ._fx.emit_water_wake(_ship_pos[s], chosen_dir)
 	return _ship_pos[s].distance_to(goal)
+
+
+func _steer_loading_squad_to_shore(civ: Node2D, cid: int, shore: Vector2) -> void:
+	var phys: Node2D = civ._physics
+	if phys == null or phys._unit_count <= 0:
+		return
+	var emb_v: Variant = phys.get("_u_embarked")
+	var emb: PackedByteArray = emb_v as PackedByteArray if (emb_v is PackedByteArray) else PackedByteArray()
+	var moved: int = 0
+	for u in range(phys._unit_count):
+		if moved >= MAX_SHIP_TROOPS:
+			break
+		if phys._hp[u] <= 0.0 or phys._u_city_id[u] != cid:
+			continue
+		if u < emb.size() and emb[u] != 0:
+			continue
+		if int(phys._u_role[u]) != 4 and (u >= phys._u_in_regiment.size() or phys._u_in_regiment[u] == 0):
+			continue
+		phys._u_target_pos[u] = shore
+		moved += 1
 
 
 func _board_troops_onto_ship(civ: Node2D, s: int) -> int:
@@ -1341,30 +1392,43 @@ func _board_troops_onto_ship(civ: Node2D, s: int) -> int:
 		return 0
 	var cid: int = _ship_city_id[s]
 	var shore: Vector2 = _ship_pickup_shore[s]
+	var ship_p: Vector2 = _ship_pos[s]
 	var cur_n: int = _ship_troop_count[s]
 	var base: int = s * MAX_SHIP_TROOPS
-	var boarded_now: int = 0
-	for u in range(phys._unit_count):
-		if cur_n >= MAX_SHIP_TROOPS:
+	var emb_v: Variant = phys.get("_u_embarked")
+	var emb: PackedByteArray = emb_v as PackedByteArray if (emb_v is PackedByteArray) else PackedByteArray()
+	var has_embark_api: bool = phys.has_method("set_unit_embarked")
+	var r2: float = 48.0 * 48.0
+	for pass_i in range(2):
+		if cur_n >= MAX_SHIP_TROOPS or (pass_i == 1 and _ship_wait_t[s] < 0.8):
 			break
-		if phys._hp[u] <= 0.0 or phys._u_city_id[u] != cid:
-			continue
-		if int(phys._u_role[u]) != 4 and (u >= phys._u_in_regiment.size() or phys._u_in_regiment[u] == 0):
-			continue
-		var uid: int = phys._u_uid[u]
-		if _is_uid_embarked(s, uid, cur_n):
-			continue
-		var d2: float = Vector2(phys._px[u], phys._py[u]).distance_squared_to(shore)
-		if d2 <= 38.0 * 38.0 or boarded_now < 4:
-			_ship_troop_uids[base + cur_n] = uid
-			cur_n += 1
-			boarded_now += 1
-			phys._px[u] = shore.x
-			phys._py[u] = shore.y
-			phys._vx[u] = 0.0
-			phys._vy[u] = 0.0
-			if u < phys._u_invuln_timer.size():
-				phys._u_invuln_timer[u] = maxf(phys._u_invuln_timer[u], 1.0)
+		for u in range(phys._unit_count):
+			if cur_n >= MAX_SHIP_TROOPS:
+				break
+			if phys._hp[u] <= 0.0 or phys._u_city_id[u] != cid:
+				continue
+			if u < emb.size() and emb[u] != 0:
+				continue
+			var is_sol: bool = int(phys._u_role[u]) == 4
+			if pass_i == 0 and not is_sol:
+				continue
+			if pass_i == 1 and (is_sol or u >= phys._u_in_regiment.size() or phys._u_in_regiment[u] == 0):
+				continue
+			var uid: int = phys._u_uid[u]
+			if _is_uid_embarked(s, uid, cur_n):
+				continue
+			if Vector2(phys._px[u], phys._py[u]).distance_squared_to(shore) <= r2:
+				_ship_troop_uids[base + cur_n] = uid
+				cur_n += 1
+				if has_embark_api:
+					phys.set_unit_embarked(uid, ship_p, true)
+				else:
+					phys._px[u] = ship_p.x
+					phys._py[u] = ship_p.y
+					phys._vx[u] = 0.0
+					phys._vy[u] = 0.0
+				if u < phys._u_invuln_timer.size():
+					phys._u_invuln_timer[u] = maxf(phys._u_invuln_timer[u], 1.0)
 	_ship_troop_count[s] = cur_n
 	return cur_n
 
@@ -1381,26 +1445,32 @@ func _hold_embarked_units(civ: Node2D, s: int) -> void:
 	var phys: Node2D = civ._physics
 	if phys == null or _ship_troop_count[s] <= 0:
 		return
+	var ship_p: Vector2 = _ship_pos[s]
+	var base: int = s * MAX_SHIP_TROOPS
+	if phys.has_method("set_unit_embarked"):
+		for k in range(_ship_troop_count[s]):
+			var uid: int = _ship_troop_uids[base + k]
+			if uid > 0:
+				phys.set_unit_embarked(uid, ship_p, true)
+		return
 	var uid_map_v: Variant = phys.get("_uid_to_idx")
 	if not (uid_map_v is Dictionary):
 		return
 	var uid_map := uid_map_v as Dictionary
-	var shore: Vector2 = _ship_pickup_shore[s]
-	var base: int = s * MAX_SHIP_TROOPS
 	for k in range(_ship_troop_count[s]):
 		var uid: int = _ship_troop_uids[base + k]
 		if uid_map.has(uid):
 			var u: int = int(uid_map[uid])
 			if u >= 0 and u < phys._unit_count:
-				phys._px[u] = shore.x
-				phys._py[u] = shore.y
+				phys._px[u] = ship_p.x
+				phys._py[u] = ship_p.y
 				phys._vx[u] = 0.0
 				phys._vy[u] = 0.0
 				if u < phys._u_invuln_timer.size():
 					phys._u_invuln_timer[u] = maxf(phys._u_invuln_timer[u], 0.4)
 
 
-func _disembark_ship_troops(civ: Node2D, s: int, use_home: bool = false) -> void:
+func _disembark_ship_troops(civ: Node2D, s: int, use_home: bool = false, is_shipwreck: bool = false) -> void:
 	var phys: Node2D = civ._physics
 	var cnt: int = _ship_troop_count[s]
 	if phys == null or cnt <= 0:
@@ -1411,9 +1481,12 @@ func _disembark_ship_troops(civ: Node2D, s: int, use_home: bool = false) -> void
 		_ship_troop_count[s] = 0
 		return
 	var uid_map := uid_map_v as Dictionary
-	var shore: Vector2 = _ship_pickup_shore[s] if use_home else _ship_dropoff_shore[s]
+	var shore: Vector2 = _ship_pos[s] if is_shipwreck else (_ship_pickup_shore[s] if use_home else _ship_dropoff_shore[s])
 	var fac: int = int(_ship_faction[s])
+	var has_embark_api: bool = phys.has_method("set_unit_embarked")
 	var vel_z_v: Variant = phys.get("_u_vel_z")
+	var mis_v: Variant = phys.get("_u_mission_pos")
+	var inland_goal: Vector2 = _resolve_beachhead_inland_goal(civ, _ship_city_id[s], shore, is_shipwreck or use_home)
 	var base: int = s * MAX_SHIP_TROOPS
 	for k in range(cnt):
 		var uid: int = _ship_troop_uids[base + k]
@@ -1425,19 +1498,33 @@ func _disembark_ship_troops(civ: Node2D, s: int, use_home: bool = false) -> void
 			continue
 		var ang: float = float(k) * (TAU / float(maxi(1, cnt)))
 		var off := Vector2(cos(ang), sin(ang)) * 4.0
-		var spot: Vector2 = civ._territory.find_walkable_near(civ, shore + off, Vector2i(14, fac))
+		var spot: Vector2 = _ship_pos[s] if is_shipwreck else civ._territory.find_walkable_near(civ, shore + off, Vector2i(14, fac))
 		if spot.x < 0.0:
 			spot = shore
-		phys._px[u] = spot.x
-		phys._py[u] = spot.y
-		phys._u_target_pos[u] = _ship_dropoff_shore[s]
-		if vel_z_v is PackedFloat32Array:
-			var vz := vel_z_v as PackedFloat32Array
-			if u < vz.size():
-				vz[u] = 16.0
+		if has_embark_api:
+			phys.set_unit_embarked(uid, spot, false)
+		else:
+			phys._px[u] = spot.x
+			phys._py[u] = spot.y
+		phys._u_target_pos[u] = inland_goal
+		if mis_v is PackedVector2Array and u < (mis_v as PackedVector2Array).size():
+			(mis_v as PackedVector2Array)[u] = inland_goal
+		if vel_z_v is PackedFloat32Array and u < (vel_z_v as PackedFloat32Array).size():
+			(vel_z_v as PackedFloat32Array)[u] = 18.0 if is_shipwreck else 16.0
 	_ship_troop_count[s] = 0
 	if civ._fx != null and civ._fx_has_spawn_burst:
 		civ._fx.spawn_burst(shore, 8, Color(0.55, 0.92, 1.0, 0.9), 20.0, 0.4, 8.0)
+
+
+func _resolve_beachhead_inland_goal(civ: Node2D, cid: int, shore: Vector2, fallback_shore: bool) -> Vector2:
+	if fallback_shore:
+		return shore
+	var orders: Dictionary = civ._diplomacy.get_army_orders(civ)
+	if orders.has(cid):
+		var tgt: Vector2 = Vector2((orders[cid] as Dictionary).get("target_pos", shore))
+		if civ._diplomacy._count_water_hops(civ, shore, tgt) < 2:
+			return tgt
+	return shore
 
 
 func _step_fleet(civ: Node2D, safe_dt: float, pace_dt: float) -> void:
@@ -1459,8 +1546,9 @@ func _step_fleet(civ: Node2D, safe_dt: float, pace_dt: float) -> void:
 			continue
 		var cid: int = _ship_city_id[s]
 		if cid < 0 or cid >= MAX_CITIES or civ._city_active[cid] == 0 or _ship_hp[s] <= 0.0:
-			_disembark_ship_troops(civ, s, true)
+			_disembark_ship_troops(civ, s, false, true)
 			_ship_active[s] = 0
+			_ship_wake_dir[s] = Vector2.ZERO
 			continue
 		active_cnt += 1
 		if not hi_pace or ((s + _fleet_step_idx) & 3) == 0:
@@ -1495,9 +1583,6 @@ func _spawn_city_fleet_and_auto_ferries(civ: Node2D) -> void:
 
 
 func _check_city_auto_ferry(civ: Node2D, cid: int, orders: Dictionary) -> void:
-	var has_gate: bool = civ._city_bld_counts[cid * civ.BLD_TYPE_COUNT + 9] > 0 and civ._city_energy[cid] >= 2.0 and civ._city_emp_timer[cid] <= 0.0
-	if has_gate:
-		return
 	if not orders.has(cid):
 		return
 	var ord: Dictionary = orders[cid]
@@ -1604,18 +1689,22 @@ func _step_troop_ship(civ: Node2D, s: int, st: int, pace_dt: float) -> void:
 	if st == SHIP_STATE_LOADING:
 		_steer_ship_water(civ, s, _ship_home_pos[s], 22.0, pace_dt)
 		_ship_wait_t[s] += pace_dt
+		_steer_loading_squad_to_shore(civ, _ship_city_id[s], _ship_pickup_shore[s])
 		var cnt: int = _board_troops_onto_ship(civ, s)
+		_hold_embarked_units(civ, s)
 		if cnt >= 6 or (cnt >= 1 and _ship_wait_t[s] >= 2.2):
 			_ship_state[s] = SHIP_STATE_MISSION
 			_ship_wait_t[s] = 0.0
+			civ._diplomacy.mark_orders_dirty()
 		elif _ship_wait_t[s] >= 8.0:
-			_disembark_ship_troops(civ, s, true)
+			_disembark_ship_troops(civ, s, true, false)
 			_ship_state[s] = SHIP_STATE_IDLE
+			civ._diplomacy.mark_orders_dirty()
 	elif st == SHIP_STATE_MISSION:
 		_hold_embarked_units(civ, s)
 		var d: float = _steer_ship_water(civ, s, _ship_dst_pos[s], 24.0, pace_dt)
 		if d <= 7.0 or _ship_wait_t[s] >= 12.0:
-			_disembark_ship_troops(civ, s, false)
+			_disembark_ship_troops(civ, s, false, d > 24.0)
 			_ship_state[s] = SHIP_STATE_RETURN
 			_ship_wait_t[s] = 0.0
 	else:
@@ -1644,95 +1733,22 @@ func _fire_ship_board_laser(civ: Node2D, s: int, kind: int) -> void:
 						civ._fx.emit_laser_tracer(pos, _ship_pos[os], civ._get_city_border_color(cid))
 					return
 	var phys: Node2D = civ._physics
-	if phys == null or phys._unit_count <= 0 or not phys.has_method("apply_external_damage"):
+	if phys == null or phys._unit_count <= 0 or not phys.has_method("apply_external_damage") or not phys.has_method("find_nearest_hostile_pos"):
 		return
-	var best_u: int = _find_nearest_hostile_unit(civ, cid, pos, r2)
+	var res_v: Variant = phys.find_nearest_hostile_pos(pos, rng, cid)
+	if not (res_v is Dictionary):
+		return
+	var res: Dictionary = res_v as Dictionary
+	if not bool(res.get("found", false)):
+		return
+	var best_u: int = int(res.get("unit_idx", -1))
 	if best_u >= 0:
 		_ship_fire_cd[s] = 1.35 if kind == SHIP_TROOP else 1.85
-		var tpos := Vector2(phys._px[best_u], phys._py[best_u])
+		var tpos := Vector2(res.get("pos", pos))
 		var dmg: float = 15.0 if kind == SHIP_TROOP else 9.0
 		phys.apply_external_damage(tpos, 8.0, {"damage": dmg, "impulse": 22.0, "unit_idx": best_u, "friendly_city": cid})
 		if civ._fx != null and civ._fx.has_method("emit_laser_tracer"):
 			civ._fx.emit_laser_tracer(pos, tpos, civ._get_city_border_color(cid))
-
-
-func _find_nearest_hostile_unit(civ: Node2D, friendly_cid: int, pos: Vector2, max_r2: float) -> int:
-	var phys: Node2D = civ._physics
-	if phys == null:
-		return -1
-	var u_cnt: int = int(phys._unit_count)
-	if u_cnt <= 0:
-		return -1
-	var u_hp: PackedFloat32Array = phys._hp
-	var u_cid_arr: PackedInt32Array = phys._u_city_id
-	var u_role_arr: PackedByteArray = phys._u_role
-	var u_px: PackedFloat32Array = phys._px
-	var u_py: PackedFloat32Array = phys._py
-	var d_mat: PackedByteArray = civ._diplo_matrix
-	var row_off: int = friendly_cid * civ._max_cities
-	var war_on: bool = friendly_cid >= 0 and friendly_cid < MAX_CITIES and int(civ._city_war_state[friendly_cid]) >= 2
-	var px0: float = pos.x
-	var py0: float = pos.y
-	var best_u: int = -1
-	var best_d2: float = max_r2
-	for u in range(u_cnt):
-		if u_hp[u] <= 0.0:
-			continue
-		var is_mut: bool = int(u_role_arr[u]) == 5
-		if not is_mut:
-			if not war_on:
-				continue
-			var u_cid: int = u_cid_arr[u]
-			if u_cid < 0 or u_cid == friendly_cid or int(d_mat[row_off + u_cid]) < 2:
-				continue
-		var dx: float = u_px[u] - px0
-		var dy: float = u_py[u] - py0
-		var d2: float = dx * dx + dy * dy
-		if d2 < best_d2:
-			best_d2 = d2
-			best_u = u
-	return best_u
-
-
-# --- Defense Turrets & Step Loop ---
-
-func _step_defense_turrets(civ: Node2D, safe_dt: float, pace_dt: float) -> void:
-	_turret_raw_cd = maxf(0.0, _turret_raw_cd - safe_dt)
-	_turret_pace_acc += pace_dt
-	if _turret_pace_acc < 1.35 or _turret_raw_cd > 0.0:
-		return
-	_turret_raw_cd = 0.45 if civ._sim_pace_mult >= 10.0 else 0.12
-	_turret_pace_acc = 0.0
-	var any_turret: bool = false
-	var bcnt: int = civ.BLD_TYPE_COUNT
-	for cid in range(civ._max_cities):
-		if civ._city_active[cid] != 0 and civ._city_bld_counts[cid * bcnt + BLD_DEFENSE_TURRET] > 0:
-			any_turret = true
-			break
-	if not any_turret:
-		return
-	var phys: Node2D = civ._physics
-	if phys == null or phys._unit_count <= 0 or not phys.has_method("apply_external_damage"):
-		return
-	var r2: float = 46.0 * 46.0
-	var shots: int = 0
-	for bi in range(civ._bld_count):
-		if int(civ._bld_type[bi]) != BLD_DEFENSE_TURRET or civ._bld_hp[bi] <= 0.0:
-			continue
-		var cid: int = civ._bld_city_id[bi]
-		if cid < 0 or cid >= MAX_CITIES or civ._city_active[cid] == 0 or civ._city_emp_timer[cid] > 0.0:
-			continue
-		var pos: Vector2 = civ._bld_pos[bi] + Vector2(0.0, -4.0)
-		var best_u: int = _find_nearest_hostile_unit(civ, cid, pos, r2)
-		if best_u >= 0:
-			var tpos := Vector2(phys._px[best_u], phys._py[best_u])
-			var dmg: float = 20.0 + float(civ._city_tech_tier[cid]) * 3.0
-			phys.apply_external_damage(tpos, 8.0, {"damage": dmg, "impulse": 26.0, "unit_idx": best_u, "friendly_city": cid})
-			if civ._fx != null and civ._fx.has_method("emit_laser_tracer"):
-				civ._fx.emit_laser_tracer(pos, tpos, civ._get_city_border_color(cid))
-			shots += 1
-			if shots >= 6:
-				break
 
 
 func has_defense_turret_near_zone(civ: Node2D, zpt: Vector2i, owner_cid: int) -> bool:
@@ -1741,9 +1757,11 @@ func has_defense_turret_near_zone(civ: Node2D, zpt: Vector2i, owner_cid: int) ->
 	var base_b: int = owner_cid * civ.BLD_TYPE_COUNT
 	if civ._city_bld_counts[base_b + BLD_DEFENSE_TURRET] <= 0:
 		return false
+	civ._ensure_turret_cache()
 	var zc := Vector2((float(zx) + 0.5) * float(civ._zone_px), (float(zy) + 0.5) * float(civ._zone_px))
-	for bi in range(civ._bld_count):
-		if civ._bld_city_id[bi] == owner_cid and int(civ._bld_type[bi]) == BLD_DEFENSE_TURRET and civ._bld_hp[bi] > 0.0:
+	for ti in range(civ._turret_indices.size()):
+		var bi: int = civ._turret_indices[ti]
+		if bi < civ._bld_count and civ._bld_city_id[bi] == owner_cid and civ._bld_hp[bi] > 0.0:
 			if civ._bld_pos[bi].distance_squared_to(zc) <= 40.0 * 40.0:
 				return true
 	return false
@@ -1752,7 +1770,6 @@ func has_defense_turret_near_zone(civ: Node2D, zpt: Vector2i, owner_cid: int) ->
 func step_meta_and_fleet(civ: Node2D, safe_dt: float, pace_dt: float) -> void:
 	ensure_allocated()
 	_step_fleet(civ, safe_dt, pace_dt)
-	_step_defense_turrets(civ, safe_dt, pace_dt)
 	_step_noosphere_and_politics(civ, safe_dt, pace_dt)
 	_step_history_sampling(civ, safe_dt, pace_dt)
 
@@ -1780,6 +1797,11 @@ func _step_noosphere_and_politics(civ: Node2D, safe_dt: float, pace_dt: float) -
 			_kingdom_truce[i] = maxf(0.0, _kingdom_truce[i] - dt_step)
 
 	_sync_all_armies_single_pass(civ)
+	civ._apply_solar_monolith_inspiration()
+	_boss_scan_timer -= dt_step
+	if _boss_scan_timer <= 0.0:
+		_boss_scan_timer = 2.5
+		_scan_boss_crises(civ)
 	var slice_sz: int = 8
 	for _s in range(slice_sz):
 		var cid: int = _meta_city_cursor % MAX_CITIES
@@ -1788,6 +1810,80 @@ func _step_noosphere_and_politics(civ: Node2D, safe_dt: float, pace_dt: float) -
 			_step_city_meta_slice(civ, cid, dt_step * 8.0)
 
 	_consider_meta_plots(civ)
+
+
+func is_kingdom_truce_active(ka: int, kb: int) -> bool:
+	if ka < 0 or kb < 0 or ka >= MAX_KINGDOMS or kb >= MAX_KINGDOMS or ka == kb:
+		return false
+	return _kingdom_truce[ka * MAX_KINGDOMS + kb] > 0.0
+
+
+func _scan_boss_crises(civ: Node2D) -> void:
+	var phys: Node2D = civ._physics
+	if phys == null:
+		return
+	var bosses: Array = []
+	if phys.has_method("get_active_boss_snapshots"):
+		var raw_b: Variant = phys.call("get_active_boss_snapshots")
+		if raw_b is Array:
+			bosses = raw_b as Array
+	else:
+		var tf_v: Variant = phys.get("_traits_fauna")
+		if tf_v != null and (tf_v as Object).has_method("get_active_boss_snapshots"):
+			var raw_b2: Variant = (tf_v as Object).call("get_active_boss_snapshots")
+			if raw_b2 is Array:
+				bosses = raw_b2 as Array
+	if bosses.is_empty():
+		if civ._diplomacy != null:
+			civ._diplomacy.clear_boss_hunt(civ)
+		return
+	for b_item in bosses:
+		if not (b_item is Dictionary):
+			continue
+		var bd: Dictionary = b_item as Dictionary
+		var boss_pos: Vector2 = Vector2(bd.get("pos", Vector2.ZERO))
+		var boss_uid: int = int(bd.get("uid", -1))
+		_apply_single_boss_crisis(civ, boss_pos, boss_uid)
+
+
+func _apply_single_boss_crisis(civ: Node2D, boss_pos: Vector2, boss_uid: int) -> void:
+	var near_180: Array[int] = []
+	var has_city_threat: bool = false
+	for cid in range(civ._max_cities):
+		if civ._city_active[cid] == 0:
+			continue
+		var d2: float = civ._city_center[cid].distance_squared_to(boss_pos)
+		var alert_r: float = 150.0 if int(civ._city_doctrine_id[cid]) == DOC_ORBITAL_WARDENS else 110.0
+		if d2 <= alert_r * alert_r:
+			has_city_threat = true
+			civ._city_threat_pos[cid] = boss_pos
+			civ._city_alerted[cid] = 1
+			civ._city_alert_timer[cid] = maxf(civ._city_alert_timer[cid], 6.0)
+			civ._light_goals_dirty = true
+			civ._diplomacy.mark_orders_dirty()
+		if d2 <= 180.0 * 180.0:
+			near_180.append(cid)
+	if not has_city_threat:
+		return
+	for ia in range(near_180.size()):
+		var ca: int = near_180[ia]
+		var ka: int = civ._city_kingdom_id[ca]
+		for ib in range(ia + 1, near_180.size()):
+			var cb: int = near_180[ib]
+			var kb: int = civ._city_kingdom_id[cb]
+			if ka < 0 or kb < 0 or ka == kb:
+				continue
+			if not civ._are_cities_hostile(ca, cb) and _find_war_between_kingdoms(ka, kb) < 0:
+				continue
+			var was_zero: bool = _kingdom_truce[ka * MAX_KINGDOMS + kb] <= 0.0
+			_kingdom_truce[ka * MAX_KINGDOMS + kb] = maxf(_kingdom_truce[ka * MAX_KINGDOMS + kb], 45.0)
+			_kingdom_truce[kb * MAX_KINGDOMS + ka] = maxf(_kingdom_truce[kb * MAX_KINGDOMS + ka], 45.0)
+			civ._diplomacy.apply_diplomacy_state(civ, Vector2i(ca, cb), Vector2i(0, 1))
+			civ._diplo_tension[ca * civ._max_cities + cb] = minf(civ._diplo_tension[ca * civ._max_cities + cb], 0.0)
+			civ._diplo_tension[cb * civ._max_cities + ca] = civ._diplo_tension[ca * civ._max_cities + cb]
+			if was_zero:
+				civ._diplomacy.push_chronicle("Перемирие перед угрозой: %s и %s" % [civ._kingdom_name[ka], civ._kingdom_name[kb]], boss_pos, Color("#FFD84A"))
+	civ._diplomacy.rally_boss_hunters(civ, boss_pos, boss_uid)
 
 
 func _step_city_meta_slice(civ: Node2D, cid: int, slice_dt: float) -> void:
@@ -1809,56 +1905,33 @@ func _sync_all_armies_single_pass(civ: Node2D) -> void:
 	var phys: Node2D = civ._physics
 	if phys == null:
 		return
-	var u_cnt: int = int(phys._unit_count)
-	_tmp_a_sol.fill(0)
-	_tmp_a_best_u.fill(-1)
-	_tmp_a_best_sc.fill(-1)
-	_tmp_a_cap_alive.fill(0)
-	if u_cnt > 0:
-		var u_hp: PackedFloat32Array = phys._hp
-		var u_cid_arr: PackedInt32Array = phys._u_city_id
-		var u_role_arr: PackedByteArray = phys._u_role
-		var u_reg_arr: PackedByteArray = phys._u_in_regiment
-		var u_kills_arr: PackedInt32Array = phys._u_kills
-		var u_uid_arr: PackedInt32Array = phys._u_uid
-		var has_reg: bool = u_reg_arr.size() >= u_cnt
-		for u in range(u_cnt):
-			if u_hp[u] <= 0.0:
-				continue
-			var cid: int = u_cid_arr[u]
-			if cid < 0 or cid >= MAX_CITIES:
-				continue
-			var is_sol: bool = int(u_role_arr[u]) == 4
-			var in_reg: bool = has_reg and u_reg_arr[u] != 0
-			if not is_sol and not in_reg:
-				continue
-			_tmp_a_sol[cid] += 1
-			var cap_uid: int = _army_captain_uid[cid]
-			var uid: int = u_uid_arr[u]
-			if uid == cap_uid:
-				_tmp_a_cap_alive[cid] = 1
-			var sc: int = u_kills_arr[u] * 3 + (4 if is_sol else 0) + (2 if uid == cap_uid else 0)
-			if sc > _tmp_a_best_sc[cid]:
-				_tmp_a_best_sc[cid] = sc
-				_tmp_a_best_u[cid] = u
-	var uid_ref: PackedInt32Array = phys._u_uid if u_cnt > 0 else PackedInt32Array()
+	var uid_map_v: Variant = phys.get("_uid_to_idx")
+	var uid_map: Dictionary = uid_map_v as Dictionary if (uid_map_v is Dictionary) else {}
+	var cai_v: Variant = phys.get("_combat_ai")
+	var cai: RefCounted = cai_v as RefCounted if (cai_v is RefCounted) else null
+	var reg_leaders: PackedInt32Array = cai._reg_leader_uid if cai != null else PackedInt32Array()
+	var reg_counts: PackedInt32Array = cai._reg_count if cai != null else PackedInt32Array()
 	for cid in range(civ._max_cities):
 		if civ._city_active[cid] == 0:
 			continue
 		_army_active[cid] = 1
 		_army_kingdom_id[cid] = civ._city_kingdom_id[cid]
-		_army_strength[cid] = _tmp_a_sol[cid]
+		var rc: int = reg_counts[cid] if cid < reg_counts.size() else 0
+		if rc > 0:
+			_army_strength[cid] = rc
+		else:
+			var base_b: int = cid * civ.BLD_TYPE_COUNT
+			_army_strength[cid] = maxi(0, civ._city_bld_counts[base_b + BLD_BARRACKS] * 3 + civ._city_pop[cid] / 5)
 		var cap_uid: int = _army_captain_uid[cid]
-		var alive: bool = _tmp_a_cap_alive[cid] != 0
+		var alive: bool = cap_uid > 0 and uid_map.has(cap_uid)
 		if not alive and cap_uid > 0 and _army_captain_name[cid] != "":
 			_push_past_captain(cid, _army_captain_name[cid])
 			_army_captain_uid[cid] = -1
 			_army_captain_name[cid] = ""
-		var best_u: int = _tmp_a_best_u[cid]
-		if best_u >= 0 and (_army_captain_uid[cid] <= 0 or not alive):
-			var new_uid: int = uid_ref[best_u]
-			_army_captain_uid[cid] = new_uid
-			var card: Dictionary = civ._diplomacy.get_notable_card(new_uid)
+		var reg_uid: int = reg_leaders[cid] if cid < reg_leaders.size() else -1
+		if reg_uid > 0 and (_army_captain_uid[cid] <= 0 or not alive):
+			_army_captain_uid[cid] = reg_uid
+			var card: Dictionary = civ._diplomacy.get_notable_card(reg_uid)
 			_army_captain_name[cid] = str(card.get("name", "")) if bool(card.get("found", false)) else generate_onomastic_name("notable", int(civ._city_faction[cid]), _city_lang_id[cid])
 
 
@@ -1971,12 +2044,45 @@ func _try_auto_schism_or_rite_plot(civ: Node2D) -> void:
 	for cid in range(civ._max_cities):
 		if civ._city_active[cid] == 0 or int(civ._city_tech_tier[cid]) < 2:
 			continue
+		var doc_id: int = int(civ._city_doctrine_id[cid])
+		if doc_id == DOC_TECH_SKEPTICS:
+			if civ._city_bld_counts[cid * civ.BLD_TYPE_COUNT + BLD_SHIELD_PYLON] > 0 and not civ._diplomacy.has_plot_for(cid, -1, PLOT_ORBITAL_SHIELD):
+				civ._diplomacy.start_plot(civ, PLOT_ORBITAL_SHIELD, Vector2i(cid, -1))
+				return
+			if not civ._diplomacy.has_plot_for(cid, -1, PLOT_SCHISM):
+				civ._diplomacy.start_plot(civ, PLOT_SCHISM, Vector2i(cid, -1))
+				return
 		if civ._city_loyalty[cid] < 55.0 and not civ._diplomacy.has_plot_for(cid, -1, PLOT_SCHISM):
 			civ._diplomacy.start_plot(civ, PLOT_SCHISM, Vector2i(cid, -1))
 			return
 		if civ._city_bld_counts[cid * civ.BLD_TYPE_COUNT + BLD_MONOLITH] > 0 and not civ._diplomacy.has_plot_for(cid, -1, PLOT_ASCEND_MONOLITH):
 			civ._diplomacy.start_plot(civ, PLOT_ASCEND_MONOLITH, Vector2i(cid, -1))
 			return
+
+
+func on_city_doctrine_changed(civ: Node2D, cid: int, doc_id: int) -> void:
+	ensure_allocated()
+	if cid < 0 or cid >= MAX_CITIES or civ._city_active[cid] == 0:
+		return
+	var cul_id: int = _city_culture_id[cid]
+	if cul_id >= 0 and cul_id < MAX_CULTURES and _cul_active[cul_id] != 0:
+		if doc_id == DOC_SOLAR_CULT:
+			_cul_ethos_flags[cul_id] |= ETHOS_SERENE
+		elif doc_id == DOC_TECH_SKEPTICS:
+			_cul_ethos_flags[cul_id] |= ETHOS_FORTIFIED
+		elif doc_id == DOC_ORBITAL_WARDENS:
+			_cul_ethos_flags[cul_id] |= ETHOS_SCHOLAR | ETHOS_FORTIFIED
+	if civ._diplomacy == null or int(civ._city_tech_tier[cid]) < 2:
+		return
+	var base_b: int = cid * civ.BLD_TYPE_COUNT
+	if doc_id == DOC_TECH_SKEPTICS:
+		if civ._city_bld_counts[base_b + BLD_SHIELD_PYLON] > 0 and not civ._diplomacy.has_plot_for(cid, -1, PLOT_ORBITAL_SHIELD):
+			civ._diplomacy.start_plot(civ, PLOT_ORBITAL_SHIELD, Vector2i(cid, -1))
+		elif not civ._diplomacy.has_plot_for(cid, -1, PLOT_SCHISM):
+			civ._diplomacy.start_plot(civ, PLOT_SCHISM, Vector2i(cid, -1))
+	elif doc_id == DOC_SOLAR_CULT and civ._city_bld_counts[base_b + BLD_MONOLITH] > 0:
+		if not civ._diplomacy.has_plot_for(cid, -1, PLOT_ASCEND_MONOLITH):
+			civ._diplomacy.start_plot(civ, PLOT_ASCEND_MONOLITH, Vector2i(cid, -1))
 
 
 func resolve_extended_plot(civ: Node2D, kind: int, pair: Vector2i) -> void:
@@ -2084,6 +2190,8 @@ func calc_extra_loyalty_bonus_fast(civ: Node2D, cid: int) -> float:
 				net_bonus -= 0.35
 	if int(civ._city_war_state[cid]) >= 2:
 		net_bonus += 0.30
+	if int(civ._city_doctrine_id[cid]) == DOC_SOLAR_CULT:
+		net_bonus += 0.25
 	return net_bonus
 
 
@@ -2120,6 +2228,9 @@ func calc_extra_loyalty_stress(civ: Node2D, cid: int) -> Dictionary:
 	if int(civ._city_war_state[cid]) >= 2:
 		net_bonus += 0.30
 		factors.append({"label": "Сплочение в войне", "delta": 20.0})
+	if int(civ._city_doctrine_id[cid]) == DOC_SOLAR_CULT:
+		net_bonus += 0.25
+		factors.append({"label": "Солярный культ", "delta": 12.0})
 	return {"bonus": net_bonus, "factors": factors}
 
 
@@ -2411,7 +2522,10 @@ func get_wars_summary(civ: Node2D) -> Array[Dictionary]:
 		var ka: int = _war_main_att_kid[w]
 		var kd: int = _war_main_def_kid[w]
 		var cap_a: int = civ._kingdom_capital_cid[ka] if (ka >= 0 and ka < MAX_KINGDOMS) else -1
+		var cap_d: int = civ._kingdom_capital_cid[kd] if (kd >= 0 and kd < MAX_KINGDOMS) else -1
 		var anchor: Vector2 = civ._city_center[cap_a] if (cap_a >= 0 and civ._city_active[cap_a] != 0) else Vector2(320.0, 180.0)
+		var doc_a: int = int(civ._city_doctrine_id[cap_a]) if (cap_a >= 0 and cap_a < MAX_CITIES and civ._city_active[cap_a] != 0) else DOC_NEUTRAL
+		var doc_d: int = int(civ._city_doctrine_id[cap_d]) if (cap_d >= 0 and cap_d < MAX_CITIES and civ._city_active[cap_d] != 0) else DOC_NEUTRAL
 		var wtype: int = clampi(int(_war_type[w]), 0, WAR_TYPE_NAMES_RU.size() - 1)
 		out.append({
 			"war_id": w,
@@ -2422,6 +2536,8 @@ func get_wars_summary(civ: Node2D) -> Array[Dictionary]:
 			"main_defender_kid": kd,
 			"attacker_name": civ._kingdom_name[ka] if ka >= 0 else "",
 			"defender_name": civ._kingdom_name[kd] if kd >= 0 else "",
+			"doctrine": doc_a,
+			"defender_doctrine": doc_d,
 			"attackers": _mask_list(_war_att_mask, w),
 			"defenders": _mask_list(_war_def_mask, w),
 			"duration": snappedf(_war_duration[w], 0.1),

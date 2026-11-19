@@ -428,6 +428,41 @@ func get_projectile_count() -> int:
 	return _proj_count
 
 
+func clear_projectiles_in_radius(world_pos: Vector2, radius: float) -> int:
+	if _proj_count <= 0 or radius <= 0.1:
+		return 0
+	var r2: float = radius * radius
+	var cleared: int = 0
+	var i: int = 0
+	while i < _proj_count:
+		var dx: float = _proj_px[i] - world_pos.x
+		var dy: float = _proj_py[i] - world_pos.y
+		if dx * dx + dy * dy <= r2:
+			var p_vis := Vector2(_proj_px[i], _proj_py[i] - maxf(_proj_pz[i], 0.0))
+			var last: int = _proj_count - 1
+			if i != last:
+				_proj_px[i] = _proj_px[last]
+				_proj_py[i] = _proj_py[last]
+				_proj_pz[i] = _proj_pz[last]
+				_proj_vx[i] = _proj_vx[last]
+				_proj_vy[i] = _proj_vy[last]
+				_proj_vz[i] = _proj_vz[last]
+				_proj_grav[i] = _proj_grav[last]
+				_proj_kind[i] = _proj_kind[last]
+				_proj_dmg[i] = _proj_dmg[last]
+				_proj_owner[i] = _proj_owner[last]
+				_proj_color[i] = _proj_color[last]
+			_proj_count = last
+			cleared += 1
+			if _fx != null and cleared <= 6:
+				_fx.spawn_burst(p_vis, 2, Color(0.65, 0.94, 1.0, 0.90), 18.0, 0.20, 0.0)
+			continue
+		i += 1
+	if cleared > 0:
+		_sync_projectile_multimesh()
+	return cleared
+
+
 func spawn_ballistic_projectile(src_dst: Rect2, kind_and_dmg: Vector2, owner_fac: int = -1) -> void:
 	_ensure_initialized()
 	var src: Vector2 = src_dst.position

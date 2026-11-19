@@ -67,6 +67,7 @@ var _reg_leader_score: PackedInt32Array
 var _reg_leader_pos: PackedVector2Array
 var _reg_rally_pos: PackedVector2Array
 var _reg_target_pos: PackedVector2Array
+var _reg_raw_target_pos: PackedVector2Array
 var _reg_count: PackedInt32Array
 var _reg_assembled: PackedInt32Array
 var _reg_min_squad: PackedInt32Array
@@ -98,6 +99,7 @@ func _init() -> void:
 	_reg_leader_pos.resize(MAX_CITIES)
 	_reg_rally_pos.resize(MAX_CITIES)
 	_reg_target_pos.resize(MAX_CITIES)
+	_reg_raw_target_pos.resize(MAX_CITIES)
 	_reg_count.resize(MAX_CITIES)
 	_reg_assembled.resize(MAX_CITIES)
 	_reg_min_squad.resize(MAX_CITIES)
@@ -124,6 +126,7 @@ func reset_state() -> void:
 	_reg_gather_timer.fill(0.0)
 	_reg_has_portal.fill(0)
 	_reg_use_portal.fill(0)
+	_reg_raw_target_pos.fill(Vector2(-1.0, -1.0))
 	_u_reg_slot.fill(0)
 	_order_refresh_cd = 0.0
 	_reg_assign_cd = 0.0
@@ -160,6 +163,7 @@ func _refresh_army_orders(up: Node2D) -> void:
 				var def_dep: Vector2 = up._city_depot_pos[cid] if cid < up._city_depot_pos.size() else Vector2(320.0, 180.0)
 				_reg_rally_pos[cid] = Vector2(ord.get("rally_pos", def_dep))
 				_reg_target_pos[cid] = Vector2(ord.get("target_pos", def_dep))
+				_reg_raw_target_pos[cid] = _reg_target_pos[cid]
 				_reg_min_squad[cid] = clampi(int(ord.get("min_squad", 6)), 2, 12)
 				_reg_max_squad[cid] = clampi(int(ord.get("max_squad", 12)), 6, 12)
 				if bool(ord.get("has_portal", false)):
@@ -204,6 +208,7 @@ func _refresh_army_orders(up: Node2D) -> void:
 		_reg_color[cid] = up._city_color[cid] if cid < up._city_color.size() else Color.CYAN
 		_reg_rally_pos[cid] = rally
 		_reg_target_pos[cid] = tgt
+		_reg_raw_target_pos[cid] = tgt
 		_reg_min_squad[cid] = 6
 		_reg_max_squad[cid] = 12
 
@@ -365,6 +370,21 @@ func _update_regiment_states(up: Node2D, safe_dt: float) -> void:
 				_reg_gather_timer[cid] = 0.0
 
 
+func get_escort_offset(slot: int) -> Vector2:
+	return _reg_slot_offsets[posmod(slot, _reg_slot_offsets.size())]
+
+
+func _resolve_unit_reg_target(up: Node2D, unit_idx: int, cid: int, unit_pos: Vector2) -> Vector2:
+	var raw_tgt: Vector2 = _reg_raw_target_pos[cid] if (cid < _reg_raw_target_pos.size() and _reg_raw_target_pos[cid].x >= 0.0) else _reg_target_pos[cid]
+	if raw_tgt.x >= 0.0 and up._count_water_hits(unit_pos, raw_tgt) < 2:
+		return raw_tgt
+	if unit_idx < up._u_mission_pos.size() and up._u_mission_pos[unit_idx].x >= 0.0:
+		var mpos: Vector2 = up._u_mission_pos[unit_idx]
+		if up._count_water_hits(unit_pos, mpos) < 2:
+			return mpos
+	return _reg_target_pos[cid]
+
+
 func get_regiment_steer(up: Node2D, unit_idx: int, safe_dt: float) -> Vector2:
 	if unit_idx >= up._u_in_regiment.size() or up._u_in_regiment[unit_idx] == 0:
 		return Vector2.ZERO
@@ -372,14 +392,18 @@ func get_regiment_steer(up: Node2D, unit_idx: int, safe_dt: float) -> Vector2:
 	if cid < 0 or cid >= MAX_CITIES or _reg_active[cid] == 0:
 		return Vector2.ZERO
 
+	var unit_pos := Vector2(up._px[unit_idx], up._py[unit_idx])
+	var has_mission: bool = unit_idx < up._u_mission_pos.size() and up._u_mission_pos[unit_idx].x >= 0.0 and up._count_water_hits(unit_pos, up._u_mission_pos[unit_idx]) < 2
+	var tgt: Vector2 = _reg_portal_pos[cid] if (_reg_state[cid] == REG_MARCH and _reg_use_portal[cid] != 0) else _resolve_unit_reg_target(up, unit_idx, cid, unit_pos)
+
 	var phase: int = (unit_idx + up._tick_idx) & 3
 	if phase != 0 and up._u_detour_timer[unit_idx] <= 0.0:
 		var cached_dir: Vector2 = up._u_steer_dir[unit_idx]
 		if cached_dir != Vector2.ZERO:
-			var tgt_c: Vector2 = _reg_portal_pos[cid] if (_reg_state[cid] == REG_MARCH and _reg_use_portal[cid] != 0) else (_reg_target_pos[cid] if _reg_state[cid] == REG_MARCH else _reg_rally_pos[cid])
-			if absf(up._px[unit_idx] - tgt_c.x) > 8.0 or absf(up._py[unit_idx] - tgt_c.y) > 8.0:
+			var tgt_c: Vector2 = tgt if (_reg_state[cid] == REG_MARCH or has_mission) else _reg_rally_pos[cid]
+			if absf(unit_pos.x - tgt_c.x) > 8.0 or absf(unit_pos.y - tgt_c.y) > 8.0:
 				if up._u_stuck_timer[unit_idx] <= 1.80:
-					if phase != 2 or up._is_walkable_tile(int(up._px[unit_idx] + cached_dir.x * 4.5), int(up._py[unit_idx] + cached_dir.y * 4.5)):
+					if phase != 2 or up._is_walkable_tile(int(unit_pos.x + cached_dir.x * 4.5), int(unit_pos.y + cached_dir.y * 4.5)):
 						return cached_dir
 				elif (phase & 1) != 0:
 					return cached_dir
@@ -387,17 +411,21 @@ func get_regiment_steer(up: Node2D, unit_idx: int, safe_dt: float) -> Vector2:
 	var slot: int = int(_u_reg_slot[unit_idx])
 	var offset: Vector2 = _reg_slot_offsets[slot % 12]
 	var goal: Vector2 = _reg_rally_pos[cid] + offset
-	if _reg_state[cid] == REG_MARCH:
-		var tgt: Vector2 = _reg_portal_pos[cid] if _reg_use_portal[cid] != 0 else _reg_target_pos[cid]
+	if _reg_state[cid] == REG_MARCH or has_mission:
 		var lpos: Vector2 = _reg_leader_pos[cid]
 		if unit_idx == _reg_leader_idx[cid]:
 			goal = tgt
-		elif lpos.distance_squared_to(tgt) <= 484.0:
+		elif lpos.distance_squared_to(tgt) <= 484.0 or up._count_water_hits(unit_pos, lpos) >= 2:
 			goal = tgt + offset * 0.75
 		else:
 			goal = lpos + offset
 	if not up._is_walkable_tile(int(goal.x), int(goal.y)):
-		goal = _reg_leader_pos[cid] if unit_idx != _reg_leader_idx[cid] else _reg_rally_pos[cid]
+		if unit_idx != _reg_leader_idx[cid] and up._count_water_hits(unit_pos, _reg_leader_pos[cid]) < 2:
+			goal = _reg_leader_pos[cid]
+		elif has_mission:
+			goal = up._u_mission_pos[unit_idx]
+		else:
+			goal = _reg_rally_pos[cid]
 	up._cur_steer_goal = goal
 	var res: Vector2 = up._harvest_ai.steer_worker(up, unit_idx, safe_dt)
 	up._u_steer_dir[unit_idx] = res
@@ -689,6 +717,7 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 	var def_fac: int = int(up._u_faction_id[def_idx])
 	var def_cid: int = up._u_city_id[def_idx]
 	var def_invuln: bool = (def_idx < up._u_invuln_timer.size() and up._u_invuln_timer[def_idx] > 0.0) or (def_idx < up._u_status_mask.size() and (up._u_status_mask[def_idx] & ST_INVINC_BIT) != 0)
+	var dash_armored: bool = (up._u_uid[def_idx] == up._possessed_uid and up._possess_dash_armor_t > 0.0)
 	var died: bool = false
 	if def_idx < up._u_status_mask.size() and (up._u_status_mask[def_idx] & ST_SLEEP_BIT) != 0 and up._traits_fauna != null:
 		up._traits_fauna.clear_status(up, def_idx, 11)
@@ -717,6 +746,8 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 			up._u_has_status[def_idx] = 1
 		if def_idx < up._u_armor_mul.size():
 			final_dmg *= up._u_armor_mul[def_idx]
+		if dash_armored:
+			final_dmg *= 0.50
 		if attacker < up._u_crit_chance.size() and up._u_crit_chance[attacker] > 0.055 and up._ext_rng.randf() < up._u_crit_chance[attacker]:
 			final_dmg *= 1.55
 			if def_idx < up._u_vel_z.size():
@@ -743,12 +774,13 @@ func _apply_hit_damage(up: Node2D, attacker: int, def_idx: int) -> bool:
 				up._strip_fx_budget -= 1
 				up._fx.call("spawn_reaction_strip", Vector2(up._px[def_idx], up._py[def_idx] - 7.0), STRIP_MUTATE)
 
-	up._vx[def_idx] += kdx * 36.0
-	up._vy[def_idx] += kdy * 36.0
-	up._knockback_timer[def_idx] = maxf(up._knockback_timer[def_idx], 0.18)
-	if def_idx < up._u_vel_z.size() and ((attacker < up._u_trait_mask.size() and (up._u_trait_mask[attacker] & TR_STRONG_BIT) != 0) or up._cur_dmg >= 20.0):
-		up._u_vel_z[def_idx] = maxf(up._u_vel_z[def_idx], 18.0)
-		up._any_z_active = true
+	if not dash_armored:
+		up._vx[def_idx] += kdx * 36.0
+		up._vy[def_idx] += kdy * 36.0
+		up._knockback_timer[def_idx] = maxf(up._knockback_timer[def_idx], 0.18)
+		if def_idx < up._u_vel_z.size() and ((attacker < up._u_trait_mask.size() and (up._u_trait_mask[attacker] & TR_STRONG_BIT) != 0) or up._cur_dmg >= 20.0):
+			up._u_vel_z[def_idx] = maxf(up._u_vel_z[def_idx], 18.0)
+			up._any_z_active = true
 	up._hit_flash_timer[def_idx] = maxf(up._hit_flash_timer[def_idx], 0.16)
 	up._record_memory(attacker, MEM_FOUGHT)
 	up._record_memory(def_idx, MEM_FOUGHT)

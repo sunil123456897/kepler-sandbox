@@ -158,7 +158,7 @@ const RARITY_NAMES_RU: Array[String] = ["Обычн.", "Редк.", "Эпич.",
 const MOD_NAMES_RU: Array[String] = ["", "Заряженный", "Укреплённый", "Облегчённый", "Кровавый", "Огненный", "Крио", "Божественный"]
 const WEAPON_BASES_RU: Array[String] = ["Карабин", "Импульс-клинок", "Рельсотрон", "Плазма-резак", "Копьё пустоты", "Аннигилятор"]
 const ARMOR_BASES_RU: Array[String] = ["Комбинезон", "Экзо-кираса", "Термо-щиток", "Силовой каркас", "Ксено-латы", "Нейтрон-панцирь"]
-const MODULE_BASES_RU: Array[String] = ["Сенсор", "Био-фильтр", "Гиро-стаб", "Кванто-чип", "Пси-резонатор", "Сингуляр-ядро"]
+const MODULE_BASES_RU: Array[String] = ["Сенсор", "Био-фильтр", "Гиро-стаб", "Кванто-чип", "Пси-резонатор", "Грави-ядро"]
 
 # [name_ru, class(0..3), habitat(0..3), hp, spd, dmg, scale, tint]
 const SPECIES_DATA: Array = [
@@ -230,6 +230,10 @@ var _f_tint: PackedColorArray = PackedColorArray()
 var _f_custom_name: PackedStringArray = PackedStringArray()
 var _f_kills: PackedInt32Array = PackedInt32Array()
 var _f_scale: PackedFloat32Array = PackedFloat32Array()
+var _f_squash: PackedFloat32Array = PackedFloat32Array()
+var _f_squash_v: PackedFloat32Array = PackedFloat32Array()
+var _f_last_attacker_uid: PackedInt32Array = PackedInt32Array()
+var _hostile_fauna_indices: PackedInt32Array = PackedInt32Array()
 var _f_uid_to_idx: Dictionary = {}
 var _next_fauna_uid: int = FAUNA_UID_BASE
 var _last_unit_cnt_mm: int = -1
@@ -244,6 +248,7 @@ func _init() -> void:
 func reset_all() -> void:
 	_f_count = 0
 	_f_uid_to_idx.clear()
+	_hostile_fauna_indices.resize(0)
 	_next_fauna_uid = FAUNA_UID_BASE
 	_last_unit_cnt_mm = -1
 	_any_ext_active = false
@@ -303,6 +308,12 @@ func _allocate_fauna_arrays() -> void:
 	_f_custom_name.resize(MAX_FAUNA)
 	_f_kills.resize(MAX_FAUNA)
 	_f_scale.resize(MAX_FAUNA)
+	_f_squash.resize(MAX_FAUNA)
+	_f_squash.fill(1.0)
+	_f_squash_v.resize(MAX_FAUNA)
+	_f_squash_v.fill(0.0)
+	_f_last_attacker_uid.resize(MAX_FAUNA)
+	_f_last_attacker_uid.fill(-1)
 
 
 func resize_unit_ext(count: int) -> void:
@@ -386,7 +397,7 @@ func _make_item_name(slot: int, mat: int, rar: int, mod_id: int, rng: RandomNumb
 	var mat_s: String = str(MAT_NAMES_RU[clampi(mat, 0, MAT_NAMES_RU.size() - 1)])
 	var mod_s: String = str(MOD_NAMES_RU[clampi(mod_id, 0, MOD_NAMES_RU.size() - 1)])
 	if rar >= 3:
-		var suffixes: Array[String] = ["Зари", "Кеплера", "Пустоты", "Ориона", "Титана", "Сингулярности"]
+		var suffixes: Array[String] = ["Зари", "Кеплера", "Пустоты", "Ориона", "Титана", "Горизонта"]
 		var suf: String = suffixes[rng.randi_range(0, suffixes.size() - 1)]
 		return "%s %s «%s»" % [mod_s if mod_s != "" else mat_s, base_s, suf]
 	if mod_s != "":
@@ -669,6 +680,8 @@ func _tick_single_unit_statuses(up: Node2D, i: int, sm: int, safe_dt: float) -> 
 	for s in range(STATUS_COUNT):
 		if (sm & (1 << s)) == 0:
 			continue
+		if s == STATUS_MAGNETIZED:
+			continue
 		var t: float = _u_status_timers[sb + s] - safe_dt
 		if t <= 0.0:
 			_u_status_timers[sb + s] = 0.0
@@ -752,7 +765,7 @@ func step_liveliness_slice(up: Node2D, n: int, safe_dt: float) -> void:
 	var show_fx: bool = up._fx != null and float(up._zoom_lod_val) > 1.85 and bool(up._fx.has_method("spawn_reaction_strip"))
 
 	for i in range(tick & 7, n, 8):
-		if up._u_step_alive[i] == 0:
+		if up._u_step_alive[i] != 1:
 			continue
 		if _u_talk_cd[i] > 0.0:
 			_u_talk_cd[i] = maxf(0.0, _u_talk_cd[i] - step_dt)
@@ -1154,11 +1167,46 @@ func spawn_fauna(up: Node2D, world_pos: Vector2, kind_id: int, count: int) -> in
 		_f_custom_name[fi] = ""
 		_f_kills[fi] = 0
 		_f_scale[fi] = float(info[6])
+		_f_squash[fi] = 1.0
+		_f_squash_v[fi] = 0.0
+		_f_last_attacker_uid[fi] = -1
 		spawned += 1
+	if spawned > 0:
+		_rebuild_hostile_fauna_cache()
 	_last_unit_cnt_mm = -1
 	if spawned > 0 and up._fx != null:
 		up._fx.spawn_burst(world_pos, 6, info[7] as Color, 20.0, 0.32, -8.0)
 	return spawned
+
+
+func _rebuild_hostile_fauna_cache() -> void:
+	_hostile_fauna_indices.resize(0)
+	for i in range(_f_count):
+		var sp := int(_f_species[i])
+		var sc := int(SPECIES_DATA[sp][1]) if sp < SPECIES_COUNT else 0
+		if sc == SCLASS_PREDATOR or sc == SCLASS_BOSS:
+			_hostile_fauna_indices.append(i)
+
+
+func get_hostile_fauna_indices() -> PackedInt32Array:
+	return _hostile_fauna_indices
+
+
+func get_active_boss_snapshots() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for k in range(_hostile_fauna_indices.size()):
+		var fi := _hostile_fauna_indices[k]
+		if fi < 0 or fi >= _f_count or _f_hp[fi] <= 0.0:
+			continue
+		var sp := int(_f_species[fi])
+		if sp < SPECIES_COUNT and int(SPECIES_DATA[sp][1]) == SCLASS_BOSS:
+			out.append({
+				"uid": _f_uid[fi],
+				"species": sp,
+				"pos": Vector2(_f_px[fi], _f_py[fi]),
+				"hp": _f_hp[fi],
+			})
+	return out
 
 
 func _find_fauna_spawn_pos(up: Node2D, center: Vector2, hab: int, rng: RandomNumberGenerator) -> Vector2:
@@ -1224,9 +1272,13 @@ func _remove_fauna_slot(fi: int) -> void:
 		_f_custom_name[fi] = _f_custom_name[last]
 		_f_kills[fi] = _f_kills[last]
 		_f_scale[fi] = _f_scale[last]
+		_f_squash[fi] = _f_squash[last]
+		_f_squash_v[fi] = _f_squash_v[last]
+		_f_last_attacker_uid[fi] = _f_last_attacker_uid[last]
 		_f_uid_to_idx[_f_uid[fi]] = fi
 	_f_count = last
 	_last_unit_cnt_mm = -1
+	_rebuild_hostile_fauna_cache()
 
 
 func step_and_pack_fauna(up: Node2D, safe_dt: float, unit_offset: int) -> int:
@@ -1267,34 +1319,42 @@ func _step_single_fauna(up: Node2D, i: int, safe_dt: float, tick: int, rng: Rand
 		_f_vy[i] = 0.0
 		_step_fauna_z(up, i, sp, hab, safe_dt, rng)
 		return
-
+	var is_mag: bool = (_f_status_mask[i] & (1 << STATUS_MAGNETIZED)) != 0
 	var is_poss: bool = (_f_uid[i] == up._possessed_uid)
-	if is_poss:
-		_step_possessed_boss(up, i, spd)
-	elif sclass != SCLASS_INSECT and ((i + tick) & 7) == 0:
-		_fauna_ai_sense(up, i, sp, sclass, hab, rng)
-	elif sclass == SCLASS_INSECT and ((i + tick) & 7) == 0:
-		_f_wander[i] += rng.randf_range(-1.1, 1.1)
-
-	if sclass == SCLASS_BOSS and _f_atk_cd[i] <= 0.0 and not is_poss:
-		_step_boss_ability(up, i, sp, rng)
-
-	var des_vx := cos(_f_wander[i]) * spd * (0.45 if sclass == SCLASS_INSECT else 1.0)
-	var des_vy := sin(_f_wander[i]) * spd * (0.45 if sclass == SCLASS_INSECT else 1.0)
-	if is_poss:
-		if up._possess_move.length_squared() > 0.01:
-			des_vx = up._possess_move.x * spd * 1.85
-			des_vy = up._possess_move.y * spd * 1.85
-		else:
-			des_vx = 0.0
-			des_vy = 0.0
-	if _f_kb[i] > 0.0:
-		_f_vx[i] *= exp(-3.2 * safe_dt)
-		_f_vy[i] *= exp(-3.2 * safe_dt)
+	if is_mag:
+		_f_vx[i] *= exp(-4.0 * safe_dt)
+		_f_vy[i] *= exp(-4.0 * safe_dt)
 	else:
-		var bl := 1.0 - exp(-6.0 * safe_dt)
-		_f_vx[i] += (des_vx - _f_vx[i]) * bl
-		_f_vy[i] += (des_vy - _f_vy[i]) * bl
+		if is_poss:
+			_step_possessed_boss(up, i, spd)
+		elif sclass != SCLASS_INSECT and ((i + tick) & 7) == 0:
+			_fauna_ai_sense(up, i, sp, sclass, hab, rng)
+		elif sclass == SCLASS_INSECT and ((i + tick) & 7) == 0:
+			_f_wander[i] += rng.randf_range(-1.1, 1.1)
+
+		if sclass == SCLASS_BOSS and _f_atk_cd[i] <= 0.0 and not is_poss:
+			_step_boss_ability(up, i, sp, rng)
+
+		var des_vx := cos(_f_wander[i]) * spd * (0.45 if sclass == SCLASS_INSECT else 1.0)
+		var des_vy := sin(_f_wander[i]) * spd * (0.45 if sclass == SCLASS_INSECT else 1.0)
+		if is_poss:
+			if up._possess_move.length_squared() > 0.01:
+				des_vx = up._possess_move.x * spd * 1.85
+				des_vy = up._possess_move.y * spd * 1.85
+			else:
+				des_vx = 0.0
+				des_vy = 0.0
+		if _f_pz[i] > 0.5 and hab != HABITAT_AIR:
+			var air_drag := exp(-0.28 * safe_dt)
+			_f_vx[i] *= air_drag
+			_f_vy[i] *= air_drag
+		elif _f_kb[i] > 0.0:
+			_f_vx[i] *= exp(-3.2 * safe_dt)
+			_f_vy[i] *= exp(-3.2 * safe_dt)
+		else:
+			var bl := 1.0 - exp(-6.0 * safe_dt)
+			_f_vx[i] += (des_vx - _f_vx[i]) * bl
+			_f_vy[i] += (des_vy - _f_vy[i]) * bl
 
 	var nx := _f_px[i] + _f_vx[i] * safe_dt
 	var ny := _f_py[i] + _f_vy[i] * safe_dt
@@ -1308,7 +1368,7 @@ func _step_single_fauna(up: Node2D, i: int, safe_dt: float, tick: int, rng: Rand
 		ny = clampf(ny, 3.0, max_y)
 		_f_vy[i] = -_f_vy[i]
 		_f_wander[i] = atan2(_f_vy[i], _f_vx[i])
-	if hab == HABITAT_LAND or hab == HABITAT_WATER:
+	if not is_mag and (hab == HABITAT_LAND or hab == HABITAT_WATER):
 		var nt: int = int(up._get_tile_tier(int(nx), int(ny)))
 		var valid: bool = (nt <= TIER_SHALLOW) if hab == HABITAT_WATER else (nt > TIER_SHALLOW and nt < TIER_SUMMIT)
 		if not valid and _f_pz[i] < 1.5:
@@ -1325,21 +1385,81 @@ func _step_single_fauna(up: Node2D, i: int, safe_dt: float, tick: int, rng: Rand
 
 
 func _step_fauna_z(up: Node2D, i: int, sp: int, hab: int, safe_dt: float, rng: RandomNumberGenerator) -> void:
+	if (_f_status_mask[i] & (1 << STATUS_MAGNETIZED)) != 0:
+		_f_pz[i] = _f_pz[i] + (15.0 - _f_pz[i]) * (1.0 - exp(-16.0 * safe_dt))
+		_f_vz[i] = 0.0
+		_f_squash[i] = 1.08
+		_f_squash_v[i] = 0.0
+		return
 	if hab == HABITAT_AIR:
 		var base_h := 13.0 if sp == BOSS_LEVIATHAN else (19.0 if sp == BOSS_UFO else 4.5)
 		_f_pz[i] = base_h + sin(up._sim_time * 3.2 + _f_phase[i]) * 2.2
 		_f_vz[i] = 0.0
+		_relax_fauna_squash(i, safe_dt)
 		return
 	if sp == 1 and _f_pz[i] <= 0.0 and _f_ai_cd[i] <= 0.0 and rng.randf() < 0.06:
 		_f_vz[i] = 18.0
 		_f_ai_cd[i] = 1.2
 	if _f_pz[i] > 0.0 or _f_vz[i] != 0.0:
+		var pre_vz := _f_vz[i]
 		_f_vz[i] -= 120.0 * safe_dt
 		var nz := _f_pz[i] + _f_vz[i] * safe_dt
 		if nz <= 0.0:
-			nz = 0.0
+			_f_pz[i] = 0.0
 			_f_vz[i] = 0.0
-		_f_pz[i] = minf(nz, 64.0)
+			if pre_vz <= -18.0:
+				_f_squash[i] = 0.66
+				_f_squash_v[i] = 0.0
+				_on_fauna_hard_landing(up, i, sp, pre_vz)
+				return
+		else:
+			_f_pz[i] = minf(nz, 64.0)
+			_f_squash[i] = clampf(1.0 + absf(_f_vz[i]) * 0.0048, 1.0, 1.34)
+			_f_squash_v[i] = 0.0
+			return
+	_relax_fauna_squash(i, safe_dt)
+
+
+func _relax_fauna_squash(i: int, safe_dt: float) -> void:
+	var sy := _f_squash[i]
+	var sv := _f_squash_v[i]
+	if absf(sy - 1.0) <= 0.002 and absf(sv) <= 0.002:
+		_f_squash[i] = 1.0
+		_f_squash_v[i] = 0.0
+		return
+	var steps := maxi(1, int(ceilf(safe_dt / 0.0125)))
+	var sub_dt := safe_dt / float(steps)
+	for _s in range(steps):
+		var force := -324.0 * (sy - 1.0) - 9.0 * sv
+		sv += force * sub_dt
+		sy += sv * sub_dt
+	if absf(sy - 1.0) < 0.002 and absf(sv) < 0.01:
+		_f_squash[i] = 1.0
+		_f_squash_v[i] = 0.0
+	else:
+		_f_squash[i] = clampf(sy, 0.55, 1.35)
+		_f_squash_v[i] = sv
+
+
+func _on_fauna_hard_landing(up: Node2D, fi: int, sp: int, _pre_vz: float) -> void:
+	var pos := Vector2(_f_px[fi], _f_py[fi])
+	var tier := int(up._get_tile_tier(clampi(int(pos.x), 0, up._map_w - 1), clampi(int(pos.y), 0, up._map_h - 1)))
+	if tier <= TIER_SHALLOW and not up._is_ice_bridge_tile(int(pos.x), int(pos.y)):
+		if up._fx != null and up._cur_splash_budget > 0:
+			up._cur_splash_budget -= 1
+			up._fx.spawn_burst(pos, 6, Color(0.55, 0.90, 1.0, 0.90), 24.0, 0.34, 30.0)
+			up._fx.play_sfx("drop_rain", pos.x)
+		return
+	var v_imp := sqrt(_f_vx[fi] * _f_vx[fi] + _f_vy[fi] * _f_vy[fi])
+	if v_imp >= 140.0:
+		var sclass := int(SPECIES_DATA[clampi(sp, 0, SPECIES_COUNT - 1)][1])
+		up.apply_toss_impact_at(pos, v_imp, sclass == SCLASS_BOSS)
+		if sclass != SCLASS_BOSS:
+			var dmg := clampf((v_imp - 140.0) * 0.18, 0.0, 85.0)
+			if v_imp < 280.0 and _f_hp[fi] >= 80.0:
+				dmg = minf(dmg, _f_hp[fi] - 5.0)
+			_f_hp[fi] -= maxf(dmg, 0.0)
+			_f_flash[fi] = 0.18
 
 
 func _fauna_ai_sense(up: Node2D, i: int, sp: int, sclass: int, hab: int, rng: RandomNumberGenerator) -> void:
@@ -1370,17 +1490,16 @@ func _find_nearest_threat_for_herb(fi: int) -> Vector2:
 	var py := _f_py[fi]
 	var best_d2 := 784.0
 	var out := Vector2(-1.0, -1.0)
-	for j in range(_f_count):
-		if j == fi or _f_hp[j] <= 0.0:
+	for k in range(_hostile_fauna_indices.size()):
+		var j := _hostile_fauna_indices[k]
+		if j == fi or j < 0 or j >= _f_count or _f_hp[j] <= 0.0:
 			continue
-		var jc := int(SPECIES_DATA[int(_f_species[j])][1])
-		if jc == SCLASS_PREDATOR or jc == SCLASS_BOSS:
-			var dx := _f_px[j] - px
-			var dy := _f_py[j] - py
-			var d2 := dx * dx + dy * dy
-			if d2 < best_d2:
-				best_d2 = d2
-				out = Vector2(_f_px[j], _f_py[j])
+		var dx := _f_px[j] - px
+		var dy := _f_py[j] - py
+		var d2 := dx * dx + dy * dy
+		if d2 < best_d2:
+			best_d2 = d2
+			out = Vector2(_f_px[j], _f_py[j])
 	return out
 
 
@@ -1496,8 +1615,8 @@ func _step_boss_ability(up: Node2D, fi: int, sp: int, rng: RandomNumberGenerator
 
 
 func _step_possessed_boss(up: Node2D, fi: int, _spd: float) -> void:
-	if up._possess_pulse and up._possess_cd <= 0.0:
-		up._possess_cd = 0.40
+	if up._possess_pulse and up._possess_pulse_cd <= 0.0:
+		up._possess_pulse_cd = 1.6
 		up._possess_pulse = false
 		var pos := Vector2(_f_px[fi], _f_py[fi])
 		up.trigger_impulse(pos, 30.0, 110.0, false)
@@ -1531,9 +1650,14 @@ func _handle_fauna_death(up: Node2D, fi: int) -> void:
 	var tm := _f_trait_mask[fi]
 	var col := _f_tint[fi]
 	var dead_uid := _f_uid[fi]
+	var sp := int(_f_species[fi])
+	var was_boss := sp < SPECIES_COUNT and int(SPECIES_DATA[sp][1]) == SCLASS_BOSS
+	var killer_uid := _f_last_attacker_uid[fi] if fi < _f_last_attacker_uid.size() else -1
 	_remove_fauna_slot(fi)
 	if dead_uid == up._possessed_uid:
 		up._possessed_uid = -1
+	if was_boss and up._civ != null and up._civ.has_method("on_boss_slain"):
+		up._civ.call("on_boss_slain", pos, killer_uid, sp)
 	if (tm & (1 << TRAIT_CORE_MELTDOWN)) != 0:
 		up.trigger_impulse(pos, 30.0, 110.0, true)
 	if up._fx != null:
@@ -1545,6 +1669,7 @@ func damage_fauna_at(up: Node2D, world_pos: Vector2, radius: float, damage: floa
 		return 0
 	var r2 := radius * radius
 	var hits := 0
+	var killer_uid: int = up._u_uid[killer_idx] if (killer_idx >= 0 and killer_idx < up._unit_count) else -1
 	var i := _f_count - 1
 	while i >= 0:
 		var dx := _f_px[i] - world_pos.x
@@ -1554,6 +1679,8 @@ func damage_fauna_at(up: Node2D, world_pos: Vector2, radius: float, damage: floa
 			_f_flash[i] = 0.18
 			_f_kb[i] = maxf(_f_kb[i], 0.18)
 			_f_vz[i] = maxf(_f_vz[i], 14.0)
+			if i < _f_last_attacker_uid.size():
+				_f_last_attacker_uid[i] = killer_uid
 			if _f_hp[i] <= 0.0:
 				var was_boss := int(SPECIES_DATA[int(_f_species[i])][1]) == SCLASS_BOSS
 				if killer_idx >= 0 and killer_idx < up._unit_count:
@@ -1598,7 +1725,7 @@ func _pack_fauna_mm(up: Node2D, unit_offset: int) -> void:
 		elif _f_flash[i] > 0.005:
 			custom_g = -2.0 - clampf(_f_flash[i] / 0.18, 0.2, 1.0)
 		mm_buf[off + 13] = custom_g
-		mm_buf[off + 14] = _f_facing[i]
+		mm_buf[off + 14] = _f_facing[i] * clampf(_f_squash[i], 0.65, 1.35)
 		mm_buf[off + 15] = float(mini(FAUNA_ATLAS_START + sp, max_col))
 	_last_unit_cnt_mm = unit_offset
 
@@ -1653,19 +1780,27 @@ func find_nearest_hostile_fauna(world_pos: Vector2, max_range: float, include_pe
 		return {"found": false}
 	var best_i := -1
 	var best_d2 := max_range * max_range
-	for i in range(_f_count):
-		if _f_hp[i] <= 0.0:
-			continue
-		var sp := int(_f_species[i])
-		var sclass := int(SPECIES_DATA[sp][1])
-		if not include_peaceful and sclass != SCLASS_PREDATOR and sclass != SCLASS_BOSS:
-			continue
-		var dx := _f_px[i] - world_pos.x
-		var dy := _f_py[i] - world_pos.y
-		var d2 := dx * dx + dy * dy
-		if d2 <= best_d2:
-			best_d2 = d2
-			best_i = i
+	if not include_peaceful:
+		for k in range(_hostile_fauna_indices.size()):
+			var i := _hostile_fauna_indices[k]
+			if i < 0 or i >= _f_count or _f_hp[i] <= 0.0:
+				continue
+			var dx := _f_px[i] - world_pos.x
+			var dy := _f_py[i] - world_pos.y
+			var d2 := dx * dx + dy * dy
+			if d2 <= best_d2:
+				best_d2 = d2
+				best_i = i
+	else:
+		for i in range(_f_count):
+			if _f_hp[i] <= 0.0:
+				continue
+			var dx := _f_px[i] - world_pos.x
+			var dy := _f_py[i] - world_pos.y
+			var d2 := dx * dx + dy * dy
+			if d2 <= best_d2:
+				best_d2 = d2
+				best_i = i
 	if best_i < 0:
 		return {"found": false}
 	return {"found": true, "fauna_idx": best_i, "pos": Vector2(_f_px[best_i], _f_py[best_i]), "d2": best_d2}
@@ -1676,7 +1811,11 @@ func apply_magnet_fauna(up: Node2D, world_pos: Vector2, radius: float, impulse_a
 		return 0
 	var r2 := radius * radius
 	var hold := impulse_and_hold.z > 0.5
-	var imp := Vector2(impulse_and_hold.x, impulse_and_hold.y)
+	var imp := Vector2(impulse_and_hold.x, impulse_and_hold.y).limit_length(360.0)
+	var raw_dt := up.get_process_delta_time()
+	var eff_dt := clampf(raw_dt, 0.005, 0.05) if raw_dt > 0.0 else 0.016667
+	var pull_k := 1.0 - exp(-18.0 * eff_dt)
+	var lift_k := 1.0 - exp(-16.0 * eff_dt)
 	var cnt := 0
 	var mw := float(up._map_w - 4)
 	var mh := float(up._map_h - 4)
@@ -1685,20 +1824,20 @@ func apply_magnet_fauna(up: Node2D, world_pos: Vector2, radius: float, impulse_a
 		var dy := _f_py[i] - world_pos.y
 		if dx * dx + dy * dy <= r2 or (not hold and (_f_status_mask[i] & (1 << STATUS_MAGNETIZED)) != 0):
 			if hold:
-				_f_px[i] = clampf(lerpf(_f_px[i], world_pos.x, 0.28), 3.0, mw)
-				_f_py[i] = clampf(lerpf(_f_py[i], world_pos.y, 0.28), 3.0, mh)
-				_f_pz[i] = lerpf(_f_pz[i], 14.0, 0.35)
+				_f_px[i] = clampf(lerpf(_f_px[i], world_pos.x, pull_k), 3.0, mw)
+				_f_py[i] = clampf(lerpf(_f_py[i], world_pos.y, pull_k), 3.0, mh)
+				_f_pz[i] = lerpf(_f_pz[i], 15.0, lift_k)
 				_f_vz[i] = 0.0
 				_f_vx[i] = imp.x * 0.45
 				_f_vy[i] = imp.y * 0.45
-				_f_kb[i] = maxf(_f_kb[i], 0.20)
+				_f_kb[i] = maxf(_f_kb[i], 0.25)
 				_f_status_mask[i] |= (1 << STATUS_MAGNETIZED)
 			else:
-				var cl := imp.limit_length(160.0)
-				_f_vx[i] += cl.x
-				_f_vy[i] += cl.y
-				_f_vz[i] = maxf(_f_vz[i], clampf(26.0 + cl.length() * 0.3, 24.0, 62.0))
-				_f_kb[i] = maxf(_f_kb[i], 0.45)
+				var throw_v := imp if imp.length_squared() > 4.0 else Vector2(_f_vx[i], _f_vy[i])
+				_f_vx[i] = throw_v.x
+				_f_vy[i] = throw_v.y
+				_f_vz[i] = maxf(_f_vz[i], clampf(32.0 + throw_v.length() * 0.25, 28.0, 62.0))
+				_f_kb[i] = maxf(_f_kb[i], 0.65)
 				_f_status_mask[i] &= ~(1 << STATUS_MAGNETIZED)
 			cnt += 1
 	return cnt
@@ -1967,5 +2106,9 @@ func unpack_ext_state(up: Node2D, buf: StreamPeerBuffer) -> bool:
 		_f_tgt_uid[f] = -1
 		_f_tgt_is_fauna[f] = 0
 		_f_status_mask[f] = 0
+		_f_squash[f] = 1.0
+		_f_squash_v[f] = 0.0
+		_f_last_attacker_uid[f] = -1
 		_apply_fauna_trait_cache(f)
+	_rebuild_hostile_fauna_cache()
 	return true

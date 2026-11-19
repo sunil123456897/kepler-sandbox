@@ -5314,7 +5314,7 @@ def build_all() -> Dict[str, dict]:
         cell_w=FX_CELL_W,
         cell_h=FX_CELL_H,
         motion_mode=0,
-        bake_building_shadows=True,
+        bake_building_shadows=False,
         forbid_shadow_tokens=True,
         extra_manifest={
             "columns": {spec["id"].upper(): spec["col"] for spec in FX_STRIP_SPECS},

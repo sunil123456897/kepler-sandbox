@@ -71,6 +71,7 @@ const MASK_MINERAL: int = (1 << FLORA_CRYSTAL_SMALL) | (1 << FLORA_CRYSTAL_TALL)
 
 const ST_CRYO_MASK: int = 1 << 2
 const ST_SLEEP_MASK: int = 1 << 11
+const ST_MAG_MASK: int = 1 << 15
 const TR_GENIUS_BIT: int = 1 << 17
 const TR_PACIFIST_BIT: int = 1 << 27
 
@@ -580,6 +581,11 @@ func _assign_soldier_goal(up: Node2D, unit_idx: int, city_id: int) -> void:
 		var ppos: Vector2 = up._city_patrol_pos[city_id]
 		if up._is_walkable_pos(ppos) and up._count_water_hits(unit_pos, ppos) < 2:
 			panchor = ppos
+	if up._count_water_hits(unit_pos, panchor) >= 2 and unit_idx < up._u_mission_pos.size() and up._u_mission_pos[unit_idx].x >= 0.0:
+		var mpos: Vector2 = up._u_mission_pos[unit_idx]
+		if up._count_water_hits(unit_pos, mpos) < 2:
+			panchor = mpos
+			patrol_r = 12.0
 	up._u_target_pos[unit_idx] = up._find_walkable_offset(panchor, 2.0, patrol_r, false)
 	up._u_task[unit_idx] = TASK_PATROL
 	up._u_work_timer[unit_idx] = 0.95 if at_war else (1.2 if alerted else up._rng.randf_range(1.6, 3.0))
@@ -733,7 +739,9 @@ func complete_harvest(up: Node2D, unit_idx: int, cid: int) -> void:
 
 
 func step_worker(up: Node2D, unit_idx: int, safe_dt: float) -> Vector2:
-	if unit_idx < up._u_status_mask.size() and (up._u_status_mask[unit_idx] & (ST_CRYO_MASK | ST_SLEEP_MASK)) != 0:
+	if unit_idx < up._u_embarked.size() and up._u_embarked[unit_idx] != 0:
+		return Vector2.ZERO
+	if unit_idx < up._u_status_mask.size() and (up._u_status_mask[unit_idx] & (ST_CRYO_MASK | ST_SLEEP_MASK | ST_MAG_MASK)) != 0:
 		return Vector2.ZERO
 	var cid: int = up._u_city_id[unit_idx]
 	if cid < up._city_depot_pos.size() and up._city_depot_pos[cid].x >= 0.0:

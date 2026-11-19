@@ -443,9 +443,35 @@ try {
         throw "[SMOKE_PARITY] Timing budget exceeded: $($paritySw.Elapsed.TotalSeconds)s"
     }
 
+    Write-Host "=== Step 11: Evolution Beyond Parity Smoke ==="
+    $evoSw = [System.Diagnostics.Stopwatch]::StartNew()
+    $evoOut = Invoke-GodotGuarded -GodotArgs @("--headless", "--path", "`"$ProjectDir`"", "--", "--smoke-evolution") -Label "SMOKE_EVOLUTION"
+    $evoSw.Stop()
+    if ($evoOut -notmatch "SMOKE_EVOLUTION_PASS") {
+        throw "[SMOKE_EVOLUTION] Expected SMOKE_EVOLUTION_PASS marker in output."
+    }
+    $evoAudioOk = Parse-IntMetric -Text $evoOut -Key "audio_stream_ok" -Label "SMOKE_EVOLUTION"
+    $evoCodexOk = Parse-IntMetric -Text $evoOut -Key "codex_click_ok" -Label "SMOKE_EVOLUTION"
+    $evoMagnetOk = Parse-IntMetric -Text $evoOut -Key "magnet_toss_ok" -Label "SMOKE_EVOLUTION"
+    $evoTheologyOk = Parse-IntMetric -Text $evoOut -Key "theology_aa_ok" -Label "SMOKE_EVOLUTION"
+    $evoAvatarOk = Parse-IntMetric -Text $evoOut -Key "avatar_kit_ok" -Label "SMOKE_EVOLUTION"
+    $evoAmphibOk = Parse-IntMetric -Text $evoOut -Key "amphib_boss_ok" -Label "SMOKE_EVOLUTION"
+    $evoScenarioOk = Parse-IntMetric -Text $evoOut -Key "scenario_save_ok" -Label "SMOKE_EVOLUTION"
+
+    if ($evoAudioOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected audio_stream_ok == 1, got $evoAudioOk" }
+    if ($evoCodexOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected codex_click_ok == 1, got $evoCodexOk" }
+    if ($evoMagnetOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected magnet_toss_ok == 1, got $evoMagnetOk" }
+    if ($evoTheologyOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected theology_aa_ok == 1, got $evoTheologyOk" }
+    if ($evoAvatarOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected avatar_kit_ok == 1, got $evoAvatarOk" }
+    if ($evoAmphibOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected amphib_boss_ok == 1, got $evoAmphibOk" }
+    if ($evoScenarioOk -ne 1) { throw "[SMOKE_EVOLUTION] Expected scenario_save_ok == 1, got $evoScenarioOk" }
+    if ($evoSw.Elapsed.TotalSeconds -ge $TimeoutSec) {
+        throw "[SMOKE_EVOLUTION] Timing budget exceeded: $($evoSw.Elapsed.TotalSeconds)s"
+    }
+
     $activeGodotPre = @(Get-Process -Name "Godot*" -ErrorAction SilentlyContinue).Count
     if ($activeGodotPre -ne 0) {
-        throw "Active Godot processes remaining after Step 10: $activeGodotPre"
+        throw "Active Godot processes remaining after Step 11: $activeGodotPre"
     }
 
     $maxSpeedStr = $smokeMaxSpeed.ToString("F2", $inv)
@@ -453,8 +479,8 @@ try {
     $wbFoundedStr = $wbFoundedSec.ToString("F2", $inv)
     $wbMaxShotStr = $wbMaxShotDist.ToString("F2", $inv)
     $wbEcoDeltaStr = $wbEcoDelta.ToString("F2", $inv)
-    Write-Host ("VERIFY_ALL_PASS steps=10/10 units={0} flora={1} max_speed={2} cities={3} zones_owned={4} buildings={5} tech_tier={6} storage_total={7} shuttles_total={8} cosmic_age={9} shield_pylons={10} shield_blocked={11} dodges={12} possession_ok={13} world_tick_ms={14} phys_civ_tick_ms={15} sim_tick_ms={16} beams_fired={17} portal_transfers={18} casualties={19} combat_tech_tier={20} wars_active={21} rebellions_total={22} water_stranded={23} combat_max_speed={24} combat_world_tick_ms={25} combat_phys_civ_tick_ms={26} combat_sim_tick_ms={27} macro_bytes={28} zoom_bytes={29} civ_bytes={30} night_bytes={31} combat_bytes={32} wb_founded_sec={33} wb_tier30={34} wb_max_tier={35} wb_kingdom_cities={36} wb_max_shot_dist={37} wb_eco_delta={38} wb_eco_events={39} contiguous_ok={40} plot_chronicle_ok={41} plot_save_ok={42} t1_sci_capped={43} notables_ok={44} full_save_ok={45} parity_drops={46} parity_uplifted={47} parity_proj={48} parity_ships={49} parity_plots={50} parity_hist={51} parity_save_ok={52}" -f `
-        $smokeUnits, $smokeFlora, $maxSpeedStr, $cities, $zonesOwned, $buildings, $techTier, $storageStr, $shuttlesTotal, $cosmicAge, $shieldPylons, $shieldBlocked, $dodges, $possessionOk, $worldTickStr, $physCivTickStr, $simTickStr, $beamsFired, $portalTransfers, $casualties, $combatTechTier, $warsActive, $rebellionsTotal, $waterStranded, $combatMaxSpeedStr, $combatWorldTickStr, $combatPhysCivTickStr, $combatSimTickStr, $macroBytes, $zoomBytes, $civBytes, $nightBytes, $combatShotBytes, $wbFoundedStr, $wbTier30, $wbMaxTier, $wbKingdomCities, $wbMaxShotStr, $wbEcoDeltaStr, $wbEcoEvents, $wbContiguousOk, $wbPlotChronicleOk, $wbPlotSaveOk, $wbT1SciCapped, $wbNotablesOk, $wbFullSaveOk, $spDropsLanded, $spUplifted, $spProjectiles, $spShips, $spPlots, $spHistLen, $spSaveOk)
+    Write-Host ("VERIFY_ALL_PASS steps=11/11 units={0} flora={1} max_speed={2} cities={3} zones_owned={4} buildings={5} tech_tier={6} storage_total={7} shuttles_total={8} cosmic_age={9} shield_pylons={10} shield_blocked={11} dodges={12} possession_ok={13} world_tick_ms={14} phys_civ_tick_ms={15} sim_tick_ms={16} beams_fired={17} portal_transfers={18} casualties={19} combat_tech_tier={20} wars_active={21} rebellions_total={22} water_stranded={23} combat_max_speed={24} combat_world_tick_ms={25} combat_phys_civ_tick_ms={26} combat_sim_tick_ms={27} macro_bytes={28} zoom_bytes={29} civ_bytes={30} night_bytes={31} combat_bytes={32} wb_founded_sec={33} wb_tier30={34} wb_max_tier={35} wb_kingdom_cities={36} wb_max_shot_dist={37} wb_eco_delta={38} wb_eco_events={39} contiguous_ok={40} plot_chronicle_ok={41} plot_save_ok={42} t1_sci_capped={43} notables_ok={44} full_save_ok={45} parity_drops={46} parity_uplifted={47} parity_proj={48} parity_ships={49} parity_plots={50} parity_hist={51} parity_save_ok={52} evo_audio={53} evo_codex={54} evo_magnet={55} evo_theology={56} evo_avatar={57} evo_amphib={58} evo_scenario={59}" -f `
+        $smokeUnits, $smokeFlora, $maxSpeedStr, $cities, $zonesOwned, $buildings, $techTier, $storageStr, $shuttlesTotal, $cosmicAge, $shieldPylons, $shieldBlocked, $dodges, $possessionOk, $worldTickStr, $physCivTickStr, $simTickStr, $beamsFired, $portalTransfers, $casualties, $combatTechTier, $warsActive, $rebellionsTotal, $waterStranded, $combatMaxSpeedStr, $combatWorldTickStr, $combatPhysCivTickStr, $combatSimTickStr, $macroBytes, $zoomBytes, $civBytes, $nightBytes, $combatShotBytes, $wbFoundedStr, $wbTier30, $wbMaxTier, $wbKingdomCities, $wbMaxShotStr, $wbEcoDeltaStr, $wbEcoEvents, $wbContiguousOk, $wbPlotChronicleOk, $wbPlotSaveOk, $wbT1SciCapped, $wbNotablesOk, $wbFullSaveOk, $spDropsLanded, $spUplifted, $spProjectiles, $spShips, $spPlots, $spHistLen, $spSaveOk, $evoAudioOk, $evoCodexOk, $evoMagnetOk, $evoTheologyOk, $evoAvatarOk, $evoAmphibOk, $evoScenarioOk)
 }
 finally {
     Stop-StrayGodot

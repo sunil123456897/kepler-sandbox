@@ -10,6 +10,8 @@ signal follow_requested(kind: String, entity_id: int, world_pos: Vector2)
 signal possess_requested(unit_uid: int)
 signal pin_requested()
 signal architect_mood_changed(mood_id: int, palette: Dictionary)
+signal scenario_requested(scenario_id: int)
+signal focus_ping_requested(world_pos: Vector2, col: Color, zoom_floor: float)
 
 const UI_ATLAS_PNG_PATH: String = "res://assets/atlases/ui_icons_atlas.png"
 const UI_ATLAS_JSON_PATH: String = "res://assets/atlases/ui_icons_atlas.json"
@@ -52,7 +54,7 @@ const TOOL_BOSS_NECRO: int = 312
 const TOOL_BOSS_COLOSSUS: int = 313
 
 const TOOL_MAGNET: int = 400
-const TOOL_FLICK: int = 401
+const TOOL_FLICK: int = 401 # Deprecated alias merged into TOOL_MAGNET (kept until Wave 2 main.gd cleanup)
 const TOOL_TRAIT_RAIN: int = 402
 const TOOL_GEAR_RAIN: int = 403
 const TOOL_MONOLITH: int = 404
@@ -109,46 +111,45 @@ const WINDOW_DEFS: Array[Dictionary] = [
 	{"id": WIN_WARS, "icon": "win_wars", "label": "Войны", "title": "ВОЙНЫ И АЛЬЯНСЫ", "tip": "Активные войны, потери, счёт и альянсы"},
 	{"id": WIN_LOG, "icon": "win_log", "label": "Хроника", "title": "ХРОНИКА СЕКТОРА", "tip": "Полный фильтруемый журнал до 200 событий"},
 	{"id": WIN_GRAPHS, "icon": "win_graphs", "label": "Графики", "title": "ИСТОРИЧЕСКИЕ ГРАФИКИ", "tip": "Динамика метрик мира на шкалах 10с / 60с / 600с"},
-	{"id": WIN_CODEX, "icon": "win_codex", "label": "Кодекс", "title": "КОДЕКС И МИР", "tip": "40 достижений, 9 настроений Архитектора и 8 шаблонов карты"},
+	{"id": WIN_CODEX, "icon": "win_codex", "label": "Кодекс", "title": "КОДЕКС И МИР", "tip": "40 достижений, 9 настроений Архитектора, 8 шаблонов и 4 сценария"},
 ]
 
 const BIOME_TOOL_DEFS: Array[Dictionary] = [
-	{"id": TOOL_BIOME_LUSH, "icon": "bio_seeder", "label": "Луга", "tip": "Биом Луга: плодородная зелёная почва"},
-	{"id": TOOL_BIOME_XENO, "icon": "xeno_virus", "label": "Ксенолес", "tip": "Биом Ксено-джунгли: густая ксенофлора"},
-	{"id": TOOL_BIOME_CRYO, "icon": "lens_biomes", "label": "Тундра", "tip": "Биом Крио-тундра: ледяные хвойники"},
-	{"id": TOOL_BIOME_ACID, "icon": "geyser", "label": "Кислота", "tip": "Биом Кислотные пустоши: едкая флора"},
-	{"id": TOOL_BIOME_DUNES, "icon": "terraform", "label": "Дюны", "tip": "Биом Силикатные дюны: сухие пески"},
-	{"id": TOOL_BIOME_OASIS, "icon": "crystal", "label": "Оазис", "tip": "Биом Биолюм-оазис: светящиеся споры"},
-	{"id": TOOL_BIOME_SCORCHED, "icon": "fire", "label": "Пустошь", "tip": "Биом Выжженная пустошь: пепел и скалы"},
-	{"id": TOOL_BIOME_CREEP_MYC, "icon": "spore", "label": "Мицелий", "tip": "Крип-биом Мицелий: расползается от узлов"},
-	{"id": TOOL_BIOME_CREEP_CYBER, "icon": "ai_glitch", "label": "Киберкрип", "tip": "Крип-биом Кибер-сеть: техногенный крип"},
+	{"id": TOOL_BIOME_LUSH, "icon": "bio_seeder", "label": "Луга", "tip": "Биом Луга: плодородная зелёная почва — основа для ферм и рощ"},
+	{"id": TOOL_BIOME_XENO, "icon": "xeno_virus", "label": "Ксенолес", "tip": "Биом Ксено-джунгли: густая ксенофлора, питает рои и хищников"},
+	{"id": TOOL_BIOME_CRYO, "icon": "lens_biomes", "label": "Тундра", "tip": "Биом Крио-тундра: охлаждает кору и замораживает каналы в лёд"},
+	{"id": TOOL_BIOME_ACID, "icon": "geyser", "label": "Кислота", "tip": "Биом Кислотные пустоши: едкая флора и агрессивные мутации"},
+	{"id": TOOL_BIOME_DUNES, "icon": "terraform", "label": "Дюны", "tip": "Биом Силикатные дюны: сухие пески, орошаются каналами и дождём"},
+	{"id": TOOL_BIOME_OASIS, "icon": "crystal", "label": "Оазис", "tip": "Биом Биолюм-оазис: светящиеся споры, лечит и питает ноосферу"},
+	{"id": TOOL_BIOME_SCORCHED, "icon": "fire", "label": "Пустошь", "tip": "Биом Выжженная пустошь: пепел и угли (Био-посев растит на пепле рощи)"},
+	{"id": TOOL_BIOME_CREEP_MYC, "icon": "spore", "label": "Мицелий", "tip": "Крип-биом Мицелий: расползается от узлов, ослабляется осушением и огнём"},
+	{"id": TOOL_BIOME_CREEP_CYBER, "icon": "ai_glitch", "label": "Киберкрип", "tip": "Крип-биом Кибер-сеть: техногенный крип, усиливает роботов и ИИ-узлы"},
 ]
 
 const FAUNA_TOOL_DEFS: Array[Dictionary] = [
-	{"id": TOOL_FAUNA_HERBIVORE, "icon": "tab_fauna", "label": "Травоядн.", "tip": "Выпустить мирную/водную фауну (нажмите ещё раз или правее для смены вида)"},
-	{"id": TOOL_FAUNA_PREDATOR, "icon": "xeno_virus", "label": "Хищники", "tip": "Выпустить хищных зверей (волк, медведь, раптор, кроко, скорпион)"},
-	{"id": TOOL_FAUNA_INSECT, "icon": "bio_seeder", "label": "Рой", "tip": "Выпустить рои опылителей (пчела, жук, светляк)"},
-	{"id": TOOL_BOSS_LEVIATHAN, "icon": "fire", "label": "Левиафан", "tip": "Мега-босс: Ксено-Левиафан с огненным дыханием"},
-	{"id": TOOL_BOSS_UFO, "icon": "orbital", "label": "Дрон-НЛО", "tip": "Мега-босс: Орбитальный Дрон-Разрушитель"},
-	{"id": TOOL_BOSS_NECRO, "icon": "diplo", "label": "Технонекр", "tip": "Мега-босс: Техно-Некромант (поднимает мутантов)"},
-	{"id": TOOL_BOSS_COLOSSUS, "icon": "robot", "label": "Колосс", "tip": "Мега-босс: Кибер-Колосс"},
+	{"id": TOOL_FAUNA_HERBIVORE, "icon": "tab_fauna", "label": "Травоядные", "tip": "Выпустить мирную или водную фауну (повторный клик меняет подвид)"},
+	{"id": TOOL_FAUNA_PREDATOR, "icon": "xeno_virus", "label": "Хищники", "tip": "Выпустить хищников (волк, медведь, раптор, крокодил, скорпион) — охотятся на стаи"},
+	{"id": TOOL_FAUNA_INSECT, "icon": "bio_seeder", "label": "Рой", "tip": "Выпустить рои опылителей (пчела, жук, светляк) — разносят споры и пыльцу"},
+	{"id": TOOL_BOSS_LEVIATHAN, "icon": "fire", "label": "Левиафан", "tip": "Мега-босс Ксено-Левиафан: огненное дыхание; вынуждает врагов к перемирию перед угрозой"},
+	{"id": TOOL_BOSS_UFO, "icon": "orbital", "label": "Дрон-НЛО", "tip": "Мега-босс Орбитальный Дрон: сбрасывает вражеские капсулы и прощупывает ПВО"},
+	{"id": TOOL_BOSS_NECRO, "icon": "diplo", "label": "Технонекр", "tip": "Мега-босс Техно-Некромант: поднимает павших в мутантов"},
+	{"id": TOOL_BOSS_COLOSSUS, "icon": "robot", "label": "Колосс", "tip": "Мега-босс Кибер-Колосс: тяжёлый таран и пробой укреплений"},
 ]
 
 const CREATOR_TOOL_DEFS: Array[Dictionary] = [
-	{"id": TOOL_MAGNET, "icon": "magnet", "label": "Магнит", "tip": "Грави-магнит: захват, перенос и бросок отряда"},
-	{"id": TOOL_FLICK, "icon": "flick", "label": "Щелчок", "tip": "Кинетический щелчок: отбросить юнитов импульсом"},
-	{"id": TOOL_TRAIT_RAIN, "icon": "trait_rain", "label": "Дождь черт", "tip": "Орбитальный дождь биочипов на юнитов"},
-	{"id": TOOL_GEAR_RAIN, "icon": "gear_rain", "label": "Дождь снаряг", "tip": "Сброс оружия, брони и модулей на бойцов"},
-	{"id": TOOL_MONOLITH, "icon": "monolith", "label": "Монолит", "tip": "Обелиск Возвышения: превращает фауну в разумный подвид"},
-	{"id": TOOL_GREY_GOO, "icon": "grey_goo", "label": "Серая слизь", "tip": "Нано-слизь: поглощает сушу до шельфа"},
-	{"id": TOOL_CONWAY, "icon": "conway", "label": "Conway", "tip": "Квантовый клеточный автомат Conway B3/S23"},
-	{"id": TOOL_BOMB, "icon": "bomb", "label": "Бомба", "tip": "Плазмо-бомба с цепной детонацией"},
-	{"id": TOOL_TORNADO, "icon": "tornado", "label": "Торнадо", "tip": "Блуждающий мега-вихрь стихии"},
-	{"id": TOOL_EARTHQUAKE, "icon": "earthquake", "label": "Землетряс.", "tip": "Тектонический разлом земной коры"},
-	{"id": TOOL_GEYSER, "icon": "geyser", "label": "Гейзер", "tip": "Открыть паровой или кислотный гейзер"},
-	{"id": TOOL_WALL, "icon": "wall", "label": "Стена", "tip": "Энергостена / Скальный барьер"},
-	{"id": TOOL_DRAIN, "icon": "drain", "label": "Осушитель", "tip": "Осушить воду, лаву или гарь"},
-	{"id": TOOL_ERASER, "icon": "eraser", "label": "Ластик", "tip": "Очистить тайлы, огонь, постройки или юнитов"},
+	{"id": TOOL_MAGNET, "icon": "magnet", "label": "Грави-длань", "tip": "Грави-длань: удержание — подъём отряда, движение — бросок через континенты, быстрый клик или Shift — ударная волна"},
+	{"id": TOOL_TRAIT_RAIN, "icon": "trait_rain", "label": "Дождь черт", "tip": "Орбитальный дождь биочипов: накладывает выбранную черту юнитам в зоне кисти"},
+	{"id": TOOL_GEAR_RAIN, "icon": "gear_rain", "label": "Арсенал", "tip": "Сброс оружия, брони и модулей выбранного тира бойцам колоний"},
+	{"id": TOOL_MONOLITH, "icon": "monolith", "label": "Монолит", "tip": "Обелиск Возвышения: превращает животных в разумный вид и сдвигает доктрину к Солярному культу"},
+	{"id": TOOL_GREY_GOO, "icon": "grey_goo", "label": "Нано-слизь", "tip": "Серая нано-слизь: поглощает сушу до шельфа — сдерживается энергостеной или осушением"},
+	{"id": TOOL_CONWAY, "icon": "conway", "label": "Conway", "tip": "Квантовый клеточный автомат Conway B3/S23: самораспространяющаяся реакция на суше"},
+	{"id": TOOL_BOMB, "icon": "bomb", "label": "Бомба", "tip": "Плазмо-бомба: кратер с углями и взрывная волна (Shift+ЛКМ — цепная детонация)"},
+	{"id": TOOL_TORNADO, "icon": "tornado", "label": "Торнадо", "tip": "Мега-вихрь: подхватывает юнитов, огонь в огненный смерч, воду в пар и радиацию бури"},
+	{"id": TOOL_EARTHQUAKE, "icon": "earthquake", "label": "Тектоника", "tip": "Тектонический разлом: вспарывает кору, сбивает постройки и поднимает ударную волну"},
+	{"id": TOOL_GEYSER, "icon": "geyser", "label": "Гейзер", "tip": "Гейзер: ЛКМ — паровой источник (охлаждается дождём); Shift+ЛКМ — кислотный гейзер"},
+	{"id": TOOL_WALL, "icon": "wall", "label": "Стена", "tip": "Барьер: ЛКМ — скальная стена; Shift+ЛКМ — энергостена против нано-слизи и штурмов"},
+	{"id": TOOL_DRAIN, "icon": "drain", "label": "Осушитель", "tip": "Осушитель: удаляет воду, лаву и гарь, гасит огонь и сдерживает крип"},
+	{"id": TOOL_ERASER, "icon": "eraser", "label": "Ластик", "tip": "Ластик: очищает тайлы, огонь, постройки, крип и юнитов в радиусе кисти"},
 ]
 
 const HERBIVORE_SPECIES: Array[Dictionary] = [
@@ -173,16 +174,20 @@ const INSECT_SPECIES: Array[Dictionary] = [
 ]
 
 const POSSESSION_CMDS: Array[Dictionary] = [
-	{"cmd": "walk", "key": "WASD", "label": "Шаг"},
-	{"cmd": "attack", "key": "ЛКМ", "label": "Атака"},
-	{"cmd": "special", "key": "E", "label": "Реликт"},
-	{"cmd": "yell", "key": "Space", "label": "Импульс"},
-	{"cmd": "dash", "key": "Shift", "label": "Рывок"},
-	{"cmd": "backstep", "key": "Q", "label": "Отскок"},
-	{"cmd": "jump", "key": "R", "label": "Прыжок"},
-	{"cmd": "kick", "key": "F", "label": "Удар"},
-	{"cmd": "talk", "key": "T", "label": "Речь"},
-	{"cmd": "exit", "key": "Esc", "label": "Выход ×"},
+	{"cmd": "walk", "key": "WASD", "label": "Шаг", "tip": "Перемещение Аватара [WASD / стрелки]"},
+	{"cmd": "attack", "key": "ЛКМ", "label": "Атака", "tip": "Фракционная атака курсором [ЛКМ]"},
+	{"cmd": "yell", "key": "Space", "label": "Волна", "tip": "Ударная волна вокруг Аватара, гасит вражеские снаряды [Space]"},
+	{"cmd": "special", "key": "E", "label": "Жест", "tip": "Мировой жест: подобрать реликт, сорвать заговор или основать лагерь [E]"},
+	{"cmd": "dash", "key": "Shift", "label": "Рывок", "tip": "Направленный рывок с тараном [Shift]"},
+	{"cmd": "rally", "key": "R", "label": "Свита", "tip": "Клич авангарда: созвать до 8 союзников в клин [R]"},
+	{"cmd": "exit", "key": "Esc", "label": "Выход", "tip": "Выйти из режима Аватара [Esc / P]"},
+]
+
+const DOCTRINE_NAMES_RU: Array[String] = [
+	"Нейтральная",
+	"Солярный культ",
+	"Техно-скептики",
+	"Стражи Орбиты",
 ]
 
 const TRAIT_DEFS: Array[Dictionary] = [
@@ -260,6 +265,41 @@ const MOOD_DEFS: Array[Dictionary] = [
 	{"id": 8, "key": "ethereal", "name": "Эфирный", "main": "#64F5DA", "text": "#E6FFF9", "border": "#36A896", "desc": "Мягкое мятное свечение ноосферы"},
 ]
 
+const SCENARIO_DEFS: Array[Dictionary] = [
+	{
+		"id": 0,
+		"template_id": 2,
+		"name": "Архипелаг Флотов",
+		"badge": "Флот и десанты",
+		"accent": "#45E9FF",
+		"desc": "3 островные державы T2 (Люди, Роботы, Споры) в активной войне — верфи, флот и десанты.",
+	},
+	{
+		"id": 1,
+		"template_id": 4,
+		"name": "Пробуждение Монолита",
+		"badge": "Кристаллы и фауна",
+		"accent": "#C275FF",
+		"desc": "Ударный кратер с кольцом кристаллов, стаями фауны, возвышением Монолита и 2 лагерями T1.",
+	},
+	{
+		"id": 2,
+		"template_id": 3,
+		"name": "Осада Левиафанов",
+		"badge": "ПВО и перемирие",
+		"accent": "#FFB347",
+		"desc": "Атолл с 2 цитаделями T3 (щиты и турели), Ионным штормом, Левиафаном и Дроном-НЛО.",
+	},
+	{
+		"id": 3,
+		"template_id": 5,
+		"name": "Раскол Кольца",
+		"badge": "Тотальная война",
+		"accent": "#FF5B6B",
+		"desc": "Тектонический разлом, очаг мицелия, тотальная война T3 и мятеж для ударов и Аватара [P].",
+	},
+]
+
 const TEMPLATE_DEFS: Array[Dictionary] = [
 	{"id": 0, "name": "Континенты", "desc": "Сбалансированные материки и проливы"},
 	{"id": 1, "name": "Пангея", "desc": "Единый сверхконтинент в океане"},
@@ -279,7 +319,7 @@ const CODEX_DEFS: Array[Dictionary] = [
 	{"id": "pop_300", "name": "Живая планета", "desc": "Население планеты достигло 300 юнитов", "cat": "Цивилизация"},
 	{"id": "tier_1", "name": "Кремний и железо", "desc": "Достигнут техно-уровень T1", "cat": "Наука"},
 	{"id": "tier_3", "name": "Биокупола Кеплера", "desc": "Достигнут техно-уровень T3", "cat": "Наука"},
-	{"id": "tier_5", "name": "Сингулярный зенит", "desc": "Достигнут максимальный уровень T5", "cat": "Наука"},
+	{"id": "tier_5", "name": "Орбитальный зенит", "desc": "Достигнут максимальный уровень T5", "cat": "Наука"},
 	{"id": "first_ship", "name": "Спуск на воду", "desc": "Построено первое судно или верфь", "cat": "Флот"},
 	{"id": "armada_5", "name": "Морская армада", "desc": "На воде одновременно 5+ кораблей", "cat": "Флот"},
 	{"id": "portal_jump", "name": "Квантовый мост", "desc": "Использованы квантовые врата", "cat": "Флот"},
@@ -311,7 +351,7 @@ const CODEX_DEFS: Array[Dictionary] = [
 	{"id": "cataclysm", "name": "Тектоника", "desc": "Вызовите торнадо, землетрясение или гейзер", "cat": "Стихии"},
 	{"id": "mood_shift", "name": "Смена палитры", "desc": "Переключите Настроение Архитектора", "cat": "Архитектор"},
 	{"id": "world_builder", "name": "Картограф", "desc": "Сгенерируйте планету по шаблону", "cat": "Архитектор"},
-	{"id": "forbidden_core", "name": "Запретный Протокол", "desc": "Открыто 12+ записей Кодекса — доступ к чёрной сингулярности", "cat": "Запрет"},
+	{"id": "forbidden_core", "name": "Запретный Протокол", "desc": "Открыто 12+ записей Кодекса — доступ к чёрной бездне", "cat": "Запрет"},
 ]
 
 var _hud_root: Node
@@ -434,6 +474,13 @@ var _last_log_count: int = -1
 var _last_codex_count: int = -1
 var _last_viewport_size: Vector2 = Vector2.ZERO
 var _tweens: Array[Tween] = []
+var _live_unit_widgets: Dictionary = {}
+var _live_city_widgets: Dictionary = {}
+var _live_wars_widgets: Dictionary = {}
+var _live_unit_pos: Vector2 = Vector2(320.0, 180.0)
+var _live_city_pos: Vector2 = Vector2(320.0, 180.0)
+var _codex_subtab_btns: Array[Button] = []
+var _local_follow_active: bool = false
 
 
 func setup(hud_root: Node, host_refs: Dictionary) -> void:
@@ -480,11 +527,17 @@ func dispose() -> void:
 	_legacy_speed_btns.clear()
 	_legacy_tab_btns.clear()
 	_legacy_groups.clear()
+	_live_unit_widgets.clear()
+	_live_city_widgets.clear()
+	_live_wars_widgets.clear()
+	_codex_subtab_btns.clear()
 	_cur_unit_info.clear()
 	_cur_city_info.clear()
 	_unlocked_codex.clear()
 	_lenses_seen.clear()
 	_fallback_history.clear()
+	if _laws_ui != null and _laws_ui.has_method("set_modal_close_callback"):
+		_laws_ui.call("set_modal_close_callback", Callable())
 	_scroll_theme = null
 	_style_panel = null
 	_style_modal = null
@@ -531,6 +584,25 @@ func has_open_modal() -> bool:
 	return _active_window_id >= 0
 
 
+func is_modal_open() -> bool:
+	return _active_window_id >= 0 and _modal_panel != null and _modal_panel.visible
+
+
+func get_win_rail_buttons() -> Dictionary:
+	return _win_rail_btns.duplicate()
+
+
+func open_scenario_picker() -> void:
+	_codex_subtab = 2
+	if _active_window_id == WIN_CODEX and _modal_panel != null and _modal_panel.visible:
+		_refresh_active_window_contents()
+		sync_layouts()
+		return
+	if _active_window_id == WIN_CODEX:
+		_active_window_id = -1
+	open_window(WIN_CODEX)
+
+
 func refresh_live(dt: float) -> void:
 	if _hud_root == null:
 		return
@@ -546,6 +618,7 @@ func refresh_live(dt: float) -> void:
 	if _live_accum < 0.25:
 		return
 	_live_accum = 0.0
+	_sync_follow_btn_state()
 	_scan_passive_codex()
 	_refresh_open_modal_live()
 
@@ -562,24 +635,43 @@ func _refresh_open_modal_live() -> void:
 			return
 		var cur_log_n: int = _get_chronicle_count()
 		if cur_log_n != _last_log_count:
+			var prev_s: int = _modal_scroll.scroll_vertical if _modal_scroll != null else 0
 			_refresh_chronicle_list_only()
+			_restore_modal_scroll(prev_s)
 		return
 	if _active_window_id == WIN_CODEX:
 		if _unlocked_codex.size() != _last_codex_count:
-			_refresh_modal_preserving_scroll()
+			if _codex_subtab == 0:
+				_refresh_modal_preserving_scroll()
+			else:
+				_last_codex_count = _unlocked_codex.size()
+				if not _codex_subtab_btns.is_empty() and is_instance_valid(_codex_subtab_btns[0]):
+					_codex_subtab_btns[0].text = "Кодекс (%d/40)" % _unlocked_codex.size()
 		return
 	if _active_window_id == WIN_UNIT and _unit_rename_edit != null and is_instance_valid(_unit_rename_edit) and _unit_rename_edit.has_focus():
 		return
 	if _modal_refresh_accum < 0.75:
 		return
 	_modal_refresh_accum = 0.0
-	_refresh_modal_preserving_scroll()
+	if _active_window_id == WIN_UNIT:
+		_refresh_unit_modal_in_place()
+	elif _active_window_id == WIN_CITY:
+		_refresh_city_modal_in_place()
+	elif _active_window_id == WIN_WARS:
+		_refresh_wars_modal_in_place()
+	else:
+		_refresh_modal_preserving_scroll()
 
 
 func _refresh_modal_preserving_scroll() -> void:
 	var prev_scroll: int = _modal_scroll.scroll_vertical if _modal_scroll != null else 0
 	_refresh_active_window_contents()
-	if _modal_scroll != null:
+	_restore_modal_scroll(prev_scroll)
+
+
+func _restore_modal_scroll(prev_scroll: int) -> void:
+	if _modal_scroll != null and prev_scroll > 0:
+		_modal_scroll.scroll_vertical = prev_scroll
 		_modal_scroll.set_deferred("scroll_vertical", prev_scroll)
 
 
@@ -597,8 +689,10 @@ func update_selection_context(unit_info: Dictionary, city_info: Dictionary) -> v
 	_refresh_selected_bar()
 	_refresh_possession_bar()
 	_sync_bottom_context_positions()
-	if _active_window_id == WIN_UNIT or _active_window_id == WIN_CITY:
-		_refresh_active_window_contents()
+	if _active_window_id == WIN_UNIT:
+		_refresh_unit_modal_in_place()
+	elif _active_window_id == WIN_CITY:
+		_refresh_city_modal_in_place()
 
 
 func notify_chronicle_event(ev_kind: String) -> void:
@@ -727,11 +821,14 @@ func open_window(win_id: int) -> void:
 	if _active_window_id == clamped and _modal_panel != null and _modal_panel.visible:
 		close_window()
 		return
+	if _laws_ui != null and _laws_ui.has_method("set_laws_panel_open"):
+		_laws_ui.call("set_laws_panel_open", false)
 	_active_window_id = clamped
 	if _modal_backdrop != null:
 		_modal_backdrop.visible = true
 	if _modal_panel != null:
 		_modal_panel.visible = true
+	_sync_modal_z_order()
 	_sync_window_rail_buttons()
 	_sync_modal_tab_buttons()
 	_refresh_active_window_contents()
@@ -1066,8 +1163,38 @@ func _decorate_and_extend_bottom_dock() -> void:
 				btn.expand_icon = false
 			_attach_hover_motion(btn, float(cfg[1]))
 	_hook_legacy_dock_controls()
+	_apply_legacy_dock_tooltips()
 	_add_new_tabs_and_shapes()
 	_add_new_tool_groups()
+
+
+func _apply_legacy_dock_tooltips() -> void:
+	if _bottom_dock == null:
+		return
+	var tip_map: Dictionary = {
+		"DockCols/RowBottom/GroupEarth/BtnTerraform": "Поднять сушу и леса (ЛКМ) · Shift+ЛКМ: канал (замерзает в Крио-тундре) [1]",
+		"DockCols/RowBottom/GroupEarth/BtnCanal": "Прорыть канал до воды: орошает сушу, гасит лаву в камень и образует лёд на морозе [Alt+2]",
+		"DockCols/RowBottom/GroupEarth/BtnCrystal": "Энергокристаллы: притягивают разряды Ионного шторма и ускоряют науку колоний [2 / Alt+3]",
+		"DockCols/RowBottom/GroupEarth/BtnLava": "Магма и вулкан: плавит песок; с Дождём даёт камень, пар и плодородный чернозём [3 / Alt+4]",
+		"DockCols/RowBottom/GroupWeather/BtnRain": "Дождевой фронт: тушит пожары, охлаждает кратеры, на лаве рождает пар и плодородие [Alt+1]",
+		"DockCols/RowBottom/GroupWeather/BtnFirestorm": "Огненная буря: выжигает леса и подхватывается Вихрем в огненный смерч [Alt+2]",
+		"DockCols/RowBottom/GroupWeather/BtnIonStorm": "Ионный шторм: бьёт молниями по кристаллам и пилонам, даёт ЭМИ по роботам [Alt+3]",
+		"DockCols/RowBottom/GroupWar/BtnDiplo": "Дипломатическая искра: ЛКМ — удар по лояльности (-35%) и повод к войне; Shift+ЛКМ — мятеж [0 / Alt+1]",
+		"DockCols/RowBottom/GroupWar/BtnOrbitalStrike": "Орбитальный удар: сдвигает доктрину города к Техно-скептикам; перехватывается щитом [9 / Alt+2]",
+		"DockCols/RowBottom/GroupWar/BtnMeteor": "Метеорит: выбивает 3-зонный кратер с углями; сбивается батареями ПВО на T3+ [4 / Alt+3]",
+		"DockCols/RowBottom/GroupWar/BtnVortex": "Стихийный вихрь: переносит огонь, пар и радиацию; Shift+ЛКМ — ледяной вихрь -22°C [5 / Alt+4]",
+		"DockCols/RowBottom/GroupEvo/BtnAiGlitch": "ИИ-сбой: ЭМИ по роботам и турелям, падение лояльности и сдвиг к Техно-скептикам [Alt+1]",
+		"DockCols/RowBottom/GroupEvo/BtnXenoVirus": "Ксено-вирус: заражает юнитов мутациями и разносит эпидемию по контакту [Alt+2]",
+		"DockCols/RowBottom/GroupEvo/BtnBioSeeder": "Био-посев: на воде растит водоросли, на пепле — рощи, на кристаллах — споры, гасит огонь [Alt+3]",
+		"DockCols/RowBottom/BtnColony": "Основать готовую колонию выбранной фракции (лагерь + поселенцы) [6]",
+		"DockCols/RowBottom/BtnBless": "Благословение: ЛКМ — исцеление, ореол и сдвиг к Солярному культу; Shift+ЛКМ — мутация [7]",
+		"DockCols/RowBottom/BtnInspect": "Инспектор: клик по юниту, городу или руинам для слежения, Аватара [P] и закладок [B] [8 / Esc]",
+		"DockCols/RowBottom/BtnRegen": "Создать новую планету (2-кликовое подтверждение; 4 сценария — в Кодексе → Шаблоны)",
+	}
+	for rel_path in tip_map.keys():
+		var btn: Button = _bottom_dock.get_node_or_null(str(rel_path)) as Button
+		if btn != null:
+			btn.tooltip_text = str(tip_map[rel_path])
 
 
 func _hook_legacy_dock_controls() -> void:
@@ -1143,7 +1270,7 @@ func _add_new_tabs_and_shapes() -> void:
 		var tab_specs: Array[Dictionary] = [
 			{"id": TAB_BIOMES, "name": "BtnTabBiomes", "text": "Биомы", "icon": "tab_biomes", "tip": "Вкладка: 7 биомов и крип-покрытия"},
 			{"id": TAB_FAUNA, "name": "BtnTabFauna", "text": "Фауна", "icon": "tab_fauna", "tip": "Вкладка: травоядные, хищники, рои и боссы"},
-			{"id": TAB_CREATOR, "name": "BtnTabCreator", "text": "Творец", "icon": "tab_creator", "tip": "Вкладка: Магнит, Монолит, Conway, Grey Goo, стихии"},
+			{"id": TAB_CREATOR, "name": "BtnTabCreator", "text": "Творец", "icon": "tab_creator", "tip": "Вкладка: Грави-длань, Монолит, Conway, Нано-слизь, стихии"},
 		]
 		for spec in tab_specs:
 			var tbtn := Button.new()
@@ -1234,7 +1361,7 @@ func _add_new_tool_groups() -> void:
 
 	_creator_mod_btn = Button.new()
 	_creator_mod_btn.visible = false
-	_creator_mod_btn.tooltip_text = "Выбрать черту для Дождя черт или тир для Дождя снаряжения"
+	_creator_mod_btn.tooltip_text = "Выбрать черту для Дождя черт или тир для Арсенала"
 	_style_button(_creator_mod_btn, 10, _style_btn_gold)
 	_creator_mod_btn.pressed.connect(_on_cycle_creator_modifier)
 	row_bottom.add_child(_creator_mod_btn)
@@ -1242,6 +1369,7 @@ func _add_new_tool_groups() -> void:
 
 
 func _populate_tool_container(parent: Control, defs: Array[Dictionary], active_style: StyleBoxFlat) -> void:
+	var is_creator: bool = (parent == _group_creator)
 	for spec in defs:
 		var tid: int = int(spec["id"])
 		var btn := Button.new()
@@ -1249,6 +1377,8 @@ func _populate_tool_container(parent: Control, defs: Array[Dictionary], active_s
 		btn.toggle_mode = true
 		btn.tooltip_text = str(spec["tip"])
 		_style_button(btn, 10, active_style)
+		if is_creator:
+			btn.custom_minimum_size = Vector2(56.0, 20.0)
 		var tex: AtlasTexture = _get_icon(str(spec["icon"]))
 		if tex != null:
 			btn.icon = tex
@@ -1457,7 +1587,6 @@ func _build_left_rails() -> void:
 			btn.icon = ltex
 		btn.button_pressed = (lid == _active_lens_id)
 		btn.pressed.connect(_on_lens_clicked.bind(lid))
-		_attach_hover_motion(btn, 0.0)
 		l_vbox.add_child(btn)
 		_lens_btns[lid] = btn
 
@@ -1481,6 +1610,8 @@ func _build_left_rails() -> void:
 	w_hdr.add_child(w_title)
 	_codex_badge_lbl = Label.new()
 	_codex_badge_lbl.text = "0/40"
+	_codex_badge_lbl.custom_minimum_size = Vector2(30.0, 0.0)
+	_codex_badge_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_codex_badge_lbl.add_theme_font_size_override("font_size", 9)
 	_codex_badge_lbl.add_theme_color_override("font_color", Color("#FFB347"))
 	w_hdr.add_child(_codex_badge_lbl)
@@ -1489,7 +1620,7 @@ func _build_left_rails() -> void:
 		var wid: int = int(win["id"])
 		var wbtn := Button.new()
 		wbtn.text = str(win["label"])
-		wbtn.toggle_mode = true
+		wbtn.toggle_mode = false
 		wbtn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		wbtn.tooltip_text = str(win["tip"])
 		wbtn.custom_minimum_size = Vector2(92.0, 22.0)
@@ -1498,15 +1629,17 @@ func _build_left_rails() -> void:
 		if wtex != null:
 			wbtn.icon = wtex
 		wbtn.pressed.connect(open_window.bind(wid))
-		_attach_hover_motion(wbtn, 0.0)
 		w_vbox.add_child(wbtn)
 		_win_rail_btns[wid] = wbtn
+	_sync_window_rail_buttons()
 
 
 func _on_toggle_lens_collapse() -> void:
 	_lens_collapsed = not _lens_collapsed
 	if _lens_collapse_btn != null:
 		_lens_collapse_btn.text = "»" if _lens_collapsed else "«"
+	if _codex_badge_lbl != null:
+		_codex_badge_lbl.visible = not _lens_collapsed
 	for lens in LENS_DEFS:
 		var lid: int = int(lens["id"])
 		var btn: Button = _lens_btns.get(lid, null)
@@ -1541,8 +1674,12 @@ func _on_lens_clicked(lens_id: int) -> void:
 func _sync_window_rail_buttons() -> void:
 	for wid_v in _win_rail_btns.keys():
 		var wb: Button = _win_rail_btns[wid_v]
-		if wb != null:
-			wb.set_pressed_no_signal(int(wid_v) == _active_window_id)
+		if wb == null:
+			continue
+		var is_active: bool = (int(wid_v) == _active_window_id)
+		wb.add_theme_stylebox_override("normal", _style_btn_prs if is_active else _style_btn_norm)
+		wb.add_theme_stylebox_override("hover", _style_btn_prs if is_active else _style_btn_hov)
+		wb.add_theme_color_override("font_color", Color("#F8FCFF") if is_active else Color("#E4EEF7"))
 
 
 func _build_selection_and_possession_bars() -> void:
@@ -1577,8 +1714,8 @@ func _build_selection_and_possession_bars() -> void:
 	_sel_bars.clear()
 	var bar_specs: Array[Dictionary] = [
 		{"key": "hp", "label": "HP", "col": Color("#4BE898")},
-		{"key": "hunger", "label": "Сыт.", "col": Color("#FFB347")},
-		{"key": "moral", "label": "Мор.", "col": Color("#7CE7FF")},
+		{"key": "hunger", "label": "Сытость", "col": Color("#FFB347")},
+		{"key": "moral", "label": "Мораль", "col": Color("#7CE7FF")},
 		{"key": "shield", "label": "Щит", "col": Color("#A86BFF")},
 	]
 	for bs in bar_specs:
@@ -1592,6 +1729,8 @@ func _build_selection_and_possession_bars() -> void:
 
 	_sel_btn_follow = Button.new()
 	_sel_btn_follow.text = "Следить"
+	_sel_btn_follow.toggle_mode = true
+	_sel_btn_follow.tooltip_text = "Включить или выключить слежение камеры за объектом"
 	_style_button(_sel_btn_follow, 10, _style_btn_prs)
 	_sel_btn_follow.pressed.connect(_on_selected_follow)
 	row.add_child(_sel_btn_follow)
@@ -1603,7 +1742,7 @@ func _build_selection_and_possession_bars() -> void:
 	row.add_child(_sel_btn_possess)
 
 	_sel_btn_pin = Button.new()
-	_sel_btn_pin.text = "В закл. [B]"
+	_sel_btn_pin.text = "Закладка [B]"
 	_style_button(_sel_btn_pin, 10, _style_btn_prs)
 	_sel_btn_pin.pressed.connect(_on_selected_pin)
 	row.add_child(_sel_btn_pin)
@@ -1641,6 +1780,7 @@ func _build_possession_hints_bar() -> void:
 		var cmd: String = str(spec["cmd"])
 		var btn := Button.new()
 		btn.text = "[%s] %s" % [str(spec["key"]), str(spec["label"])]
+		btn.tooltip_text = str(spec.get("tip", ""))
 		_style_button(btn, 9, _style_btn_danger if cmd == "exit" else _style_btn_prs)
 		btn.pressed.connect(_on_possession_cmd_clicked.bind(cmd))
 		p_row.add_child(btn)
@@ -1650,7 +1790,7 @@ func _build_possession_hints_bar() -> void:
 func _create_micro_bar(parent: Control, title_str: String, fill_col: Color) -> Dictionary:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
-	box.custom_minimum_size = Vector2(54.0, 0.0)
+	box.custom_minimum_size = Vector2(64.0, 0.0)
 	parent.add_child(box)
 
 	var lbl := Label.new()
@@ -1660,7 +1800,7 @@ func _create_micro_bar(parent: Control, title_str: String, fill_col: Color) -> D
 	box.add_child(lbl)
 
 	var track := ColorRect.new()
-	track.custom_minimum_size = Vector2(54.0, 5.0)
+	track.custom_minimum_size = Vector2(64.0, 5.0)
 	track.color = Color(0.06, 0.10, 0.16, 0.95)
 	box.add_child(track)
 
@@ -1672,7 +1812,9 @@ func _create_micro_bar(parent: Control, title_str: String, fill_col: Color) -> D
 	return {"box": box, "track": track, "label": lbl, "title": title_str, "fill": fill, "color": fill_col}
 
 
-func _set_micro_bar_val(bar: Dictionary, ratio: float, val_txt: String) -> void:
+func _set_micro_bar_val(bar: Dictionary, ratio: float, val_txt: String, title_override: String = "") -> void:
+	if title_override != "":
+		bar["title"] = title_override
 	var lbl: Label = bar.get("label", null) as Label
 	var fill: ColorRect = bar.get("fill", null) as ColorRect
 	if lbl != null:
@@ -1723,18 +1865,18 @@ func _refresh_selected_bar() -> void:
 		var sat: float = float(_cur_unit_info.get("satiety", 100.0 - float(_cur_unit_info.get("hunger", 15.0))))
 		var mood_v: float = float(_cur_unit_info.get("mood", 75.0))
 		var sh_v: float = float(_cur_unit_info.get("shield", 100.0 if _unit_has_trait(_cur_unit_info, 6) else 0.0))
-		_set_micro_bar_val(_sel_bars[0], hp / max_hp, "%d" % int(round(hp)))
-		_set_micro_bar_val(_sel_bars[1], sat / 100.0, "%d%%" % int(round(clampf(sat, 0.0, 100.0))))
-		_set_micro_bar_val(_sel_bars[2], mood_v / 100.0, "%d%%" % int(round(clampf(mood_v, 0.0, 100.0))))
-		_set_micro_bar_val(_sel_bars[3], sh_v / 100.0, "%d%%" % int(round(clampf(sh_v, 0.0, 100.0))))
+		_set_micro_bar_val(_sel_bars[0], hp / max_hp, "%d/%d" % [int(round(hp)), int(round(max_hp))], "HP")
+		_set_micro_bar_val(_sel_bars[1], sat / 100.0, "%d%%" % int(round(clampf(sat, 0.0, 100.0))), "Сытость")
+		_set_micro_bar_val(_sel_bars[2], mood_v / 100.0, "%d%%" % int(round(clampf(mood_v, 0.0, 100.0))), "Мораль")
+		_set_micro_bar_val(_sel_bars[3], sh_v / 100.0, "%d%%" % int(round(clampf(sh_v, 0.0, 100.0))), "Щит")
 		_sel_btn_possess.disabled = false
 		_sel_btn_possess.text = "Выйти [P]" if _is_possessing_active() else "Аватар [P]"
 	else:
 		_sel_title_lbl.text = str(_cur_city_info.get("name", "Колония"))
-		_sel_sub_lbl.text = "%s · Т%d/5 · Нас:%d" % [
+		_sel_sub_lbl.text = "%s · Т%d/5 · %s" % [
 			str(_cur_city_info.get("faction_name", "")),
 			int(_cur_city_info.get("tech_tier", 0)),
-			int(_cur_city_info.get("pop", 0)),
+			_resolve_doctrine_label(_cur_city_info),
 		]
 		_sel_badge_dot.color = _faction_color(int(_cur_city_info.get("faction", 0)))
 		var pop_f: float = float(_cur_city_info.get("pop", 0))
@@ -1742,12 +1884,34 @@ func _refresh_selected_bar() -> void:
 		var food_f: float = float(_cur_city_info.get("food", 0.0))
 		var loy_f: float = float(_cur_city_info.get("loyalty", 100.0))
 		var has_sh: bool = bool(_cur_city_info.get("has_shield", false))
-		_set_micro_bar_val(_sel_bars[0], pop_f / cap_f, "%d/%d" % [int(pop_f), int(cap_f)])
-		_set_micro_bar_val(_sel_bars[1], minf(food_f / 120.0, 1.0), "%d" % int(round(food_f)))
-		_set_micro_bar_val(_sel_bars[2], loy_f / 100.0, "%d%%" % int(round(loy_f)))
-		_set_micro_bar_val(_sel_bars[3], 1.0 if has_sh else 0.0, "ВКЛ" if has_sh else "НЕТ")
+		_set_micro_bar_val(_sel_bars[0], pop_f / cap_f, "%d/%d" % [int(pop_f), int(cap_f)], "Нас.")
+		_set_micro_bar_val(_sel_bars[1], minf(food_f / 120.0, 1.0), "%d" % int(round(food_f)), "Еда")
+		_set_micro_bar_val(_sel_bars[2], loy_f / 100.0, "%d%%" % int(round(loy_f)), "Лоял.")
+		_set_micro_bar_val(_sel_bars[3], 1.0 if has_sh else 0.0, "ВКЛ" if has_sh else "ВЫКЛ", "Щит")
 		_sel_btn_possess.disabled = true
 		_sel_btn_possess.text = "Аватар [P]"
+	_sync_follow_btn_state()
+
+
+func _is_follow_active_for_selection() -> bool:
+	if _main != null:
+		if bool(_cur_unit_info.get("found", false)):
+			var uid: int = int(_cur_unit_info.get("uid", -1))
+			var lu: Variant = _main.get("_locked_unit_uid")
+			var fl: Variant = _main.get("_follow_locked_unit")
+			return bool(fl) and lu != null and int(lu) == uid
+		if bool(_cur_city_info.get("found", false)):
+			var cf: Variant = _main.get("_cam_focus_active")
+			return bool(cf)
+	return _local_follow_active
+
+
+func _sync_follow_btn_state() -> void:
+	if _sel_btn_follow == null:
+		return
+	var following: bool = _is_follow_active_for_selection()
+	_sel_btn_follow.set_pressed_no_signal(following)
+	_sel_btn_follow.text = "Слежу" if following else "Следить"
 
 
 func _refresh_possession_bar() -> void:
@@ -1767,6 +1931,15 @@ func _on_selected_details() -> void:
 
 
 func _on_selected_follow() -> void:
+	if _is_follow_active_for_selection():
+		_local_follow_active = false
+		if _main != null:
+			_main.set("_follow_locked_unit", false)
+			_main.set("_cam_focus_active", false)
+		_sync_follow_btn_state()
+		_play_ui_sfx("ui")
+		return
+	_local_follow_active = true
 	if bool(_cur_unit_info.get("found", false)):
 		var uid: int = int(_cur_unit_info.get("uid", -1))
 		var pos: Vector2 = _cur_unit_info.get("pos", Vector2(320.0, 180.0))
@@ -1781,6 +1954,7 @@ func _on_selected_follow() -> void:
 		if follow_requested.get_connections().is_empty() and _main != null:
 			_main.set("_cam_focus_target", cpos)
 			_main.set("_cam_focus_active", true)
+	_sync_follow_btn_state()
 	_play_ui_sfx("ui")
 
 
@@ -1802,6 +1976,7 @@ func _on_selected_pin() -> void:
 
 
 func _on_selected_clear() -> void:
+	_local_follow_active = false
 	selection_cleared.emit()
 	if selection_cleared.get_connections().is_empty() and _main != null and _main.has_method("_clear_inspector_lock"):
 		_main.call("_clear_inspector_lock")
@@ -1820,14 +1995,19 @@ func _on_possession_cmd_clicked(cmd: String) -> void:
 		_refresh_possession_bar()
 		_play_ui_sfx("ui")
 		return
-	if _physics != null and _physics.has_method("trigger_possession_command"):
-		_physics.call("trigger_possession_command", cmd)
-	elif cmd == "special" and _main != null:
+	if cmd == "special" and _main != null:
 		_main.set("_possess_alt_queued", true)
 	elif cmd == "yell" and _main != null:
 		_main.set("_possess_pulse_queued", true)
 	elif cmd == "attack" and _main != null:
 		_main.set("_possess_action_queued", true)
+	elif cmd == "dash" and _physics != null and _physics.has_method("avatar_dash"):
+		var dash_dir: Vector2 = _cur_unit_info.get("vel", Vector2.RIGHT)
+		if dash_dir.length_squared() < 0.01:
+			dash_dir = Vector2.RIGHT
+		_physics.call("avatar_dash", dash_dir.normalized())
+	elif cmd == "rally" and _physics != null and _physics.has_method("avatar_rally"):
+		_physics.call("avatar_rally")
 	_play_ui_sfx("ui")
 
 
@@ -1868,6 +2048,20 @@ func _build_modal_shell() -> void:
 	_modal_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_modal_body.add_theme_constant_override("separation", 8)
 	_modal_scroll.add_child(_modal_body)
+	_sync_modal_z_order()
+
+
+func _sync_modal_z_order() -> void:
+	if _hud_root == null or _modal_backdrop == null or _modal_panel == null:
+		return
+	if _modal_backdrop.get_parent() == _hud_root:
+		_hud_root.move_child(_modal_backdrop, _hud_root.get_child_count() - 1)
+	if _lens_panel != null and _lens_panel.get_parent() == _hud_root:
+		_hud_root.move_child(_lens_panel, _hud_root.get_child_count() - 1)
+	if _win_panel != null and _win_panel.get_parent() == _hud_root:
+		_hud_root.move_child(_win_panel, _hud_root.get_child_count() - 1)
+	if _modal_panel.get_parent() == _hud_root:
+		_hud_root.move_child(_modal_panel, _hud_root.get_child_count() - 1)
 
 
 func _build_modal_header(parent: VBoxContainer) -> void:
@@ -1991,6 +2185,10 @@ func _clear_modal_body() -> void:
 	_log_list_box = null
 	_graph_canvas = null
 	_log_filter_btns.clear()
+	_live_unit_widgets.clear()
+	_live_city_widgets.clear()
+	_live_wars_widgets.clear()
+	_codex_subtab_btns.clear()
 	for child in _modal_body.get_children():
 		_modal_body.remove_child(child)
 		child.queue_free()
@@ -2051,9 +2249,10 @@ func _resolve_active_unit_dict() -> Dictionary:
 func _build_unit_window() -> void:
 	var u: Dictionary = _resolve_active_unit_dict()
 	if not bool(u.get("found", false)):
-		_add_empty_notice(_modal_body, "Юнит не выбран. Кликните по существу инструментом Инсп или нажмите > для поиска.")
+		_add_empty_notice(_modal_body, "Юнит не выбран. Кликните по существу инструментом Инспектор или нажмите > для поиска.")
 		return
 	var uid: int = int(u.get("uid", -1))
+	_live_unit_pos = u.get("pos", Vector2(320.0, 180.0))
 	var name_row := HBoxContainer.new()
 	name_row.add_theme_constant_override("separation", 6)
 	_modal_body.add_child(name_row)
@@ -2080,15 +2279,72 @@ func _build_unit_window() -> void:
 	var btn_focus := Button.new()
 	btn_focus.text = "Камера"
 	_style_button(btn_focus, 10, _style_btn_prs)
-	var upos: Vector2 = u.get("pos", Vector2(320.0, 180.0))
-	btn_focus.pressed.connect(_focus_camera_on.bind(upos))
+	btn_focus.pressed.connect(_on_live_unit_focus.bind(uid))
 	name_row.add_child(btn_focus)
 
-	_add_unit_stats_section(u)
-	_add_unit_traits_section(u, uid)
-	_add_unit_gear_section(u)
-	_add_unit_genes_section(u)
+	_live_unit_widgets = {
+		"uid": uid,
+		"faction": int(u.get("faction", 0)),
+		"mem_count": _extract_unit_memory_lines(u).size(),
+		"stats_labels": _add_unit_stats_section(u),
+		"trait_btns": _add_unit_traits_section(u, uid),
+		"gear_labels": _add_unit_gear_section(u),
+		"gene_bars": _add_unit_genes_section(u),
+	}
 	_add_unit_memory_section(u)
+
+
+func _on_live_unit_focus(uid: int) -> void:
+	var pos: Vector2 = _live_unit_pos
+	if uid >= 0 and _physics != null and _physics.has_method("get_unit_follow_pos"):
+		var live_p: Variant = _physics.call("get_unit_follow_pos", uid)
+		if live_p is Vector2 and (live_p as Vector2).x >= 0.0:
+			pos = live_p as Vector2
+	var fac_id: int = int(_live_unit_widgets.get("faction", _cur_unit_info.get("faction", 0)))
+	var col: Color = _faction_color(fac_id)
+	_focus_camera_on(pos, true, col)
+	if uid >= 0 and _main != null:
+		_main.set("_locked_unit_uid", uid)
+		_main.set("_locked_city_id", -1)
+		_main.set("_follow_locked_unit", true)
+		_main.set("_hud_sel_sig", "")
+
+
+func _refresh_unit_modal_in_place() -> void:
+	var u: Dictionary = _resolve_active_unit_dict()
+	var found: bool = bool(u.get("found", false))
+	var uid: int = int(u.get("uid", -1))
+	var mem_cnt: int = _extract_unit_memory_lines(u).size() if found else -1
+	if not found or _live_unit_widgets.is_empty() or uid != int(_live_unit_widgets.get("uid", -999)) or mem_cnt != int(_live_unit_widgets.get("mem_count", -1)):
+		_refresh_modal_preserving_scroll()
+		return
+	_live_unit_pos = u.get("pos", _live_unit_pos)
+	var stat_lines: Array[String] = _format_unit_stats_lines(u)
+	var stat_lbls: Array = _live_unit_widgets.get("stats_labels", [])
+	for i in range(mini(stat_lines.size(), stat_lbls.size())):
+		var lbl: Label = stat_lbls[i] as Label
+		if lbl != null and is_instance_valid(lbl):
+			lbl.text = stat_lines[i]
+	var trait_btns: Dictionary = _live_unit_widgets.get("trait_btns", {})
+	for tid_v in trait_btns.keys():
+		var tb: Button = trait_btns[tid_v] as Button
+		if tb != null and is_instance_valid(tb):
+			tb.set_pressed_no_signal(_unit_has_trait(u, int(tid_v)))
+	var gear_lbls: Array = _live_unit_widgets.get("gear_labels", [])
+	var raw_eq: Variant = u.get("equipment", [])
+	var slot_titles: Array[String] = ["Оружие", "Броня", "Модуль"]
+	for i in range(mini(3, gear_lbls.size())):
+		var glbl: Label = gear_lbls[i] as Label
+		if glbl != null and is_instance_valid(glbl):
+			var stxt: String = _format_unit_gear_slot(raw_eq, i, slot_titles[i])
+			glbl.text = "%s: %s" % [slot_titles[i], stxt]
+			glbl.add_theme_color_override("font_color", Color("#E4EEF7") if stxt != "— Пусто —" else Color("#7F96AC"))
+	var gene_bars: Array = _live_unit_widgets.get("gene_bars", [])
+	var raw_genes: Variant = u.get("genes", [])
+	var fac: int = int(u.get("faction", 0))
+	for i in range(mini(10, gene_bars.size())):
+		var gd: Dictionary = _format_unit_gene_entry(raw_genes, fac, i)
+		_set_micro_bar_val(gene_bars[i] as Dictionary, float(gd["ratio"]), str(gd["val_txt"]), str(gd["label"]))
 
 
 func _on_unit_name_submitted(new_text: String, uid: int) -> void:
@@ -2109,7 +2365,21 @@ func _on_unit_rename_btn(uid: int) -> void:
 		_on_unit_name_submitted(_unit_rename_edit.text, uid)
 
 
-func _add_unit_stats_section(u: Dictionary) -> void:
+func _format_unit_stats_lines(u: Dictionary) -> Array[String]:
+	return [
+		"Роль: %s" % str(u.get("role_name", "Скиталец")),
+		"Фракция: %s" % str(u.get("faction_name", "Люди")),
+		"Подвид: %s" % str(u.get("subspecies", u.get("faction_name", "Базовый"))),
+		"HP: %d / %d" % [int(round(float(u.get("hp", 100.0)))), int(round(float(u.get("max_hp", 100.0))))],
+		"Победы: %d · Уклонение: %d" % [int(u.get("kills", 0)), int(u.get("dodges", 0))],
+		"Настроение: %d%% · Голод: %d%%" % [int(round(float(u.get("mood", 75.0)))), int(round(float(u.get("hunger", 15.0))))],
+		"Радиация: %.2f" % float(u.get("rad_exposure", 0.0)),
+		"Урон: x%.2f" % float(u.get("dmg_mul", 1.0)),
+		"Задача: %s" % str(u.get("task_name", "Idle")),
+	]
+
+
+func _add_unit_stats_section(u: Dictionary) -> Array[Label]:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", _style_card)
 	_modal_body.add_child(card)
@@ -2118,27 +2388,19 @@ func _add_unit_stats_section(u: Dictionary) -> void:
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 4)
 	card.add_child(grid)
-	var lines: Array[String] = [
-		"Роль: %s" % str(u.get("role_name", "Скиталец")),
-		"Фракция: %s" % str(u.get("faction_name", "Люди")),
-		"Подвид: %s" % str(u.get("subspecies", u.get("faction_name", "Базовый"))),
-		"HP: %d / %d" % [int(round(float(u.get("hp", 100.0)))), int(round(float(u.get("max_hp", 100.0))))],
-		"Фраги: %d · Уклон: %d" % [int(u.get("kills", 0)), int(u.get("dodges", 0))],
-		"Настр.: %d%% · Голод: %d%%" % [int(round(float(u.get("mood", 75.0)))), int(round(float(u.get("hunger", 15.0))))],
-		"Радиация: %.2f" % float(u.get("rad_exposure", 0.0)),
-		"Урон x%.2f" % float(u.get("dmg_mul", 1.0)),
-		"Задача: %s" % str(u.get("task_name", "Idle")),
-	]
-	for s in lines:
+	var out_lbls: Array[Label] = []
+	for s in _format_unit_stats_lines(u):
 		var lbl := Label.new()
 		lbl.text = s
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lbl.add_theme_font_size_override("font_size", 11)
 		lbl.add_theme_color_override("font_color", Color("#E4EEF7"))
 		grid.add_child(lbl)
+		out_lbls.append(lbl)
+	return out_lbls
 
 
-func _add_unit_traits_section(u: Dictionary, uid: int) -> void:
+func _add_unit_traits_section(u: Dictionary, uid: int) -> Dictionary:
 	_add_section_header(_modal_body, "ЧЕРТЫ И БИОЧИПЫ (клик: выдать / снять)")
 	var grid := GridContainer.new()
 	grid.columns = 4
@@ -2146,6 +2408,7 @@ func _add_unit_traits_section(u: Dictionary, uid: int) -> void:
 	grid.add_theme_constant_override("v_separation", 4)
 	_modal_body.add_child(grid)
 
+	var out_btns: Dictionary = {}
 	for spec in TRAIT_DEFS:
 		var tid: int = int(spec["id"])
 		var has_t: bool = _unit_has_trait(u, tid)
@@ -2158,6 +2421,8 @@ func _add_unit_traits_section(u: Dictionary, uid: int) -> void:
 		_style_button(btn, 10, _style_btn_gold if tid == 35 else _style_btn_prs)
 		btn.pressed.connect(_on_unit_trait_toggled.bind(uid, tid))
 		grid.add_child(btn)
+		out_btns[tid] = btn
+	return out_btns
 
 
 func _on_unit_trait_toggled(uid: int, trait_id: int) -> void:
@@ -2170,46 +2435,72 @@ func _on_unit_trait_toggled(uid: int, trait_id: int) -> void:
 		mask = mask ^ (1 << trait_id)
 		_cur_unit_info["trait_mask"] = mask
 	_unlock_codex("trait_editor")
-	_refresh_active_window_contents()
+	_refresh_unit_modal_in_place()
 	_play_ui_sfx("ui_pin")
 
 
-func _add_unit_gear_section(u: Dictionary) -> void:
+func _format_unit_gear_slot(raw_eq: Variant, i: int, slot_title: String) -> String:
+	var slot_text: String = "— Пусто —"
+	if raw_eq is Array and i < (raw_eq as Array).size():
+		var entry: Variant = (raw_eq as Array)[i]
+		if entry is Dictionary:
+			var ed: Dictionary = entry as Dictionary
+			if not bool(ed.get("empty", false)):
+				var ename: String = str(ed.get("name", ""))
+				if ename != "" and ename != "Пусто":
+					var mat_n: String = str(ed.get("material_name", ""))
+					var rar_n: String = str(ed.get("rarity_name", "R%d" % int(ed.get("rarity", 0))))
+					slot_text = "%s\n[%s · %s · %d побед]" % [ename, mat_n, rar_n, int(ed.get("kills", 0))]
+		elif str(entry) != "":
+			slot_text = str(entry)
+	elif raw_eq is Dictionary and (raw_eq as Dictionary).has(slot_title):
+		slot_text = str((raw_eq as Dictionary)[slot_title])
+	return slot_text
+
+
+func _add_unit_gear_section(u: Dictionary) -> Array[Label]:
 	_add_section_header(_modal_body, "СНАРЯЖЕНИЕ (3 слота)")
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	_modal_body.add_child(row)
 	var slot_titles: Array[String] = ["Оружие", "Броня", "Модуль"]
 	var raw_eq: Variant = u.get("equipment", [])
+	var out_lbls: Array[Label] = []
 	for i in range(3):
 		var card := PanelContainer.new()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.add_theme_stylebox_override("panel", _style_card)
 		row.add_child(card)
-		var slot_text: String = "— Пусто —"
-		if raw_eq is Array and i < (raw_eq as Array).size():
-			var entry: Variant = (raw_eq as Array)[i]
-			if entry is Dictionary:
-				var ed: Dictionary = entry as Dictionary
-				if not bool(ed.get("empty", false)):
-					var ename: String = str(ed.get("name", ""))
-					if ename != "" and ename != "Пусто":
-						var mat_n: String = str(ed.get("material_name", ""))
-						var rar_n: String = str(ed.get("rarity_name", "R%d" % int(ed.get("rarity", 0))))
-						slot_text = "%s\n[%s · %s · %dф]" % [ename, mat_n, rar_n, int(ed.get("kills", 0))]
-			elif str(entry) != "":
-				slot_text = str(entry)
-		elif raw_eq is Dictionary and (raw_eq as Dictionary).has(slot_titles[i]):
-			slot_text = str((raw_eq as Dictionary)[slot_titles[i]])
+		var slot_text: String = _format_unit_gear_slot(raw_eq, i, slot_titles[i])
 		var lbl := Label.new()
 		lbl.text = "%s: %s" % [slot_titles[i], slot_text]
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lbl.add_theme_font_size_override("font_size", 10)
 		lbl.add_theme_color_override("font_color", Color("#E4EEF7") if slot_text != "— Пусто —" else Color("#7F96AC"))
 		card.add_child(lbl)
+		out_lbls.append(lbl)
+	return out_lbls
 
 
-func _add_unit_genes_section(u: Dictionary) -> void:
+func _format_unit_gene_entry(raw_genes: Variant, fac: int, i: int) -> Dictionary:
+	var val: float = float(1 + ((fac * 2 + i) % 4))
+	var g_label: String = GENE_LABELS[i]
+	var syn: bool = false
+	if raw_genes is Array and i < (raw_genes as Array).size():
+		var gv: Variant = (raw_genes as Array)[i]
+		if gv is Dictionary:
+			var gd: Dictionary = gv as Dictionary
+			g_label = str(gd.get("name", g_label))
+			val = float(gd.get("value", gd.get("val", val)))
+			syn = bool(gd.get("synergy", false))
+		else:
+			val = float(gv)
+	var ratio: float = clampf(val / 5.0, 0.0, 1.0) if val <= 6.0 else clampf(val / 100.0, 0.0, 1.0)
+	var val_txt: String = ("%d/5%s" % [int(round(val)), " ★" if syn else ""]) if val <= 6.0 else ("%d" % int(round(val)))
+	return {"label": g_label, "ratio": ratio, "val_txt": val_txt, "synergy": syn}
+
+
+func _add_unit_genes_section(u: Dictionary) -> Array[Dictionary]:
 	_add_section_header(_modal_body, "ГЕНОМ ПОДВИДА (10 локусов)")
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -2218,20 +2509,10 @@ func _add_unit_genes_section(u: Dictionary) -> void:
 	_modal_body.add_child(grid)
 	var raw_genes: Variant = u.get("genes", [])
 	var fac: int = int(u.get("faction", 0))
+	var out_bars: Array[Dictionary] = []
 	for i in range(10):
-		var val: float = float(1 + ((fac * 2 + i) % 4))
-		var g_label: String = GENE_LABELS[i]
-		var syn: bool = false
-		if raw_genes is Array and i < (raw_genes as Array).size():
-			var gv: Variant = (raw_genes as Array)[i]
-			if gv is Dictionary:
-				var gd: Dictionary = gv as Dictionary
-				g_label = str(gd.get("name", g_label))
-				val = float(gd.get("value", gd.get("val", val)))
-				syn = bool(gd.get("synergy", false))
-			else:
-				val = float(gv)
-		var bar := _create_micro_bar(grid, g_label, Color("#4BE898") if syn else Color("#7CE7FF"))
+		var gd: Dictionary = _format_unit_gene_entry(raw_genes, fac, i)
+		var bar := _create_micro_bar(grid, str(gd["label"]), Color("#4BE898") if bool(gd["synergy"]) else Color("#7CE7FF"))
 		var box_node: VBoxContainer = bar.get("box", null) as VBoxContainer
 		if box_node != null:
 			box_node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2239,13 +2520,12 @@ func _add_unit_genes_section(u: Dictionary) -> void:
 		if track_node != null:
 			track_node.custom_minimum_size = Vector2(180.0, 5.0)
 			track_node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var ratio: float = clampf(val / 5.0, 0.0, 1.0) if val <= 6.0 else clampf(val / 100.0, 0.0, 1.0)
-		var val_txt: String = ("%d/5%s" % [int(round(val)), " ★" if syn else ""]) if val <= 6.0 else ("%d" % int(round(val)))
-		_set_micro_bar_val(bar, ratio, val_txt)
+		_set_micro_bar_val(bar, float(gd["ratio"]), str(gd["val_txt"]))
+		out_bars.append(bar)
+	return out_bars
 
 
-func _add_unit_memory_section(u: Dictionary) -> void:
-	_add_section_header(_modal_body, "ВОСПОМИНАНИЯ (до 8 слотов)")
+func _extract_unit_memory_lines(u: Dictionary) -> Array[String]:
 	var mem_raw: Variant = u.get("memory", [])
 	var lines: Array[String] = []
 	if mem_raw is Array:
@@ -2253,6 +2533,12 @@ func _add_unit_memory_section(u: Dictionary) -> void:
 			var s: String = str(m).strip_edges()
 			if s != "":
 				lines.append(s)
+	return lines
+
+
+func _add_unit_memory_section(u: Dictionary) -> void:
+	_add_section_header(_modal_body, "ВОСПОМИНАНИЯ (до 8 слотов)")
+	var lines: Array[String] = _extract_unit_memory_lines(u)
 	if lines.is_empty():
 		_add_empty_notice(_modal_body, "У этого юнита пока нет значимых воспоминаний.")
 		return
@@ -2305,7 +2591,8 @@ func _build_city_window() -> void:
 		_add_empty_notice(_modal_body, "В секторе пока нет основанных колоний и держав.")
 		return
 	var cid: int = int(c.get("city_id", -1))
-	var c_pos: Vector2 = c.get("center", Vector2(320.0, 180.0))
+	_live_city_pos = c.get("center", Vector2(320.0, 180.0))
+	var cdata: Dictionary = _compute_city_display_data(c, cid)
 
 	var top_card := PanelContainer.new()
 	top_card.add_theme_stylebox_override("panel", _style_card)
@@ -2315,19 +2602,14 @@ func _build_city_window() -> void:
 	top_card.add_child(hbox)
 	var title_lbl := Label.new()
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_lbl.text = "%s (%s) · Держава: %s · Т%d/5" % [
-		str(c.get("name", "Колония")),
-		str(c.get("faction_name", "Люди")),
-		str(c.get("kingdom_name", "—")),
-		int(c.get("tech_tier", 0)),
-	]
+	title_lbl.text = str(cdata["title"])
 	title_lbl.add_theme_font_size_override("font_size", 12)
 	title_lbl.add_theme_color_override("font_color", Color("#7CE7FF"))
 	hbox.add_child(title_lbl)
 	var btn_cam := Button.new()
 	btn_cam.text = "К городу"
 	_style_button(btn_cam, 10, _style_btn_prs)
-	btn_cam.pressed.connect(_focus_camera_on.bind(c_pos))
+	btn_cam.pressed.connect(_on_live_city_focus.bind(int(c.get("faction", 0))))
 	hbox.add_child(btn_cam)
 
 	_add_section_header(_modal_body, "РЕСУРСЫ ГОРОДА И ТЕХНОЛОГИИ")
@@ -2335,14 +2617,8 @@ func _build_city_window() -> void:
 	res_grid.columns = 5
 	res_grid.add_theme_constant_override("h_separation", 8)
 	_modal_body.add_child(res_grid)
-	var res_items: Array[Array] = [
-		["Еда", int(round(float(c.get("food", 0.0))))],
-		["Руда", int(round(float(c.get("ore", 0.0))))],
-		["Энергия", int(round(float(c.get("energy", 0.0))))],
-		["Наука", int(round(float(c.get("science", 0.0))))],
-		["Кредиты", int(round(float(c.get("credits", 0.0))))],
-	]
-	for ri in res_items:
+	var res_lbls: Array[Label] = []
+	for ri in (cdata["res"] as Array):
 		var box := PanelContainer.new()
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		box.add_theme_stylebox_override("panel", _style_card)
@@ -2353,23 +2629,51 @@ func _build_city_window() -> void:
 		l.add_theme_font_size_override("font_size", 11)
 		l.add_theme_color_override("font_color", Color("#E4EEF7"))
 		box.add_child(l)
+		res_lbls.append(l)
 
-	_add_city_kingdom_meta_section(c, cid)
-	_add_city_roster_chips(c)
+	var meta_raw: Variant = cdata.get("meta_lines", [])
+	var meta_lbls: Array[Label] = _add_city_kingdom_meta_section(meta_raw if meta_raw is Array else [])
+	var city_chips: Array[Button] = _add_city_roster_chips(c)
+	_live_city_widgets = {
+		"city_id": cid,
+		"roster_count": _fetch_city_roster().size(),
+		"title_lbl": title_lbl,
+		"res_labels": res_lbls,
+		"meta_labels": meta_lbls,
+		"city_chips": city_chips,
+	}
 
 
-func _add_city_kingdom_meta_section(c: Dictionary, cid: int) -> void:
-	_add_section_header(_modal_body, "АРМИИ, КЛАН, НООСФЕРА И ДИПЛОМАТИЯ")
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _style_card)
-	_modal_body.add_child(card)
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
-	card.add_child(vbox)
+func _on_live_city_focus(fac_id: int) -> void:
+	_focus_camera_on(_live_city_pos, true, _faction_color(fac_id))
 
+
+func _fetch_city_roster() -> Array:
+	if _civ != null and _civ.has_method("get_city_roster"):
+		var raw: Variant = _civ.call("get_city_roster")
+		if raw is Array:
+			return raw as Array
+	return []
+
+
+func _compute_city_display_data(c: Dictionary, cid: int) -> Dictionary:
+	var title_s: String = "%s (%s) · Держава: %s · Т%d/5" % [
+		str(c.get("name", "Колония")),
+		str(c.get("faction_name", "Люди")),
+		str(c.get("kingdom_name", "—")),
+		int(c.get("tech_tier", 0)),
+	]
+	var res_items: Array[Array] = [
+		["Еда", int(round(float(c.get("food", 0.0))))],
+		["Руда", int(round(float(c.get("ore", 0.0))))],
+		["Энергия", int(round(float(c.get("energy", 0.0))))],
+		["Наука", int(round(float(c.get("science", 0.0))))],
+		["Кредиты", int(round(float(c.get("credits", 0.0))))],
+	]
 	var clan_n: String = str(c.get("clan_name", ""))
 	var cult_n: String = str(c.get("culture_name", ""))
 	var creed_n: String = str(c.get("creed_name", ""))
+	var doc_n: String = _resolve_doctrine_label(c)
 	var ships_n: int = int(c.get("ships", 0))
 	var armies_n: int = int(c.get("armies", c.get("army_count", 0)))
 	var kid: int = int(c.get("kingdom_id", -1))
@@ -2385,22 +2689,23 @@ func _add_city_kingdom_meta_section(c: Dictionary, cid: int) -> void:
 						cult_n = str(kd.get("culture_name", "Доктрина"))
 					if creed_n == "":
 						creed_n = str(kd.get("creed_name", "Гармония"))
+					if doc_n == "Нейтральная" and kd.has("doctrine"):
+						doc_n = _resolve_doctrine_label(kd)
 					ships_n = maxi(ships_n, int(kd.get("ships", 0)))
 					armies_n = maxi(armies_n, int(kd.get("armies", 0)))
 					break
+	var doc_heat_s: String = " (%+.0f)" % float(c.get("doctrine_heat", 0.0)) if c.has("doctrine_heat") else ""
 	var lines: Array[String] = [
-		"Население: %d / %d · Здания: %d (Доки:%d Каз:%d Тур:%d Арх:%d) · Стройка: %s" % [
+		"Население: %d / %d · Постройки: %d (Доки: %d · Казармы: %d · Турели: %d · Архивы: %d) · Проект: %s" % [
 			int(c.get("pop", 0)), int(c.get("housing_cap", 0)),
 			int(c.get("buildings", 0)), int(c.get("docks", 0)),
 			int(c.get("barracks", 0)), int(c.get("turrets", 0)),
 			int(c.get("archives", 0)), str(c.get("project", "Нет")),
 		],
-		"Армии и флот: Полки=%d · Корабли=%d · Энергия Δ=%.1f" % [
-			armies_n, ships_n, float(c.get("energy_net", 0.0)),
-		],
-		"Клан: %s · Культура: %s · Идеология: %s" % [
-			clan_n if clan_n != "" else "Основатели",
-			cult_n if cult_n != "" else "Доктрина Сектора",
+		"Армии: %d · Флот: %d · Энергия: %+.1f/с" % [armies_n, ships_n, float(c.get("energy_net", 0.0))],
+		"Доктрина свидетелей: %s%s · Клан: %s" % [doc_n, doc_heat_s, clan_n if clan_n != "" else "Основатели"],
+		"Культура: %s · Идеология: %s" % [
+			cult_n if cult_n != "" else "Культура Сектора",
 			creed_n if creed_n != "" else "Гармония Орбиты",
 		],
 		"Лояльность: %.0f%% (%s) · Войны: %d · Пакты: %d" % [
@@ -2411,13 +2716,65 @@ func _add_city_kingdom_meta_section(c: Dictionary, cid: int) -> void:
 		],
 	]
 	_append_city_diplomacy_lines(lines, cid)
-	for s in lines:
+	return {"title": title_s, "res": res_items, "meta_lines": lines}
+
+
+func _refresh_city_modal_in_place() -> void:
+	var c: Dictionary = _resolve_active_city_dict()
+	var found: bool = bool(c.get("found", false))
+	var cid: int = int(c.get("city_id", -1))
+	var roster: Array = _fetch_city_roster()
+	if not found or _live_city_widgets.is_empty() or cid != int(_live_city_widgets.get("city_id", -999)) or roster.size() != int(_live_city_widgets.get("roster_count", -1)):
+		_refresh_modal_preserving_scroll()
+		return
+	var cdata: Dictionary = _compute_city_display_data(c, cid)
+	var meta_raw: Variant = cdata.get("meta_lines", [])
+	var meta_lines: Array = meta_raw if meta_raw is Array else []
+	var meta_lbls: Array = _live_city_widgets.get("meta_labels", [])
+	if meta_lines.size() != meta_lbls.size():
+		_refresh_modal_preserving_scroll()
+		return
+	_live_city_pos = c.get("center", _live_city_pos)
+	var t_lbl: Label = _live_city_widgets.get("title_lbl", null) as Label
+	if t_lbl != null and is_instance_valid(t_lbl):
+		t_lbl.text = str(cdata["title"])
+	var res_lbls: Array = _live_city_widgets.get("res_labels", [])
+	var res_arr: Array = cdata["res"] as Array
+	for i in range(mini(res_arr.size(), res_lbls.size())):
+		var rl: Label = res_lbls[i] as Label
+		if rl != null and is_instance_valid(rl):
+			rl.text = "%s\n%d" % [str(res_arr[i][0]), int(res_arr[i][1])]
+	for i in range(meta_lines.size()):
+		var ml: Label = meta_lbls[i] as Label
+		if ml != null and is_instance_valid(ml):
+			ml.text = str(meta_lines[i])
+	var chips: Array = _live_city_widgets.get("city_chips", [])
+	for idx in range(mini(mini(roster.size(), 18), chips.size())):
+		var cb: Button = chips[idx] as Button
+		if cb != null and is_instance_valid(cb) and roster[idx] is Dictionary:
+			var d: Dictionary = roster[idx] as Dictionary
+			cb.text = "%s (%d)" % [str(d.get("name", "Город")), int(d.get("pop", 0))]
+			cb.set_pressed_no_signal(int(d.get("city_id", -2)) == cid)
+
+
+func _add_city_kingdom_meta_section(lines: Array) -> Array[Label]:
+	_add_section_header(_modal_body, "АРМИИ, ДОКТРИНА, НООСФЕРА И ДИПЛОМАТИЯ")
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _style_card)
+	_modal_body.add_child(card)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	card.add_child(vbox)
+	var out_lbls: Array[Label] = []
+	for s_v in lines:
 		var lbl := Label.new()
-		lbl.text = s
+		lbl.text = str(s_v)
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lbl.add_theme_font_size_override("font_size", 11)
 		lbl.add_theme_color_override("font_color", Color("#C5D6E6"))
 		vbox.add_child(lbl)
+		out_lbls.append(lbl)
+	return out_lbls
 
 
 func _append_city_diplomacy_lines(lines: Array[String], cid: int) -> void:
@@ -2452,12 +2809,11 @@ func _append_city_diplomacy_lines(lines: Array[String], cid: int) -> void:
 	])
 
 
-func _add_city_roster_chips(active_city: Dictionary) -> void:
-	if _civ == null or not _civ.has_method("get_city_roster"):
-		return
-	var raw: Variant = _civ.call("get_city_roster")
-	if not (raw is Array) or (raw as Array).is_empty():
-		return
+func _add_city_roster_chips(active_city: Dictionary) -> Array[Button]:
+	var out_chips: Array[Button] = []
+	var arr: Array = _fetch_city_roster()
+	if arr.is_empty():
+		return out_chips
 	_add_section_header(_modal_body, "ГОРОДА СЕКТОРА")
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -2465,20 +2821,21 @@ func _add_city_roster_chips(active_city: Dictionary) -> void:
 	grid.add_theme_constant_override("v_separation", 4)
 	_modal_body.add_child(grid)
 	var active_cid: int = int(active_city.get("city_id", -1))
-	var arr: Array = raw as Array
 	for idx in range(mini(arr.size(), 18)):
 		var item: Variant = arr[idx]
 		if not (item is Dictionary):
 			continue
 		var d: Dictionary = item as Dictionary
 		var btn := Button.new()
-		btn.text = "%s (Н:%d)" % [str(d.get("name", "Город")), int(d.get("pop", 0))]
+		btn.text = "%s (%d)" % [str(d.get("name", "Город")), int(d.get("pop", 0))]
 		btn.toggle_mode = true
 		btn.button_pressed = (int(d.get("city_id", -2)) == active_cid)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_style_button(btn, 10, _style_btn_prs)
 		btn.pressed.connect(_on_city_chip_picked.bind(idx, d))
 		grid.add_child(btn)
+		out_chips.append(btn)
+	return out_chips
 
 
 func _on_city_chip_picked(idx: int, city_d: Dictionary) -> void:
@@ -2490,23 +2847,103 @@ func _on_city_chip_picked(idx: int, city_d: Dictionary) -> void:
 func _build_wars_window() -> void:
 	var wars: Array = _fetch_wars_list()
 	var alliances: Array = _fetch_alliances_list()
-	_modal_counter_lbl.text = "В:%d · С:%d" % [wars.size(), alliances.size()]
+	var notables: Array = _fetch_notables_list()
+	var doc_maps: Dictionary = _build_doctrine_lookup_maps()
+	_modal_counter_lbl.text = "Войн: %d · Союзов: %d · Героев: %d" % [wars.size(), alliances.size(), notables.size()]
 
+	var war_btns: Array[Button] = []
 	_add_section_header(_modal_body, "АКТИВНЫЕ ВОЙНЫ (%d)" % wars.size())
 	if wars.is_empty():
 		_add_empty_notice(_modal_body, "В секторе сейчас царит мир — активных войн нет.")
 	else:
 		for w in wars:
 			if w is Dictionary:
-				_add_war_row(_modal_body, w as Dictionary)
+				war_btns.append(_add_war_row(_modal_body, w as Dictionary, doc_maps))
 
+	var ally_btns: Array[Button] = []
 	_add_section_header(_modal_body, "АЛЬЯНСЫ И СОЮЗЫ (%d)" % alliances.size())
 	if alliances.is_empty():
 		_add_empty_notice(_modal_body, "Междержавные альянсы пока не сформированы.")
 	else:
 		for al in alliances:
 			if al is Dictionary:
-				_add_alliance_row(_modal_body, al as Dictionary)
+				ally_btns.append(_add_alliance_row(_modal_body, al as Dictionary, doc_maps))
+
+	var notable_btns: Array[Button] = []
+	_add_section_header(_modal_body, "ГЕРОИ И НОТАБЛИ (%d)" % notables.size())
+	if notables.is_empty():
+		_add_empty_notice(_modal_body, "В секторе пока нет прославленных героев, пророков и лидеров.")
+	else:
+		for n_raw in notables:
+			if n_raw is Dictionary:
+				notable_btns.append(_add_notable_row(_modal_body, n_raw as Dictionary, doc_maps))
+
+	_live_wars_widgets = {
+		"wars_count": wars.size(),
+		"alliances_count": alliances.size(),
+		"notables_count": notables.size(),
+		"war_btns": war_btns,
+		"ally_btns": ally_btns,
+		"notable_btns": notable_btns,
+	}
+
+
+func _refresh_wars_modal_in_place() -> void:
+	var wars: Array = _fetch_wars_list()
+	var alliances: Array = _fetch_alliances_list()
+	var notables: Array = _fetch_notables_list()
+	if _live_wars_widgets.is_empty() or wars.size() != int(_live_wars_widgets.get("wars_count", -1)) or alliances.size() != int(_live_wars_widgets.get("alliances_count", -1)) or notables.size() != int(_live_wars_widgets.get("notables_count", -1)):
+		_refresh_modal_preserving_scroll()
+		return
+	_modal_counter_lbl.text = "Войн: %d · Союзов: %d · Героев: %d" % [wars.size(), alliances.size(), notables.size()]
+	var doc_maps: Dictionary = _build_doctrine_lookup_maps()
+	var war_btns: Array = _live_wars_widgets.get("war_btns", [])
+	for i in range(mini(wars.size(), war_btns.size())):
+		var wb: Button = war_btns[i] as Button
+		if wb != null and is_instance_valid(wb) and wars[i] is Dictionary:
+			var wd: Dictionary = wars[i] as Dictionary
+			wb.text = _format_war_row_text(wd, doc_maps)
+			wb.set_meta("_jump_pos", wd.get("pos", wd.get("focus_pos", Vector2(320.0, 180.0))))
+	var ally_btns: Array = _live_wars_widgets.get("ally_btns", [])
+	for i in range(mini(alliances.size(), ally_btns.size())):
+		var ab: Button = ally_btns[i] as Button
+		if ab != null and is_instance_valid(ab) and alliances[i] is Dictionary:
+			var ad: Dictionary = alliances[i] as Dictionary
+			ab.text = _format_alliance_row_text(ad, doc_maps)
+			ab.set_meta("_jump_pos", ad.get("pos", ad.get("focus_pos", Vector2(320.0, 180.0))))
+	var not_btns: Array = _live_wars_widgets.get("notable_btns", [])
+	for i in range(mini(notables.size(), not_btns.size())):
+		var nb: Button = not_btns[i] as Button
+		if nb != null and is_instance_valid(nb) and notables[i] is Dictionary:
+			var nd: Dictionary = notables[i] as Dictionary
+			nb.text = _format_notable_row_text(nd, doc_maps)
+			nb.set_meta("_jump_uid", int(nd.get("uid", -1)))
+			nb.set_meta("_jump_pos", nd.get("pos", Vector2(320.0, 180.0)))
+			nb.set_meta("_jump_col", _faction_color(int(nd.get("faction", 0))))
+
+
+func _fetch_notables_list() -> Array:
+	if _civ != null and _civ.has_method("get_notables_summary"):
+		var raw: Variant = _civ.call("get_notables_summary")
+		if raw is Array:
+			return raw as Array
+	return []
+
+
+func _build_doctrine_lookup_maps() -> Dictionary:
+	var by_city: Dictionary = {}
+	var by_kingdom: Dictionary = {}
+	for item in _fetch_city_roster():
+		if item is Dictionary:
+			var d: Dictionary = item as Dictionary
+			var doc_name: String = _resolve_doctrine_label(d)
+			var cid: int = int(d.get("city_id", -1))
+			var kid: int = int(d.get("kingdom_id", -1))
+			if cid >= 0:
+				by_city[cid] = doc_name
+			if kid >= 0 and (not by_kingdom.has(kid) or doc_name != "Нейтральная"):
+				by_kingdom[kid] = doc_name
+	return {"city": by_city, "kingdom": by_kingdom}
 
 
 func _fetch_wars_list() -> Array:
@@ -2555,35 +2992,130 @@ func _fetch_alliances_list() -> Array:
 	return fallback
 
 
-func _add_war_row(parent: Control, w: Dictionary) -> void:
-	var btn := Button.new()
+func _resolve_doctrine_from_val(val: Variant, fallback_kid: int, by_kid: Dictionary) -> String:
+	if val is int:
+		return DOCTRINE_NAMES_RU[clampi(int(val), 0, DOCTRINE_NAMES_RU.size() - 1)]
+	if val is String:
+		var s: String = str(val).strip_edges()
+		if s.is_valid_int():
+			return DOCTRINE_NAMES_RU[clampi(int(s), 0, DOCTRINE_NAMES_RU.size() - 1)]
+		if s != "":
+			return s
+	return str(by_kid.get(fallback_kid, "Нейтральная"))
+
+
+func _format_war_row_text(w: Dictionary, doc_maps: Dictionary) -> String:
 	var wtype: String = str(w.get("type_name", w.get("kind_name", w.get("type", "Война"))))
 	var atk: String = str(w.get("attacker_name", w.get("attackers", "Агрессор")))
 	var defn: String = str(w.get("defender_name", w.get("defenders", "Защитник")))
 	var score: float = float(w.get("score", 0.0))
 	var loss: int = int(w.get("casualties", 0))
 	var dur: float = float(w.get("duration", w.get("duration_sec", w.get("age_sec", 0.0))))
-	btn.text = "[%s] %s vs %s  |  Счёт: %+.0f · Потери: %d · %.0fс" % [wtype, atk, defn, score, loss, dur]
-	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.tooltip_text = "Клик: сфокусировать камеру на очаге войны"
-	_style_button(btn, 10, _style_btn_danger)
-	var fpos: Vector2 = w.get("pos", w.get("focus_pos", Vector2(320.0, 180.0)))
-	btn.pressed.connect(_focus_camera_on.bind(fpos))
-	parent.add_child(btn)
+	var by_kid: Dictionary = doc_maps.get("kingdom", {})
+	var doc_a: String = _resolve_doctrine_from_val(w.get("attacker_doctrine", null), int(w.get("main_attacker_kid", -1)), by_kid)
+	var doc_d: String = _resolve_doctrine_from_val(w.get("defender_doctrine", null), int(w.get("main_defender_kid", -1)), by_kid)
+	var doc_tail: String = ""
+	if doc_a != "Нейтральная" or doc_d != "Нейтральная":
+		doc_tail = " · [%s vs %s]" % [doc_a, doc_d]
+	return "[%s] %s vs %s%s  |  Счёт: %+.0f · Потери: %d · %.0fс" % [wtype, atk, defn, doc_tail, score, loss, dur]
 
 
-func _add_alliance_row(parent: Control, al: Dictionary) -> void:
-	var btn := Button.new()
+func _format_alliance_row_text(al: Dictionary, doc_maps: Dictionary) -> String:
 	var aname: String = str(al.get("name", "Альянс Сектора"))
 	var cnt: int = int(al.get("member_count", 2))
 	var age: float = float(al.get("age", al.get("age_sec", 0.0)))
-	btn.text = "%s  |  Держав: %d · Срок: %.0fс" % [aname, cnt, age]
+	var by_kid: Dictionary = doc_maps.get("kingdom", {})
+	var members: Variant = al.get("members", [])
+	var doc_tag: String = ""
+	if members is Array and not (members as Array).is_empty():
+		var first_doc: String = str(by_kid.get(int((members as Array)[0]), "Нейтральная"))
+		if first_doc != "Нейтральная":
+			doc_tag = " · Доктрина: %s" % first_doc
+	return "%s  |  Держав: %d%s · Срок: %.0fс" % [aname, cnt, doc_tag, age]
+
+
+func _format_notable_row_text(n: Dictionary, doc_maps: Dictionary) -> String:
+	var pin_mark: String = "★ " if bool(n.get("pinned", false)) else ""
+	var rk_name: String = str(n.get("rank_name", "Герой"))
+	var nname: String = str(n.get("name", "Безымянный"))
+	var by_city: Dictionary = doc_maps.get("city", {})
+	var doc_name: String = _resolve_doctrine_label(n) if n.has("doctrine") or n.has("doctrine_name") else str(by_city.get(int(n.get("city_id", -1)), "Нейтральная"))
+	var renown: int = int(n.get("renown", 0))
+	var relic: String = str(n.get("relic_name", "")).strip_edges()
+	var relic_tail: String = (" · Реликт: %s" % relic) if relic != "" else ""
+	return "%s[%s] %s · %s · Слава: %d%s" % [pin_mark, rk_name, nname, doc_name, renown, relic_tail]
+
+
+func _add_war_row(parent: Control, w: Dictionary, doc_maps: Dictionary) -> Button:
+	var btn := Button.new()
+	btn.text = _format_war_row_text(w, doc_maps)
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.tooltip_text = "Клик: сфокусировать камеру на очаге войны"
+	_style_button(btn, 10, _style_btn_danger)
+	btn.set_meta("_jump_pos", w.get("pos", w.get("focus_pos", Vector2(320.0, 180.0))))
+	btn.set_meta("_jump_col", Color("#FF5B6B"))
+	btn.pressed.connect(_on_jump_btn_pressed.bind(btn))
+	parent.add_child(btn)
+	return btn
+
+
+func _add_alliance_row(parent: Control, al: Dictionary, doc_maps: Dictionary) -> Button:
+	var btn := Button.new()
+	btn.text = _format_alliance_row_text(al, doc_maps)
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.tooltip_text = "Клик: сфокусировать камеру на столице альянса"
 	_style_button(btn, 10, _style_btn_prs)
-	var fpos: Vector2 = al.get("pos", al.get("focus_pos", Vector2(320.0, 180.0)))
-	btn.pressed.connect(_focus_camera_on.bind(fpos))
+	btn.set_meta("_jump_pos", al.get("pos", al.get("focus_pos", Vector2(320.0, 180.0))))
+	btn.set_meta("_jump_col", Color("#4BE898"))
+	btn.pressed.connect(_on_jump_btn_pressed.bind(btn))
 	parent.add_child(btn)
+	return btn
+
+
+func _add_notable_row(parent: Control, n: Dictionary, doc_maps: Dictionary) -> Button:
+	var btn := Button.new()
+	btn.text = _format_notable_row_text(n, doc_maps)
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.tooltip_text = "Клик: перелёт камеры к герою и слежение"
+	_style_button(btn, 10, _style_btn_gold if bool(n.get("pinned", false)) else _style_btn_prs)
+	var col: Color = _faction_color(int(n.get("faction", 0)))
+	btn.add_theme_color_override("font_color", Color("#FFE066") if bool(n.get("pinned", false)) else col.lightened(0.35))
+	btn.set_meta("_jump_uid", int(n.get("uid", -1)))
+	btn.set_meta("_jump_pos", n.get("pos", Vector2(320.0, 180.0)))
+	btn.set_meta("_jump_col", col)
+	btn.pressed.connect(_on_notable_btn_pressed.bind(btn))
+	parent.add_child(btn)
+	return btn
+
+
+func _on_jump_btn_pressed(btn: Button) -> void:
+	if btn == null:
+		return
+	var pos_v: Variant = btn.get_meta("_jump_pos", Vector2(320.0, 180.0))
+	var pos: Vector2 = pos_v as Vector2 if pos_v is Vector2 else Vector2(320.0, 180.0)
+	var col_v: Variant = btn.get_meta("_jump_col", Color("#7CE7FF"))
+	var col: Color = col_v as Color if col_v is Color else Color("#7CE7FF")
+	_focus_camera_on(pos, true, col)
+
+
+func _on_notable_btn_pressed(btn: Button) -> void:
+	if btn == null:
+		return
+	var uid: int = int(btn.get_meta("_jump_uid", -1))
+	var pos_v: Variant = btn.get_meta("_jump_pos", Vector2(320.0, 180.0))
+	var pos: Vector2 = pos_v as Vector2 if pos_v is Vector2 else Vector2(320.0, 180.0)
+	var col_v: Variant = btn.get_meta("_jump_col", Color("#FFE066"))
+	var col: Color = col_v as Color if col_v is Color else Color("#FFE066")
+	if uid >= 0 and _physics != null and _physics.has_method("get_unit_follow_pos"):
+		var live_p: Variant = _physics.call("get_unit_follow_pos", uid)
+		if live_p is Vector2 and (live_p as Vector2).x >= 0.0:
+			pos = live_p as Vector2
+	_focus_camera_on(pos, true, col)
+	if uid >= 0 and _main != null:
+		_main.set("_locked_unit_uid", uid)
+		_main.set("_locked_city_id", -1)
+		_main.set("_follow_locked_unit", true)
+		_main.set("_hud_sel_sig", "")
 
 
 func _build_chronicle_window() -> void:
@@ -2668,8 +3200,13 @@ func _refresh_chronicle_list_only() -> void:
 		_style_button(row_btn, 10, _style_btn_prs)
 		var col: Color = ev.get("color", Color("#E4EEF7"))
 		row_btn.add_theme_color_override("font_color", col.lightened(0.25))
-		var epos: Vector2 = ev.get("pos", Vector2(320.0, 180.0))
-		row_btn.pressed.connect(_focus_camera_on.bind(epos))
+		var raw_pos: Variant = ev.get("pos", null)
+		if raw_pos is Vector2:
+			row_btn.tooltip_text = "Клик: перелёт камеры к месту события"
+			row_btn.pressed.connect(_focus_camera_on.bind(raw_pos as Vector2, true, col))
+		else:
+			row_btn.tooltip_text = "Глобальное событие сектора"
+			row_btn.mouse_default_cursor_shape = Control.CURSOR_ARROW
 		_log_list_box.add_child(row_btn)
 
 
@@ -2858,13 +3395,15 @@ func _record_fallback_history_sample() -> void:
 
 
 func _build_codex_window() -> void:
+	_last_codex_count = _unlocked_codex.size()
+	_codex_subtab_btns.clear()
 	var sub_row := HBoxContainer.new()
 	sub_row.add_theme_constant_override("separation", 4)
 	_modal_body.add_child(sub_row)
 	var subs: Array[String] = [
 		"Кодекс (%d/40)" % _unlocked_codex.size(),
 		"Настроение (9)",
-		"Шаблоны карты (8)",
+		"Шаблоны и сценарии",
 	]
 	for idx in range(subs.size()):
 		var b := Button.new()
@@ -2875,6 +3414,7 @@ func _build_codex_window() -> void:
 		_style_button(b, 10, _style_btn_prs)
 		b.pressed.connect(_on_codex_subtab_clicked.bind(idx))
 		sub_row.add_child(b)
+		_codex_subtab_btns.append(b)
 
 	_modal_counter_lbl.text = "%d / 3" % (_codex_subtab + 1)
 	if _codex_subtab == 0:
@@ -2984,6 +3524,25 @@ func _apply_architect_mood(mood_id: int) -> void:
 
 
 func _render_map_templates_tab() -> void:
+	_add_section_header(_modal_body, "КУРИРУЕМЫЕ СЦЕНАРИИ (старт в 1 клик)")
+	var scen_grid := GridContainer.new()
+	scen_grid.columns = 2
+	scen_grid.add_theme_constant_override("h_separation", 6)
+	scen_grid.add_theme_constant_override("v_separation", 6)
+	_modal_body.add_child(scen_grid)
+	for sc in SCENARIO_DEFS:
+		var sid: int = int(sc["id"])
+		var sbtn := Button.new()
+		sbtn.text = "%s  [%s]\n%s" % [str(sc["name"]), str(sc["badge"]), str(sc["desc"])]
+		sbtn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		sbtn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sbtn.tooltip_text = "Запустить сценарий «%s» и сфокусировать камеру" % str(sc["name"])
+		_style_button(sbtn, 10, _style_btn_gold)
+		sbtn.add_theme_color_override("font_color", Color(str(sc.get("accent", "#7CE7FF"))).lightened(0.25))
+		sbtn.pressed.connect(_on_scenario_clicked.bind(sid))
+		scen_grid.add_child(sbtn)
+
 	_add_section_header(_modal_body, "ШАБЛОН ГЕНЕРАЦИИ ПЛАНЕТЫ (8 режимов)")
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -3007,6 +3566,18 @@ func _render_map_templates_tab() -> void:
 	_style_button(gen_btn, 12, _style_btn_gold)
 	gen_btn.pressed.connect(_on_template_regen_clicked)
 	_modal_body.add_child(gen_btn)
+
+
+func _on_scenario_clicked(scenario_id: int) -> void:
+	var sid: int = clampi(scenario_id, 0, SCENARIO_DEFS.size() - 1)
+	_unlock_codex("world_builder")
+	scenario_requested.emit(sid)
+	if scenario_requested.get_connections().is_empty():
+		_selected_template_id = int(SCENARIO_DEFS[sid].get("template_id", 0))
+		_on_template_regen_clicked()
+		return
+	close_window()
+	_play_ui_sfx("ui_pin")
 
 
 func _on_template_selected(tid: int) -> void:
@@ -3079,18 +3650,41 @@ func _unlock_codex(codex_id: String) -> void:
 
 
 func _connect_laws_hook() -> void:
-	if _laws_ui != null and _laws_ui.has_signal("chronicle_event_logged"):
+	if _laws_ui == null:
+		return
+	if _laws_ui.has_signal("chronicle_event_logged"):
 		_laws_ui.connect("chronicle_event_logged", notify_chronicle_event)
+	if _laws_ui.has_signal("laws_panel_toggled"):
+		_laws_ui.connect("laws_panel_toggled", _on_laws_panel_toggled)
+	if _laws_ui.has_method("set_modal_close_callback"):
+		_laws_ui.call("set_modal_close_callback", Callable(self, "close_window"))
 
 
-func _focus_camera_on(world_pos: Vector2) -> void:
-	if _laws_ui != null and _laws_ui.has_signal("chronicle_focus_requested"):
-		_laws_ui.emit_signal("chronicle_focus_requested", world_pos)
-	elif _main != null:
-		_main.set("_follow_locked_unit", false)
-		_main.set("_cam_focus_target", world_pos)
-		_main.set("_cam_focus_active", true)
+func _on_laws_panel_toggled(is_open: bool) -> void:
+	if is_open and _active_window_id >= 0:
+		close_window()
+
+
+func _focus_camera_on(world_pos: Vector2, close_on_jump: bool = true, ping_col: Color = Color("#7CE7FF")) -> void:
+	if close_on_jump and _active_window_id >= 0:
+		close_window()
+	focus_ping_requested.emit(world_pos, ping_col, 2.2)
+	if focus_ping_requested.get_connections().is_empty():
+		if _laws_ui != null and _laws_ui.has_signal("chronicle_focus_requested"):
+			_laws_ui.emit_signal("chronicle_focus_requested", world_pos)
+		elif _main != null:
+			_main.set("_follow_locked_unit", false)
+			_main.set("_cam_focus_target", world_pos)
+			_main.set("_cam_focus_active", true)
 	_play_ui_sfx("ui")
+
+
+func _resolve_doctrine_label(d: Dictionary) -> String:
+	var doc_name: String = str(d.get("doctrine_name", "")).strip_edges()
+	if doc_name != "":
+		return doc_name
+	var did: int = clampi(int(d.get("doctrine", d.get("doctrine_id", 0))), 0, DOCTRINE_NAMES_RU.size() - 1)
+	return DOCTRINE_NAMES_RU[did]
 
 
 func _play_ui_sfx(kind: String) -> void:

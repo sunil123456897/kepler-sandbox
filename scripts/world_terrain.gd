@@ -14,7 +14,7 @@ const TUNING_KNOBS := {
 	"RIVER_COUNT": 16,
 	"VOLCANO_HUB_COUNT": 3,
 	"CRYSTAL_POCKET_COUNT": 4,
-	"CLOUD_COUNT": 26,
+	"CLOUD_COUNT": 14,
 	"CLOUD_SPEED_X": 7.5,
 	"CLOUD_SPEED_Y": 2.1,
 	"TEMP_AMBIENT_C": 18.0,
@@ -389,10 +389,27 @@ const COL_BOMB_BODY := Color(0.180, 0.157, 0.173, 1.0)
 const COL_BOMB_FUSE := Color(0.945, 0.353, 0.165, 1.0)
 const COL_MINE_BODY := Color(0.235, 0.290, 0.337, 1.0)
 
+const BIOME_TINTS: Array[Color] = [
+	COL_RUST_LOW,
+	COL_LUSH_LOW,
+	COL_CRYS_LOW,
+	COL_SCORCH_HIGH,
+	COL_LAVA_MID,
+	COL_XENO_LOW,
+	COL_CRYO_LOW,
+	COL_ACID_LOW,
+	COL_SILICA_LOW,
+	COL_BIOLUM_LOW,
+	COL_MYC_LOW,
+	COL_CYBER_LOW,
+]
+
 signal map_rebuilt
 signal surface_impact(world_pos: Vector2, radius: float, kind: String)
 signal region_changed(rect: Rect2i)
 signal cosmic_age_changed(age_id: int)
+signal lightning_flash_triggered(world_pos: Vector2, radius: float, col: Color)
+signal hostile_pod_landed(world_pos: Vector2)
 
 var map_w: int = int(TUNING_KNOBS["MAP_WIDTH"])
 var map_h: int = int(TUNING_KNOBS["MAP_HEIGHT"])
@@ -431,6 +448,8 @@ var _cloud_scale: PackedVector2Array
 var _cloud_vapor: PackedFloat32Array
 var _cloud_raining: PackedByteArray
 var _clouds_suppressed: bool = false
+var _clouds_dirty: bool = false
+var _last_cloud_sync_frame: int = -1
 var _global_vapor_pool: float = 0.0
 var _co2_load: float = 0.0
 var _frost_tiles: int = 0
@@ -506,9 +525,12 @@ var _env_chunk_cursor: int = 0
 var _bio_chunk_cursor: int = 0
 var _env_step_count: int = 0
 var _steam_cooldown: float = 0.0
+var _crater_ember_cd: float = 0.0
 var _ca_10hz_accum: float = 0.0
 var _vent_erupt_accum: float = 0.0
 var _had_drops_synced: bool = false
+var _lightning_events: Array[Dictionary] = []
+var _hostile_pod_events: Array[Dictionary] = []
 var _fire_events_total: int = 0
 var _active_fire_tiles: int = 0
 var _ash_tiles: int = 0
@@ -560,6 +582,7 @@ var _ren_crys_role: int = 0
 var _ren_shore_bevel_n: bool = false
 var _ren_row_col: PackedColorArray
 var _ren_row_crys: PackedByteArray
+var _ren_row_scorch: PackedByteArray
 
 
 func _ready() -> void:
@@ -580,6 +603,8 @@ func _exit_tree() -> void:
 	_geysers.clear()
 	_tornadoes.clear()
 	_quake_steps.clear()
+	_lightning_events.clear()
+	_hostile_pod_events.clear()
 
 
 func _ensure_initialized() -> void:
@@ -634,6 +659,7 @@ func _ensure_initialized() -> void:
 	_mask_buf.resize(total * 4)
 	_ren_row_col.resize(map_w)
 	_ren_row_crys.resize(map_w)
+	_ren_row_scorch.resize(map_w)
 
 	_chunks_w = (map_w + CHUNK_SIZE - 1) >> CHUNK_SHIFT
 	_chunks_h = (map_h + CHUNK_SIZE - 1) >> CHUNK_SHIFT
@@ -930,6 +956,9 @@ func _reset_extended_state(seed_val: int) -> void:
 	_volcanoes_sealed_total = 0
 	_goo_decayed_total = 0
 	_had_drops_synced = false
+	_crater_ember_cd = 0.0
+	_lightning_events.clear()
+	_hostile_pod_events.clear()
 	var fx := _resolve_fx()
 	if fx != null and fx.has_method("sync_sky_drops"):
 		fx.sync_sky_drops(PackedVector2Array(), PackedColorArray(), PackedFloat32Array())
@@ -1722,14 +1751,18 @@ func _init_clouds() -> void:
 
 
 func _sync_cloud_multimesh() -> void:
+	if _mm_clouds == null or _mm_clouds.multimesh == null:
+		return
 	var mm: MultiMesh = _mm_clouds.multimesh
+	var rain_thresh: float = float(TUNING_KNOBS["CLOUD_RAIN_THRESH"])
 	for i in range(_cloud_pos.size()):
 		mm.set_instance_transform_2d(i, Transform2D(0.0, _cloud_scale[i], 0.0, _cloud_pos[i]))
-		var c_t: float = clampf(_cloud_vapor[i] / float(TUNING_KNOBS["CLOUD_RAIN_THRESH"]), 0.0, 1.0)
+		var c_t: float = clampf(_cloud_vapor[i] / rain_thresh, 0.0, 1.0)
 		var col: Color = Color(0.54, 0.64, 0.80, 1.0) if _cloud_raining[i] > 0 else Color(
 			lerpf(1.0, 0.78, c_t), lerpf(1.0, 0.84, c_t), lerpf(1.0, 0.93, c_t), 1.0
 		)
 		mm.set_instance_color(i, col)
+	_clouds_dirty = false
 
 
 func _step_clouds(dt: float) -> void:
@@ -1742,9 +1775,6 @@ func _step_clouds(dt: float) -> void:
 		for j in range(n):
 			_cloud_vapor[j] = minf(2.4, _cloud_vapor[j] + share)
 
-	var mm: MultiMesh = _mm_clouds.multimesh
-	var update_vis: bool = not _clouds_suppressed
-	var update_col: bool = update_vis and (_env_step_count & 3) == 0
 	var check_rain: bool = (_env_step_count & 3) == 0
 	var max_x: float = float(map_w + 96)
 	var max_y: float = float(map_h + 48)
@@ -1762,8 +1792,6 @@ func _step_clouds(dt: float) -> void:
 		elif cp.y < -48.0:
 			cp.y = max_y
 		_cloud_pos[i] = cp
-		if update_vis:
-			mm.set_instance_transform_2d(i, Transform2D(0.0, _cloud_scale[i], 0.0, cp))
 
 		if check_rain:
 			var cx: int = int(floor(cp.x))
@@ -1780,13 +1808,7 @@ func _step_clouds(dt: float) -> void:
 				elif in_bounds and rain_bursts < 1:
 					rain_bursts += 1
 					_deposit_cloud_rain(cx, cy, 14, rain_dep * dt * 4.0)
-
-		if update_col:
-			var c_t: float = clampf(_cloud_vapor[i] / rain_thresh, 0.0, 1.0)
-			var col: Color = Color(0.54, 0.64, 0.80, 1.0) if _cloud_raining[i] > 0 else Color(
-				lerpf(1.0, 0.78, c_t), lerpf(1.0, 0.84, c_t), lerpf(1.0, 0.93, c_t), 1.0
-			)
-			mm.set_instance_color(i, col)
+	_clouds_dirty = true
 
 
 func _deposit_cloud_rain(cx: int, cy: int, rad: int, deposit_amt: float) -> void:
@@ -1854,6 +1876,13 @@ func _deposit_cloud_rain(cx: int, cy: int, rad: int, deposit_amt: float) -> void
 		surface_impact.emit(Vector2(float(cx) + 0.5, float(cy) + 0.5), float(rad), "rain")
 
 
+func _set_temp_tracked(idx: int, new_t: float) -> void:
+	var old_t: float = _temp[idx]
+	if new_t != old_t:
+		_temp[idx] = new_t
+		_temp_total_sum += new_t - old_t
+
+
 func apply_brush(world_pos: Vector2, brush_mode: int, radius: float = 12.0) -> void:
 	_ensure_initialized()
 	var mode: int = BrushMode.LOWER_CANAL if brush_mode < 0 else brush_mode
@@ -1885,7 +1914,8 @@ func apply_shaped_brush(world_pos: Vector2, radius: int, mode_and_shape: Vector2
 	var cx: int = int(floor(world_pos.x))
 	var cy: int = int(floor(world_pos.y))
 	var r: int = clampi(radius, 1, 64)
-	var flags: int = _apply_shaped_brush_loop(cx, cy, r, mode, shape)
+	var use_ring: bool = (mode == BrushMode.METEOR_CRATER and shape == BrushShape.CIRCLE)
+	var flags: int = _stamp_crater_ring(cx, cy, r, true) if use_ring else _apply_shaped_brush_loop(cx, cy, r, mode, shape)
 	if (flags & 1) == 0 and (mode == BrushMode.PLACE_BOMB or mode == BrushMode.PLACE_MINE):
 		var scx: int = clampi(cx, 1, map_w - 2)
 		var scy: int = clampi(cy, 1, map_h - 2)
@@ -1897,10 +1927,11 @@ func apply_shaped_brush(world_pos: Vector2, radius: int, mode_and_shape: Vector2
 		return
 
 	var touched_water_lava: bool = (flags & 2) != 0
-	var rx0: int = maxi(0, cx - r - 2)
-	var ry0: int = maxi(0, cy - r - 2)
-	var rx1: int = mini(map_w, cx + r + 3)
-	var ry1: int = mini(map_h, cy + r + 3)
+	var pad_r: int = ceili(float(r) * 1.04) if use_ring else r
+	var rx0: int = maxi(0, cx - pad_r - 2)
+	var ry0: int = maxi(0, cy - pad_r - 2)
+	var rx1: int = mini(map_w, cx + pad_r + 3)
+	var ry1: int = mini(map_h, cy + pad_r + 3)
 
 	if mode == BrushMode.LOWER_CANAL or mode == BrushMode.SPONGE_DRAIN:
 		_seed_water_queue_rect(rx0, ry0, rx1, ry1)
@@ -1915,9 +1946,9 @@ func apply_shaped_brush(world_pos: Vector2, radius: int, mode_and_shape: Vector2
 		_global_vapor_pool += 0.35
 
 	_enforce_hot_lava_borders_rect(rx0 - 2, ry0 - 2, rx1 + 2, ry1 + 2, false)
-	_mark_chunks_in_rect(cx - r - 1, cy - r - 1, r * 2 + 3, r * 2 + 3, false)
+	_mark_chunks_in_rect(cx - pad_r - 1, cy - pad_r - 1, pad_r * 2 + 3, pad_r * 2 + 3, false)
 	_recompute_bio_chunks_rect(rx0, ry0, rx1, ry1)
-	_recompute_avg_temp_full()
+	_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 	_render_rect(rx0, ry0, rx1 - rx0, ry1 - ry0)
 
 	if mode != BrushMode.VORTEX_PULL:
@@ -1988,7 +2019,7 @@ func _apply_brush_tile(px: int, py: int, dx: int, dy: int, cx: int, idx: int, no
 			return _brush_tile_meteor(idx, norm_d, falloff)
 		BrushMode.VORTEX_PULL:
 			if _temp[idx] > 35.0:
-				_temp[idx] = maxf(24.0, _temp[idx] - 18.0 * falloff)
+				_set_temp_tracked(idx, maxf(24.0, _temp[idx] - 18.0 * falloff))
 				return 1
 			return 0
 		_:
@@ -2013,7 +2044,7 @@ func _brush_tile_terraform(idx: int, falloff: float) -> int:
 			_river_mask[idx] = 0
 	if _tiers[idx] >= Tier.SAND:
 		_biomes[idx] = Biome.LUSH
-	_temp[idx] = lerpf(_temp[idx], 21.0, clampf(0.45 + 0.50 * falloff, 0.0, 1.0))
+	_set_temp_tracked(idx, lerpf(_temp[idx], 21.0, clampf(0.45 + 0.50 * falloff, 0.0, 1.0)))
 	_moisture[idx] = clampf(maxf(_moisture[idx], 0.55 + 0.35 * falloff), 0.0, 1.0)
 	_rad[idx] *= 0.25
 	return 1
@@ -2041,7 +2072,7 @@ func _brush_tile_canal(idx: int, falloff: float) -> int:
 			if _temp[idx] > 120.0 or _biomes[idx] == Biome.LAVA:
 				touched_wl = 2
 			_biomes[idx] = Biome.RUST
-			_temp[idx] = minf(_temp[idx], 28.0)
+			_set_temp_tracked(idx, minf(_temp[idx], 28.0))
 			_moisture[idx] = 1.0
 			if _ash[idx] > 0:
 				_ash[idx] = 0
@@ -2062,7 +2093,7 @@ func _brush_tile_crystal(idx: int, norm_d: float, falloff: float) -> int:
 		_biomes[idx] = Biome.CRYSTAL
 		_vent_mask[idx] = 0
 	_rad[idx] = clampf(maxf(_rad[idx], 0.45 + 0.48 * falloff), 0.0, 1.0)
-	_temp[idx] = minf(_temp[idx], 34.0)
+	_set_temp_tracked(idx, minf(_temp[idx], 34.0))
 	_moisture[idx] = maxf(_moisture[idx], 0.32)
 	return 1
 
@@ -2075,7 +2106,7 @@ func _brush_tile_lava(px: int, py: int, dx: int, dy: int, cx: int, idx: int, nor
 		_tiers[idx] = _classify_height(_height[idx])
 		if _tiers[idx] >= Tier.SAND:
 			_biomes[idx] = Biome.SCORCHED
-			_temp[idx] = maxf(_temp[idx], 220.0)
+			_set_temp_tracked(idx, maxf(_temp[idx], 220.0))
 			_river_mask[idx] = 0
 			touched_wl = 2
 	else:
@@ -2087,7 +2118,7 @@ func _brush_tile_lava(px: int, py: int, dx: int, dy: int, cx: int, idx: int, nor
 		var vein_hash: int = ((px * 73856093) ^ (py * 19349663)) & 7
 		if norm_d < 0.24 or (norm_d < 0.74 and crack_wave > 0.82 and vein_hash < 5):
 			_biomes[idx] = Biome.LAVA
-			_temp[idx] = lerpf(580.0, float(TUNING_KNOBS["LAVA_SOURCE_TEMP_C"]), falloff)
+			_set_temp_tracked(idx, lerpf(580.0, float(TUNING_KNOBS["LAVA_SOURCE_TEMP_C"]), falloff))
 			if norm_d < 0.18:
 				_vent_mask[idx] = 1
 			if _fire[idx] > 0.0:
@@ -2100,7 +2131,7 @@ func _brush_tile_lava(px: int, py: int, dx: int, dy: int, cx: int, idx: int, nor
 					_ignite_tile(idx, 0.85)
 				else:
 					_biomes[idx] = Biome.SCORCHED
-			_temp[idx] = maxf(_temp[idx], 155.0 + 240.0 * falloff)
+			_set_temp_tracked(idx, maxf(_temp[idx], 155.0 + 240.0 * falloff))
 		_moisture[idx] = 0.0
 		_rad[idx] = maxf(_rad[idx], 0.18 * falloff)
 		if _bomb_map[idx] > 0:
@@ -2108,52 +2139,98 @@ func _brush_tile_lava(px: int, py: int, dx: int, dy: int, cx: int, idx: int, nor
 	return 1 | touched_wl
 
 
-func _brush_tile_meteor(idx: int, norm_d: float, falloff: float) -> int:
+func _brush_tile_meteor(idx: int, norm_d: float, _falloff: float) -> int:
+	return _stamp_crater_tile(idx, norm_d, true)
+
+
+func _stamp_crater_ring(cx: int, cy: int, r: int, core_lava: bool) -> int:
+	var safe_r: int = maxi(r, 1)
+	var outer_r: int = ceili(float(safe_r) * 1.04)
+	var outer_f: float = float(safe_r) * 1.04
+	var outer_sq: float = outer_f * outer_f
+	var y0: int = maxi(1, cy - outer_r)
+	var y1: int = mini(map_h - 2, cy + outer_r)
+	var x0: int = maxi(1, cx - outer_r)
+	var x1: int = mini(map_w - 2, cx + outer_r)
+	var flags: int = 0
+	for py in range(y0, y1 + 1):
+		var dy: int = py - cy
+		var row_off: int = py * map_w
+		for px in range(x0, x1 + 1):
+			var dx: int = px - cx
+			var d2: float = float(dx * dx + dy * dy)
+			if d2 > outer_sq:
+				continue
+			flags |= _stamp_crater_tile(row_off + px, sqrt(d2) / float(safe_r), core_lava)
+	return flags
+
+
+func _stamp_crater_tile(idx: int, norm_d: float, core_lava: bool) -> int:
 	var touched_wl: int = 0
-	_vent_mask[idx] = 0
-	_wall_mask[idx] = 0
 	_clear_frost_at(idx)
-	if _bomb_map[idx] > 0:
+	if norm_d <= 0.90:
+		_vent_mask[idx] = 0
+	if norm_d <= 0.72:
+		_wall_mask[idx] = 0
+	if norm_d <= 0.95 and _bomb_map[idx] > 0:
 		_enqueue_bomb_detonation(idx)
 	var orig_land: bool = _height[idx] >= 0.40
 	if norm_d < 0.66:
 		var bowl: float = 1.0 - (norm_d / 0.66) * (norm_d / 0.66)
 		var min_floor: float = 0.362 if orig_land else 0.06
-		_height[idx] = clampf(_height[idx] - bowl * 0.18, min_floor, 0.95)
+		_height[idx] = clampf(_height[idx] - bowl * (0.18 if core_lava else 0.14), min_floor, 0.95)
 		_tiers[idx] = _classify_height(_height[idx])
 		if _tiers[idx] >= Tier.SAND:
 			_river_mask[idx] = 0
-			if norm_d < 0.20:
-				_biomes[idx] = Biome.LAVA
-				_temp[idx] = maxf(_temp[idx], 690.0)
-				if _fire[idx] > 0.0:
-					_fire[idx] = 0.0
-					_active_fire_tiles = maxi(0, _active_fire_tiles - 1)
+			if norm_d < 0.22:
+				if core_lava:
+					_biomes[idx] = Biome.LAVA
+					_set_temp_tracked(idx, maxf(_temp[idx], 690.0))
+					if _fire[idx] > 0.0:
+						_fire[idx] = 0.0
+						_active_fire_tiles = maxi(0, _active_fire_tiles - 1)
+				else:
+					_biomes[idx] = Biome.SCORCHED
+					_set_temp_tracked(idx, maxf(_temp[idx], 420.0 + 180.0 * bowl))
 			else:
 				_biomes[idx] = Biome.SCORCHED
-				_temp[idx] = maxf(_temp[idx], 260.0 + 360.0 * bowl)
+				_set_temp_tracked(idx, maxf(_temp[idx], 240.0 + 340.0 * bowl))
 				if _ash[idx] == 0:
-					_ash[idx] = 120
 					_ash_tiles += 1
+				_ash[idx] = maxi(_ash[idx], 140)
 		else:
 			touched_wl = 2
-			_temp[idx] = maxf(_temp[idx], 85.0)
+			_set_temp_tracked(idx, maxf(_temp[idx], 85.0))
 			if _fire[idx] > 0.0:
 				_fire[idx] = 0.0
 				_active_fire_tiles = maxi(0, _active_fire_tiles - 1)
+			_enqueue_water_tile(idx)
 	else:
-		var rim_phase: float = sin(((norm_d - 0.66) / 0.34) * PI)
-		_height[idx] = clampf(_height[idx] + rim_phase * 0.085, 0.0, 0.96)
-		_tiers[idx] = _classify_height(_height[idx])
-		if _tiers[idx] >= Tier.SAND:
-			if _biomes[idx] == Biome.LUSH and _moisture[idx] < 0.72:
-				_ignite_tile(idx, 0.90)
+		if norm_d < 0.92:
+			var rim_phase: float = sin(clampf((norm_d - 0.66) / 0.26, 0.0, 1.0) * PI)
+			_height[idx] = clampf(_height[idx] + rim_phase * 0.075, 0.0, 0.96)
+			_tiers[idx] = _classify_height(_height[idx])
+		if _tiers[idx] >= Tier.SAND and _biomes[idx] != Biome.LAVA:
+			if norm_d < 0.84:
+				_river_mask[idx] = 0
+				if _biomes[idx] == Biome.LUSH and _moisture[idx] < 0.72:
+					_ignite_tile(idx, 0.90)
+				else:
+					_biomes[idx] = Biome.SCORCHED
+				if _ash[idx] == 0:
+					_ash_tiles += 1
+				_ash[idx] = maxi(_ash[idx], 155)
+				_set_temp_tracked(idx, maxf(_temp[idx], 125.0 + 135.0 * maxf(0.0, 1.0 - norm_d)))
 			else:
-				_biomes[idx] = Biome.SCORCHED
-			_river_mask[idx] = 0
-		_temp[idx] = maxf(_temp[idx], 125.0 + 135.0 * rim_phase)
-	_rad[idx] = clampf(_rad[idx] + 0.55 * falloff, 0.0, 1.0)
-	_moisture[idx] *= 0.25
+				var skirt_t: float = clampf((norm_d - 0.84) / 0.20, 0.0, 1.0)
+				var skirt_ash: int = clampi(int(round(lerpf(185.0, 80.0, skirt_t))), 80, 185)
+				if _ash[idx] == 0:
+					_ash_tiles += 1
+				_ash[idx] = maxi(_ash[idx], skirt_ash)
+				_set_temp_tracked(idx, maxf(_temp[idx], lerpf(125.0, 72.0, skirt_t)))
+	if core_lava:
+		_rad[idx] = clampf(_rad[idx] + 0.55 * maxf(0.0, 1.0 - norm_d), 0.0, 1.0)
+	_moisture[idx] *= (0.25 if norm_d < 0.84 else 0.55)
 	return 1 | touched_wl
 
 
@@ -2189,7 +2266,7 @@ func _brush_tile_extended(px: int, py: int, idx: int, mode: int) -> int:
 		if _tiers[idx] >= Tier.SAND and _tiers[idx] <= Tier.HILLS and _biomes[idx] != Biome.LAVA:
 			_biomes[idx] = target_b
 			if target_b == Biome.CRYO_TUNDRA:
-				_temp[idx] = minf(_temp[idx], -4.0)
+				_set_temp_tracked(idx, minf(_temp[idx], -4.0))
 			return 1
 		return 0
 	if mode == BrushMode.PLACE_BOMB or mode == BrushMode.PLACE_MINE:
@@ -2517,17 +2594,17 @@ func apply_orbital_strike(world_pos: Vector2, radius: float, intercepted: bool) 
 					_river_mask[idx] = 0
 					_biomes[idx] = Biome.SCORCHED
 					if norm_d < 0.24:
-						_temp[idx] = maxf(_temp[idx], 460.0 + 240.0 * bowl)
+						_set_temp_tracked(idx, maxf(_temp[idx], 460.0 + 240.0 * bowl))
 						_ignite_tile(idx, 1.0)
 					else:
-						_temp[idx] = maxf(_temp[idx], 240.0 + 240.0 * bowl)
+						_set_temp_tracked(idx, maxf(_temp[idx], 240.0 + 240.0 * bowl))
 						if _ash[idx] == 0:
 							_ash[idx] = 140
 							_ash_tiles += 1
 						if norm_d < 0.42 and _moisture[idx] < 0.72:
 							_ignite_tile(idx, 0.78)
 				else:
-					_temp[idx] = maxf(_temp[idx], 95.0)
+					_set_temp_tracked(idx, maxf(_temp[idx], 95.0))
 					if _fire[idx] > 0.0:
 						_fire[idx] = 0.0
 						_active_fire_tiles = maxi(0, _active_fire_tiles - 1)
@@ -2547,9 +2624,9 @@ func apply_orbital_strike(world_pos: Vector2, radius: float, intercepted: bool) 
 						if _ash[idx] == 0 and rim_phase < 0.55:
 							_ash[idx] = 95
 							_ash_tiles += 1
-					_temp[idx] = maxf(_temp[idx], 165.0 + 185.0 * rim_phase)
+					_set_temp_tracked(idx, maxf(_temp[idx], 165.0 + 185.0 * rim_phase))
 				else:
-					_temp[idx] = maxf(_temp[idx], 65.0)
+					_set_temp_tracked(idx, maxf(_temp[idx], 65.0))
 			_rad[idx] = clampf(_rad[idx] + 0.32 * falloff, 0.0, 1.0)
 			_moisture[idx] *= 0.20
 
@@ -2565,7 +2642,7 @@ func apply_orbital_strike(world_pos: Vector2, radius: float, intercepted: bool) 
 		_enforce_hot_lava_borders_rect(rx0 - 2, ry0 - 2, rx1 + 2, ry1 + 2, false)
 	_mark_chunks_in_rect(cx - r - 1, cy - r - 1, r * 2 + 3, r * 2 + 3, false)
 	if not intercepted:
-		_recompute_avg_temp_full()
+		_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 	_render_rect(rx0, ry0, rx1 - rx0, ry1 - ry0)
 
 	if not intercepted:
@@ -2667,11 +2744,13 @@ func apply_elemental_storm(world_pos: Vector2, radius: float, kind: String) -> v
 	var ry1: int = mini(map_h, cy + r + 3)
 	_enforce_hot_lava_borders_rect(rx0 - 2, ry0 - 2, rx1 + 2, ry1 + 2, false)
 	_mark_chunks_in_rect(cx - r - 1, cy - r - 1, r * 2 + 3, r * 2 + 3, false)
-	_recompute_avg_temp_full()
+	_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 	_render_rect(rx0, ry0, rx1 - rx0, ry1 - ry0)
 	region_changed.emit(Rect2i(rx0, ry0, rx1 - rx0, ry1 - ry0))
 	var ev_names := ["rain", "firestorm", "ion_storm", "meltdown"]
 	surface_impact.emit(world_pos, float(r), ev_names[storm_id])
+	if storm_id == 2:
+		_record_lightning_flash(world_pos, maxf(float(r) * 2.4, 64.0), Color(0.55, 0.92, 1.0, 1.0))
 
 
 func _classify_storm_kind(k_low: String) -> int:
@@ -2695,7 +2774,7 @@ func _apply_storm_tile(storm_id: int, px: int, py: int, idx: int, norm_d: float,
 			_fire[idx] = 0.0
 			_active_fire_tiles = maxi(0, _active_fire_tiles - 1)
 		_moisture[idx] = clampf(_moisture[idx] + 0.42 * falloff, 0.0, 1.0)
-		_temp[idx] = lerpf(_temp[idx], amb_c, clampf(0.45 + 0.45 * falloff, 0.0, 1.0))
+		_set_temp_tracked(idx, lerpf(_temp[idx], amb_c, clampf(0.45 + 0.45 * falloff, 0.0, 1.0)))
 		if b == Biome.LAVA and _vent_mask[idx] == 0 and t >= Tier.SAND:
 			_biomes[idx] = Biome.SCORCHED
 			if _ash[idx] == 0:
@@ -2719,7 +2798,7 @@ func _apply_storm_tile(storm_id: int, px: int, py: int, idx: int, norm_d: float,
 		var next_m_f: float = maxf(0.0, prev_m_f * (0.45 - 0.25 * falloff))
 		_moisture[idx] = next_m_f
 		_global_vapor_pool += prev_m_f - next_m_f
-		_temp[idx] = maxf(_temp[idx], 165.0 + 260.0 * falloff)
+		_set_temp_tracked(idx, maxf(_temp[idx], 165.0 + 260.0 * falloff))
 		var f_h: int = ((px * 73856093) ^ (py * 19349663)) & 7
 		if norm_d < 0.28 and b != Biome.LAVA:
 			_biomes[idx] = Biome.SCORCHED
@@ -2761,18 +2840,18 @@ func _apply_meltdown_tile(idx: int, norm_d: float, falloff: float) -> bool:
 			_river_mask[idx] = 0
 			if norm_d < 0.26:
 				_biomes[idx] = Biome.LAVA
-				_temp[idx] = maxf(_temp[idx], 740.0)
+				_set_temp_tracked(idx, maxf(_temp[idx], 740.0))
 				if _fire[idx] > 0.0:
 					_fire[idx] = 0.0
 					_active_fire_tiles = maxi(0, _active_fire_tiles - 1)
 			else:
 				_biomes[idx] = Biome.SCORCHED
-				_temp[idx] = maxf(_temp[idx], 320.0 + 340.0 * bowl)
+				_set_temp_tracked(idx, maxf(_temp[idx], 320.0 + 340.0 * bowl))
 				if _ash[idx] == 0:
 					_ash[idx] = 160
 					_ash_tiles += 1
 		else:
-			_temp[idx] = maxf(_temp[idx], 90.0)
+			_set_temp_tracked(idx, maxf(_temp[idx], 90.0))
 	else:
 		var rim_phase: float = sin(((norm_d - 0.65) / 0.35) * PI)
 		_height[idx] = clampf(_height[idx] + rim_phase * 0.065, 0.0, 0.96)
@@ -2783,7 +2862,7 @@ func _apply_meltdown_tile(idx: int, norm_d: float, falloff: float) -> bool:
 				_ignite_tile(idx, 0.85)
 			else:
 				_biomes[idx] = Biome.SCORCHED
-		_temp[idx] = maxf(_temp[idx], 150.0 + 160.0 * rim_phase)
+		_set_temp_tracked(idx, maxf(_temp[idx], 150.0 + 160.0 * rim_phase))
 	_rad[idx] = clampf(_rad[idx] + 0.78 * falloff + 0.18, 0.0, 1.0)
 	_moisture[idx] *= 0.20
 	return true
@@ -2865,7 +2944,7 @@ func _apply_ecology_at(kind: int, nx: int, ny: int, val: float) -> bool:
 		elif new_t >= 52.0 and b == Biome.LUSH:
 			_biomes[idx] = Biome.RUST
 			visual_dirty = true
-		if (old_t <= 65.0 and new_t > 65.0) or (old_t <= 95.0 and new_t > 95.0) or (old_t <= 185.0 and new_t > 185.0):
+		if (old_t <= 65.0 and new_t > 65.0) or (old_t <= 95.0 and new_t > 95.0) or (old_t <= 115.0 and new_t > 115.0):
 			visual_dirty = true
 		if visual_dirty:
 			_mark_tile_dirty(nx, ny, structural, 1 if structural else 0)
@@ -2971,6 +3050,7 @@ func step_environment(dt: float) -> void:
 	_env_time += eff_dt
 	_env_step_count += 1
 	_steam_cooldown = maxf(0.0, _steam_cooldown - eff_dt)
+	_crater_ember_cd = maxf(0.0, _crater_ember_cd - eff_dt)
 	_cloud_rain_fx_cd = maxf(0.0, _cloud_rain_fx_cd - eff_dt)
 	_co2_load = maxf(0.0, _co2_load - 0.12 * eff_dt)
 	_step_clouds(eff_dt)
@@ -3155,8 +3235,9 @@ func _step_env_chunk_row(cidx: int, py: int, ly: int, start_x: int, x1: int, has
 			var next_t_eff: float = cooled + c_off
 			if absf(cooled - t_cur) >= steady_eps or (cooled > eq_max_c and nb_avg_h <= t_cur) or (check_cold and tier_cur < Tier.HILLS and next_t_eff < _env_eq_min_c and absf(cooled - target_amb) > 1.0):
 				row_active = true
-			if b_cur == Biome.SCORCHED and (((px * 73856093) ^ (py * 19349663)) & 3) == 0 and ((t_cur >= 95.0 and cooled < 95.0) or (t_cur >= 185.0 and cooled < 185.0)):
+			if b_cur == Biome.SCORCHED and (((px * 73856093) ^ (py * 19349663)) & 3) == 0 and ((t_cur >= 95.0 and cooled < 95.0) or (t_cur >= 115.0 and cooled < 115.0)):
 				_mark_chunk_dirty_local(cidx, px & 15, ly, px & 15, ly, false)
+			_maybe_emit_crater_ember(px, py, b_cur, cooled)
 			t_cur = cooled
 
 		if frost_cur > 0 or (tier_cur == Tier.SHALLOW and (t_cur + c_off) <= freeze_c and b_cur != Biome.LAVA and f_cur <= 0.0):
@@ -3401,12 +3482,31 @@ func _step_env_ecology_at(cidx: int, px: int, py: int, ly: int, idx: int, _tier_
 	_fast_rng_seed = rng_s
 
 
+func _maybe_emit_crater_ember(px: int, py: int, b_cur: int, temp_c: float) -> void:
+	if _sim_pace_mult >= 10.0 or _crater_ember_cd > 0.0:
+		return
+	if b_cur != Biome.SCORCHED or temp_c < 115.0 or temp_c >= 340.0:
+		return
+	if (((px * 73856093) ^ (py * 19349663) ^ _env_step_count) & 63) != 0:
+		return
+	var fx := _resolve_fx()
+	if fx != null and float(fx.get("_cam_zoom")) > 1.8 and fx.has_method("emit_campfire_ember"):
+		_crater_ember_cd = 0.18
+		fx.emit_campfire_ember(Vector2(float(px) + 0.5, float(py) + 0.5), Vector2.ZERO, Color(1.0, 0.48, 0.14, 0.90))
+
+
 func _flush_env_outputs() -> void:
 	if _env_temp_delta != 0.0:
 		_temp_total_sum += _env_temp_delta
 		_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 	if (_env_step_count & 31) == 0 and (not _active_chunks.is_empty() or _temp_scan_row > 0 or _env_ocean_damp > 0.35 or _cosmic_temp_offset <= -4.0 or _frost_tiles > 0):
 		_step_rolling_avg_temp()
+
+	if _clouds_dirty and not _clouds_suppressed and DisplayServer.get_name() != "headless":
+		var cur_frame: int = Engine.get_process_frames()
+		if cur_frame != _last_cloud_sync_frame:
+			_last_cloud_sync_frame = cur_frame
+			_sync_cloud_multimesh()
 
 	var flush_interval: int = int(TUNING_KNOBS["DIRTY_FLUSH_INTERVAL"])
 	var dirty_cap: int = 16
@@ -3438,6 +3538,50 @@ func spawn_sky_drops(world_pos: Vector2, radius: float, drop_kind: int) -> int:
 	return count
 
 
+func intercept_sky_drops(batteries: Array, max_per_tick: int = 4) -> Array[Dictionary]:
+	if _drops == null or _drops.get_count() <= 0 or batteries.is_empty():
+		return []
+	var hits: Array[Dictionary] = _drops.intercept_hostile_drops(batteries, max_per_tick)
+	if not hits.is_empty():
+		_sync_drops_to_fx()
+	return hits
+
+
+func grab_sky_drops(world_pos: Vector2, radius: float, vel_target: Vector2) -> int:
+	if _drops == null or _drops.get_count() <= 0:
+		return 0
+	var grabbed: int = _drops.grab_drops_in_radius(world_pos, radius, vel_target)
+	if grabbed > 0:
+		_sync_drops_to_fx()
+	return grabbed
+
+
+func poll_lightning_events() -> Array[Dictionary]:
+	if _lightning_events.is_empty():
+		return []
+	var out: Array[Dictionary] = _lightning_events.duplicate()
+	_lightning_events.clear()
+	return out
+
+
+func poll_hostile_pod_events() -> Array[Dictionary]:
+	if _hostile_pod_events.is_empty():
+		return []
+	var out: Array[Dictionary] = _hostile_pod_events.duplicate()
+	_hostile_pod_events.clear()
+	return out
+
+
+func _record_lightning_flash(world_pos: Vector2, radius: float, col: Color = Color(0.55, 0.92, 1.0, 1.0)) -> void:
+	var fx := _resolve_fx()
+	if fx != null and fx.has_method("emit_lightning_flash"):
+		fx.emit_lightning_flash(world_pos, radius, col)
+	if _lightning_events.size() >= 32:
+		_lightning_events.remove_at(0)
+	_lightning_events.append({"pos": world_pos, "radius": radius, "col": col})
+	lightning_flash_triggered.emit(world_pos, radius, col)
+
+
 func _sync_drops_to_fx() -> void:
 	if _drops == null:
 		return
@@ -3458,7 +3602,7 @@ func _on_sky_drop_landed(px: int, py: int, drop_kind: int) -> void:
 	var t: int = _tiers[idx]
 	var changed: bool = false
 	var fx := _resolve_fx()
-	if drop_kind <= WorldDropsScript.DropKind.CRYSTAL or drop_kind >= WorldDropsScript.DropKind.STEAM:
+	if drop_kind <= WorldDropsScript.DropKind.CRYSTAL or drop_kind == WorldDropsScript.DropKind.STEAM or drop_kind == WorldDropsScript.DropKind.FERTILIZER:
 		changed = _land_drop_climate(px, py, idx, t, drop_kind)
 	elif drop_kind >= WorldDropsScript.DropKind.SEED_LUSH and drop_kind <= WorldDropsScript.DropKind.SEED_CREEP_CYBER:
 		changed = _land_drop_seed(px, py, idx, t, drop_kind)
@@ -3468,7 +3612,7 @@ func _on_sky_drop_landed(px: int, py: int, drop_kind: int) -> void:
 	if changed:
 		_mark_tile_dirty(px, py, true, 1)
 	if fx != null and fx.has_method("play_sfx"):
-		if drop_kind == WorldDropsScript.DropKind.METEOR_SHARD or drop_kind == WorldDropsScript.DropKind.PLASMA_BOMB:
+		if drop_kind == WorldDropsScript.DropKind.METEOR_SHARD or drop_kind == WorldDropsScript.DropKind.PLASMA_BOMB or drop_kind == WorldDropsScript.DropKind.HOSTILE_POD:
 			fx.play_sfx(22, float(px) + 0.5)
 		elif (_drops.get_landed_total() & 7) == 0:
 			fx.play_sfx(22, float(px) + 0.5)
@@ -3501,7 +3645,7 @@ func _land_drop_climate(px: int, py: int, idx: int, t: int, drop_kind: int) -> b
 			_ignite_tile(idx, 0.85)
 			if drop_kind == WorldDropsScript.DropKind.LAVA:
 				_biomes[idx] = Biome.LAVA
-				_temp[idx] = maxf(_temp[idx], 860.0)
+				_set_temp_tracked(idx, maxf(_temp[idx], 860.0))
 			if (_bomb_map[idx] & 3) > 0:
 				_enqueue_bomb_detonation(idx)
 			return true
@@ -3538,10 +3682,34 @@ func _land_drop_power(px: int, py: int, idx: int, t: int, drop_kind: int) -> boo
 	if drop_kind == WorldDropsScript.DropKind.PLASMA_BOMB or drop_kind == WorldDropsScript.DropKind.METEOR_SHARD:
 		var r: int = 4 if drop_kind == WorldDropsScript.DropKind.PLASMA_BOMB else 3
 		_detonate_crater_at(px, py, r)
+		var f_pos := Vector2(float(px) + 0.5, float(py) + 0.5)
+		var f_col := Color(1.0, 0.36, 0.22, 1.0) if drop_kind == WorldDropsScript.DropKind.PLASMA_BOMB else Color(1.0, 0.62, 0.24, 1.0)
+		_record_lightning_flash(f_pos, 64.0, f_col)
+		return true
+	if drop_kind == WorldDropsScript.DropKind.HOSTILE_POD:
+		if t >= Tier.SAND:
+			_detonate_crater_at(px, py, 2)
+		_plasma_glow[idx] = 255
+		_rad[idx] = clampf(_rad[idx] + 0.18, 0.0, 1.0)
+		_set_temp_tracked(idx, minf(520.0, _temp[idx] + 95.0))
+		if (_bomb_map[idx] & 3) > 0:
+			_enqueue_bomb_detonation(idx)
+		var pod_pos := Vector2(float(px) + 0.5, float(py) + 0.5)
+		if _hostile_pod_events.size() >= 32:
+			_hostile_pod_events.remove_at(0)
+		_hostile_pod_events.append({"pos": pod_pos, "tile": Vector2i(px, py), "is_land": t >= Tier.SAND})
+		hostile_pod_landed.emit(pod_pos)
+		surface_impact.emit(pod_pos, 8.0, "ion_storm")
+		var fx := _resolve_fx()
+		if fx != null:
+			if fx.has_method("spawn_shockwave"):
+				fx.spawn_shockwave(pod_pos, 10.0, Color(1.0, 0.38, 0.24, 0.96), 0.28)
+			if fx.has_method("play_sfx"):
+				fx.play_sfx(17, pod_pos.x)
 		return true
 	if drop_kind == WorldDropsScript.DropKind.PLASMA_ARC:
 		_plasma_glow[idx] = 255
-		_temp[idx] = minf(520.0, _temp[idx] + 85.0)
+		_set_temp_tracked(idx, minf(520.0, _temp[idx] + 85.0))
 		if (_bomb_map[idx] & 3) > 0:
 			_enqueue_bomb_detonation(idx)
 		return true
@@ -3558,7 +3726,7 @@ func _land_drop_power(px: int, py: int, idx: int, t: int, drop_kind: int) -> boo
 	if drop_kind >= WorldDropsScript.DropKind.TRAIT_RAIN and drop_kind <= WorldDropsScript.DropKind.BLESS:
 		_plasma_glow[idx] = maxi(_plasma_glow[idx], 190)
 		if t >= Tier.SAND and drop_kind == WorldDropsScript.DropKind.BLESS:
-			_temp[idx] = lerpf(_temp[idx], 20.0, 0.35)
+			_set_temp_tracked(idx, lerpf(_temp[idx], 20.0, 0.35))
 			_rad[idx] = maxf(0.0, _rad[idx] - 0.12)
 		return true
 	return false
@@ -3682,7 +3850,7 @@ func _seal_vent_tile(idx: int, px: int, py: int) -> void:
 	_vent_mask[idx] = 0
 	if _biomes[idx] == Biome.LAVA:
 		_biomes[idx] = Biome.SCORCHED
-	_temp[idx] = minf(_temp[idx], 110.0)
+	_set_temp_tracked(idx, minf(_temp[idx], 110.0))
 	_volcanoes_sealed_total += 1
 	_rebuild_vent_tiles_cache()
 	_mark_tile_dirty(px, py, true, 1)
@@ -3753,7 +3921,6 @@ func _step_earthquake_fault() -> void:
 					_carve_fault_tile(px, py)
 		_mark_tile_dirty(cx, cy, true, rad + 1)
 	if _quake_steps.is_empty():
-		_recompute_avg_temp_full()
 		region_changed.emit(Rect2i(0, 0, map_w, map_h))
 
 
@@ -3804,42 +3971,25 @@ func _detonate_crater_at(cx: int, cy: int, radius: int) -> void:
 	var mw: int = map_w
 	var mh: int = map_h
 	var chain_r: int = radius + 6
-	var r_sq: int = radius * radius
+	var chain_sq: int = chain_r * chain_r
 	var y0: int = maxi(1, cy - chain_r)
 	var y1: int = mini(mh - 2, cy + chain_r)
 	var x0: int = maxi(1, cx - chain_r)
 	var x1: int = mini(mw - 2, cx + chain_r)
-	for py in range(y0, y1 + 1):
-		var dy: int = py - cy
-		var row_off: int = py * mw
-		for px in range(x0, x1 + 1):
-			var dx: int = px - cx
-			var d_sq: int = dx * dx + dy * dy
-			var idx: int = row_off + px
-			if d_sq <= chain_r * chain_r and (_bomb_map[idx] & 3) > 0:
-				_enqueue_bomb_detonation(idx)
-			if d_sq <= r_sq:
-				var falloff: float = 1.0 - float(d_sq) / maxf(1.0, float(r_sq))
-				if _wall_mask[idx] > 0 and d_sq <= (radius >> 1) * (radius >> 1) + 2:
-					_wall_mask[idx] = 0
-				var h_new: float = maxf(0.10, _height[idx] - 0.13 * falloff)
-				_height[idx] = h_new
-				var nt: int = _classify_height(h_new)
-				_tiers[idx] = nt
-				_clear_frost_at(idx)
-				var old_t: float = _temp[idx]
-				var new_t: float = minf(520.0, old_t + 260.0 * falloff)
-				_temp[idx] = new_t
-				_temp_total_sum += new_t - old_t
-				if nt >= Tier.SAND and _biomes[idx] != Biome.LAVA:
-					_biomes[idx] = Biome.SCORCHED
-					if _ash[idx] == 0:
-						_ash_tiles += 1
-					_ash[idx] = maxi(_ash[idx], int(180.0 * falloff))
-				elif nt <= Tier.SHALLOW:
-					_enqueue_water_tile(idx)
-	_mark_tile_dirty(cx, cy, true, radius + 1)
+	if _bomb_count > 0:
+		for py in range(y0, y1 + 1):
+			var dy: int = py - cy
+			var row_off: int = py * mw
+			for px in range(x0, x1 + 1):
+				var dx: int = px - cx
+				var idx: int = row_off + px
+				if dx * dx + dy * dy <= chain_sq and (_bomb_map[idx] & 3) > 0:
+					_enqueue_bomb_detonation(idx)
+	_stamp_crater_ring(cx, cy, radius, false)
+	var pad_r: int = ceili(float(maxi(radius, 1)) * 1.04)
+	_mark_tile_dirty(cx, cy, true, pad_r + 1)
 	_seed_water_queue_rect(x0, y0, x1, y1)
+	_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 
 
 func _enqueue_bomb_detonation(idx: int) -> void:
@@ -3938,7 +4088,7 @@ func _step_grey_goo_10hz() -> void:
 			_mark_tile_dirty(px, py, true, 0)
 		idx_cursor += 1
 	if eaten_any and _active_chunks.size() < 4:
-		_recompute_avg_temp_full()
+		_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 
 
 func _step_conway_10hz() -> void:
@@ -4229,7 +4379,8 @@ func _try_biome_spread_tile(px: int, py: int, idx: int, b: int) -> void:
 	if _biome_rng.randf() >= chance:
 		return
 	if b == Biome.CRYO_TUNDRA and _temp[nidx] > 18.0:
-		_temp[nidx] = 6.0
+		_set_temp_tracked(nidx, 6.0)
+		_avg_temp_cached = _temp_total_sum * _inv_total_tiles
 	_biomes[nidx] = b
 	_activate_bio_chunk_at(nx, ny)
 	_mark_tile_dirty(nx, ny, true, 0)
@@ -4351,6 +4502,7 @@ func _trigger_disaster_extra(cx: int, cy: int, pos: Vector2, disaster_id: int) -
 	if disaster_id == DisasterKind.ION_LIGHTNING:
 		apply_orbital_strike(pos, 18.0, true)
 		spawn_sky_drops(pos, 12.0, WorldDropsScript.DropKind.PLASMA_ARC)
+		_record_lightning_flash(pos, 72.0, Color(0.55, 0.92, 1.0, 1.0))
 		return true
 
 	if disaster_id == DisasterKind.HEATWAVE:
@@ -4425,38 +4577,75 @@ func get_template_name(template_id: int) -> String:
 	return TEMPLATE_NAMES[clampi(template_id, 0, TEMPLATE_NAMES.size() - 1)]
 
 
-func get_dominant_biome_in_rect(cam_rect: Rect2) -> int:
+func get_audio_env_probe(cam_rect: Rect2) -> Dictionary:
 	if _biomes.is_empty():
-		return Biome.RUST
-	var x0: int = clampi(int(floor(cam_rect.position.x)), 0, map_w - 1)
-	var y0: int = clampi(int(floor(cam_rect.position.y)), 0, map_h - 1)
-	var x1: int = clampi(int(ceil(cam_rect.end.x)), x0 + 1, map_w)
-	var y1: int = clampi(int(ceil(cam_rect.end.y)), y0 + 1, map_h)
-	var sx: int = maxi(1, (x1 - x0) / 10)
-	var sy: int = maxi(1, (y1 - y0) / 8)
+		return {
+			"biome_id": Biome.RUST,
+			"ocean_ratio": 0.0,
+			"coast_ratio": 0.0,
+			"fire_ratio": 0.0,
+			"avg_temp": get_avg_temp(),
+		}
+	var probe_rect := cam_rect
+	if probe_rect.size.x <= 0.0 or probe_rect.size.y <= 0.0:
+		probe_rect = Rect2(0.0, 0.0, float(map_w), float(map_h))
+	var x0: int = clampi(int(floor(probe_rect.position.x)), 0, map_w - 1)
+	var y0: int = clampi(int(floor(probe_rect.position.y)), 0, map_h - 1)
+	var x1: int = clampi(int(ceil(probe_rect.end.x)), x0 + 1, map_w)
+	var y1: int = clampi(int(ceil(probe_rect.end.y)), y0 + 1, map_h)
+	var sx: int = maxi(1, ceili(float(x1 - x0) / 10.0))
+	var sy: int = maxi(1, ceili(float(y1 - y0) / 8.0))
 	var counts := PackedInt32Array()
 	counts.resize(BIOME_NAMES.size())
 	var water_cnt: int = 0
 	var land_cnt: int = 0
+	var coast_cnt: int = 0
+	var fire_cnt: int = 0
+	var temp_sum: float = 0.0
+	var sample_cnt: int = 0
 	for py in range(y0, y1, sy):
 		var row_off: int = py * map_w
 		for px in range(x0, x1, sx):
 			var idx: int = row_off + px
-			if _tiers[idx] <= Tier.SHALLOW:
+			var t: int = _tiers[idx]
+			var b: int = _biomes[idx]
+			temp_sum += _temp[idx] + _cosmic_temp_offset
+			sample_cnt += 1
+			if _fire[idx] > 0.05 or b == Biome.LAVA or _temp[idx] >= 185.0:
+				fire_cnt += 1
+			if t <= Tier.SHALLOW:
 				water_cnt += 1
+				if t == Tier.SHALLOW or _has_land_within_two(px, py):
+					coast_cnt += 1
 			else:
-				var b: int = clampi(_biomes[idx], 0, counts.size() - 1)
-				counts[b] += 1
+				counts[clampi(b, 0, counts.size() - 1)] += 1
 				land_cnt += 1
-	if water_cnt > land_cnt * 2:
-		return -1
-	var best_b: int = Biome.RUST
-	var best_n: int = -1
-	for bi in range(counts.size()):
-		if counts[bi] > best_n:
-			best_n = counts[bi]
-			best_b = bi
-	return best_b
+				if t == Tier.SAND or (t <= Tier.SOIL_LOW and _has_water_within(px, py, 3)):
+					coast_cnt += 1
+	var inv_s: float = 1.0 / float(maxi(sample_cnt, 1))
+	var ocean_ratio: float = float(water_cnt) * inv_s
+	var mix_coast: float = clampf(minf(ocean_ratio, 1.0 - ocean_ratio) * 2.5, 0.0, 1.0)
+	var coast_ratio: float = clampf(maxf(float(coast_cnt) * inv_s, mix_coast * 0.65), 0.0, 1.0)
+	var fire_ratio: float = clampf(float(fire_cnt) * inv_s, 0.0, 1.0)
+	var dom_b: int = -1
+	if water_cnt <= land_cnt * 2:
+		dom_b = Biome.RUST
+		var best_n: int = -1
+		for bi in range(counts.size()):
+			if counts[bi] > best_n:
+				best_n = counts[bi]
+				dom_b = bi
+	return {
+		"biome_id": dom_b,
+		"ocean_ratio": ocean_ratio,
+		"coast_ratio": coast_ratio,
+		"fire_ratio": fire_ratio,
+		"avg_temp": temp_sum * inv_s if sample_cnt > 0 else get_avg_temp(),
+	}
+
+
+func get_dominant_biome_in_rect(cam_rect: Rect2) -> int:
+	return int(get_audio_env_probe(cam_rect).get("biome_id", Biome.RUST))
 
 
 func get_world_extended_stats() -> Dictionary:
@@ -4795,6 +4984,7 @@ func _render_row_base(y: int, rx0: int, rx1: int) -> void:
 		var h: float = _height[idx]
 		var hv: int = ((x * 73856093) ^ (y * 19349663)) & 63
 		var crys_role: int = 0
+		var scorch_flag: int = 0
 		var col: Color
 
 		if t == Tier.DEEP_OCEAN:
@@ -4838,6 +5028,7 @@ func _render_row_base(y: int, rx0: int, rx1: int) -> void:
 				col = COL_CRYS_TIP if crys_role == 3 else (COL_CRYS_VEIN if crys_role == 2 else (COL_CRYS_SLATE if (crys_role == 1 or hv > 54) else (COL_CRYS_LOW if t == Tier.SOIL_LOW else COL_CRYS_HIGH)))
 			elif b == Biome.SCORCHED:
 				var sc_s: bool = (hv & 3) == 0 and (sin(float(x) * 0.45 + float(y) * 0.35) + cos(float(x - y) * 0.52) > 1.38)
+				scorch_flag = 1 if sc_s else 0
 				col = _scorched_color_at(t, _temp[idx], hv, sc_s)
 			elif b == Biome.LAVA:
 				col = _lava_color_at(_temp[idx], hv)
@@ -4855,16 +5046,20 @@ func _render_row_base(y: int, rx0: int, rx1: int) -> void:
 		else:
 			col = _render_highland_col(x, y, idx, t, b, h, hv, row_off, row_n, row_s)
 			crys_role = _ren_crys_role
+			scorch_flag = _ren_row_scorch[x]
 		_ren_row_col[x] = col
 		_ren_row_crys[x] = crys_role
+		_ren_row_scorch[x] = scorch_flag
 
 
 func _render_highland_col(x: int, y: int, idx: int, t: int, b: int, h: float, hv: int, row_off: int, row_n: int, row_s: int) -> Color:
 	_ren_crys_role = 0
+	_ren_row_scorch[x] = 0
 	if b == Biome.LAVA:
 		return _lava_color_at(_temp[idx], hv)
 	if b == Biome.SCORCHED:
 		var sc: bool = (hv & 3) == 0 and (sin(float(x) * 0.45 + float(y) * 0.35) + cos(float(x - y) * 0.52) > 1.38)
+		_ren_row_scorch[x] = 1 if sc else 0
 		return _scorched_color_at(t, _temp[idx], hv, sc)
 	var mw: int = map_w
 	var gx: float = (_height[row_off + mini(mw - 1, x + 1)] - _height[row_off + maxi(0, x - 1)]) * 0.5
@@ -4888,7 +5083,7 @@ func _render_highland_col(x: int, y: int, idx: int, t: int, b: int, h: float, hv
 			return hc.lerp(_render_tile_new_biome_col(x, y, Tier.SOIL_LOW, b, h, hv, nw_lit), 0.28)
 		return hc
 	if t == Tier.MOUNTAINS:
-		var m_shade: float = nw_lit + sin(h * 72.0 + float(x - y) * 0.10) * 0.0022
+		var m_shade: float = nw_lit + sin(h * 72.0 + float(((x * 13) ^ (y * 29)) & 15) * 0.35) * 0.0022
 		if m_shade > 0.0085:
 			return COL_MTN_RIDGE
 		if m_shade > 0.0020:
@@ -4933,6 +5128,8 @@ func _render_row_commit(y: int, rx0: int, rx1: int) -> int:
 		elif (b == Biome.LUSH or b == Biome.RUST or b == Biome.XENO_JUNGLE) and t >= Tier.SAND:
 			if temp_v > 65.0 or _biomes[row_off + xp] == Biome.LAVA or _biomes[row_off + xn] == Biome.LAVA or _biomes[row_n + x] == Biome.LAVA or _biomes[row_s + x] == Biome.LAVA:
 				col = col.lerp(COL_SCORCH_HIGH, 0.62)
+		if t >= Tier.SOIL_LOW and t <= Tier.HILLS and b != Biome.LAVA and fire_v <= 0.05 and (hv & 3) < 2:
+			col = _dither_biome_edge_col(col, x, b, row_off, row_n, row_s, xp, xn)
 
 		var bev: int = 0
 		if t <= Tier.SHALLOW:
@@ -4997,8 +5194,8 @@ func _render_row_commit(y: int, rx0: int, rx1: int) -> int:
 		else:
 			if fire_v > 0.05 and t >= Tier.SAND:
 				m_foam = clampi(int(clampf(fire_v, 0.15, 1.0) * 245.0), 40, 250)
-			if b == Biome.SCORCHED and t >= Tier.SAND and temp_v > 185.0 and (hv & 3) == 0 and (sin(float(x) * 0.45 + float(y) * 0.35) + cos(float(x - y) * 0.52) > 1.38):
-				m_lava = clampi(int(clampf((temp_v - 185.0) / 360.0, 0.14, 0.58) * 255.0), 0, 255)
+			if b == Biome.SCORCHED and t >= Tier.SAND and temp_v > 115.0 and _ren_row_scorch[x] != 0:
+				m_lava = clampi(int(clampf((temp_v - 115.0) / 360.0, 0.14, 0.58) * 255.0), 0, 255)
 			elif (b == Biome.CRYSTAL or b == Biome.BIOLUM_OASIS or b == Biome.CREEP_CYBER) and t >= Tier.SAND and t <= Tier.HILLS:
 				var cr: int = _ren_row_crys[x]
 				m_cryst = 235 if cr == 3 else (92 if cr == 2 else 0)
@@ -5015,6 +5212,26 @@ func _render_row_commit(y: int, rx0: int, rx1: int) -> int:
 			_mask_buf[p + 3] = m_cryst
 			upload_flags |= 2
 	return upload_flags
+
+
+func _dither_biome_edge_col(col: Color, x: int, b: int, row_off: int, row_n: int, row_s: int, xp: int, xn: int) -> Color:
+	var nidx: int = row_off + xp
+	var nb_b: int = _biomes[nidx]
+	if _tiers[nidx] >= Tier.SOIL_LOW and _tiers[nidx] <= Tier.HILLS and nb_b != b and nb_b != Biome.LAVA:
+		return col.lerp(BIOME_TINTS[clampi(nb_b, 0, BIOME_TINTS.size() - 1)], 0.38)
+	nidx = row_off + xn
+	nb_b = _biomes[nidx]
+	if _tiers[nidx] >= Tier.SOIL_LOW and _tiers[nidx] <= Tier.HILLS and nb_b != b and nb_b != Biome.LAVA:
+		return col.lerp(BIOME_TINTS[clampi(nb_b, 0, BIOME_TINTS.size() - 1)], 0.38)
+	nidx = row_n + x
+	nb_b = _biomes[nidx]
+	if _tiers[nidx] >= Tier.SOIL_LOW and _tiers[nidx] <= Tier.HILLS and nb_b != b and nb_b != Biome.LAVA:
+		return col.lerp(BIOME_TINTS[clampi(nb_b, 0, BIOME_TINTS.size() - 1)], 0.38)
+	nidx = row_s + x
+	nb_b = _biomes[nidx]
+	if _tiers[nidx] >= Tier.SOIL_LOW and _tiers[nidx] <= Tier.HILLS and nb_b != b and nb_b != Biome.LAVA:
+		return col.lerp(BIOME_TINTS[clampi(nb_b, 0, BIOME_TINTS.size() - 1)], 0.38)
+	return col
 
 
 func _render_hazard_overlay(col: Color, x: int, y: int, idx: int, hv: int, w: int, row_n: int, row_off: int, xp: int) -> Color:

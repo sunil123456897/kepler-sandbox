@@ -143,6 +143,7 @@ var _p_mode: PackedByteArray
 var _p_origin: PackedVector2Array
 var _p_dir: PackedVector2Array
 var _p_max_r: PackedFloat32Array
+var _p_mm_buf: PackedFloat32Array
 var _active_count: int = 0
 var _evict_cursor: int = 0
 
@@ -153,6 +154,7 @@ var _s_age: PackedFloat32Array
 var _s_life: PackedFloat32Array
 var _s_hdr: PackedFloat32Array
 var _s_col_idx: PackedByteArray
+var _s_mm_buf: PackedFloat32Array
 var _s_active_count: int = 0
 var _s_evict_cursor: int = 0
 
@@ -181,7 +183,6 @@ var _audio_player: AudioStreamPlayer
 var _audio_supported: bool = false
 var _audio_unlocked: bool = false
 var _mix_chunk: PackedVector2Array
-var _was_silent: bool = true
 var _rng := RandomNumberGenerator.new()
 var _cam_zoom: float = 2.0
 var _cam_center_x: float = 320.0
@@ -195,11 +196,22 @@ var _amb_pause_gain: float = 1.0
 var _amb_pause_target: float = 1.0
 var _amb_biome_f_mul: float = 1.0
 var _amb_biome_wind_mul: float = 1.0
+var _amb_ocean_ratio: float = 0.0
+var _amb_coast_ratio: float = 0.0
+var _amb_fire_ratio: float = 0.0
+var _amb_city_density: float = 0.0
+var _amb_avg_temp: float = 18.0
 var _world_ref: Node2D = null
+var _civ_ref: Node2D = null
 var _amb_noise_state: int = 0x51A7F00D
 var _amb_wind_prev: float = 0.0
 var _amb_wind_curr: float = 0.0
 var _amb_wind_lpf: float = 0.0
+var _amb_surf_lpf: float = 0.0
+var _amb_surf_ph: float = 0.0
+var _amb_forge_ph: float = 0.0
+var _amb_crackle_hp_prev: float = 0.0
+var _amb_crackle_env: float = 0.0
 var _amb_drone_ph1: float = 0.0
 var _amb_drone_ph2: float = 0.0
 var _amb_lfo_ph: float = 0.0
@@ -266,6 +278,7 @@ func _exit_tree() -> void:
 		_mm_strips.texture = null
 		_mm_strips = null
 	_world_ref = null
+	_civ_ref = null
 	_strips_mat = null
 	if _light_sprite != null:
 		_light_sprite.texture = null
@@ -299,6 +312,13 @@ func _init_particle_buffers() -> void:
 	_p_max_r.resize(MAX_PARTICLES)
 	_p_aspect.fill(1.0)
 	_p_rot.fill(0.0)
+	_p_mm_buf.resize(MAX_PARTICLES * 16)
+	_p_mm_buf.fill(0.0)
+	for k in range(MAX_PARTICLES):
+		var base := k * 16
+		_p_mm_buf[base] = 1.0
+		_p_mm_buf[base + 5] = 1.0
+		_p_mm_buf[base + 11] = 1.0
 	_active_count = 0
 	_evict_cursor = 0
 
@@ -595,6 +615,13 @@ func _init_strip_buffers() -> void:
 	_s_life.resize(MAX_STRIPS)
 	_s_hdr.resize(MAX_STRIPS)
 	_s_col_idx.resize(MAX_STRIPS)
+	_s_mm_buf.resize(MAX_STRIPS * 16)
+	_s_mm_buf.fill(0.0)
+	for sk in range(MAX_STRIPS):
+		var sbase := sk * 16
+		_s_mm_buf[sbase] = 1.0
+		_s_mm_buf[sbase + 5] = 1.0
+		_s_mm_buf[sbase + 11] = 1.0
 	_s_active_count = 0
 	_s_evict_cursor = 0
 
@@ -783,12 +810,15 @@ func _init_audio_synth() -> void:
 
 	_audio_supported = true
 	_audio_player = AudioStreamPlayer.new()
+	_audio_player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	var gen := AudioStreamGenerator.new()
 	gen.mix_rate = TUNING_KNOBS["AUDIO_MIX_RATE"]
-	gen.buffer_length = TUNING_KNOBS["AUDIO_BUFFER_SEC"]
+	gen.buffer_length = 0.18 if OS.has_feature("web") else float(TUNING_KNOBS["AUDIO_BUFFER_SEC"])
 	_audio_player.stream = gen
 	_audio_player.volume_db = TUNING_KNOBS["AUDIO_VOLUME_DB"]
 	add_child(_audio_player)
+	if not OS.has_feature("web"):
+		_audio_unlocked = true
 
 
 func _alloc_particle_slot() -> int:
@@ -944,6 +974,73 @@ func emit_campfire_ember(world_pos: Vector2, drift: Vector2 = Vector2.ZERO, colo
 	_mm_particles.multimesh.visible_instance_count = _active_count
 
 
+func emit_water_wake(world_pos: Vector2, dir: Vector2) -> void:
+	_ensure_initialized()
+	var fwd := dir.normalized() if dir.length_squared() > 0.0001 else Vector2.RIGHT
+	var side := Vector2(-fwd.y, fwd.x)
+	var base_ang := fwd.angle()
+	for s_idx in range(2):
+		var sgn := -1.0 if s_idx == 0 else 1.0
+		var slot := _alloc_particle_slot()
+		_p_mode[slot] = MODE_BALLISTIC
+		_p_pos[slot] = world_pos - fwd * 2.2 + side * (sgn * 1.4)
+		_p_vel[slot] = -fwd * 2.4 + side * (sgn * 5.2)
+		_p_age[slot] = 0.0
+		_p_life[slot] = 0.55
+		_p_gravity[slot] = 0.0
+		_p_col_idx[slot] = P_COL_SPARKLE if s_idx == 0 else P_COL_EMBER
+		_p_hdr[slot] = 1.0
+		_p_color[slot] = Color(0.62, 0.90, 1.0, 0.55)
+		_p_size[slot] = 0.32
+		_p_aspect[slot] = 1.35
+		_p_rot[slot] = base_ang + sgn * 0.36
+		_write_instance_visual(slot)
+	_mm_particles.multimesh.visible_instance_count = _active_count
+
+
+func emit_lightning_flash(world_pos: Vector2, radius: float, col: Color = Color(0.55, 0.92, 1.0, 1.0)) -> void:
+	_ensure_initialized()
+	var cur_p := world_pos + Vector2(_rng.randf_range(-4.0, 4.0), -64.0)
+	for seg in range(4):
+		var next_p := world_pos if seg == 3 else (world_pos + Vector2(_rng.randf_range(-7.0, 7.0), -64.0 + float(seg + 1) * 16.0))
+		var seg_vec := next_p - cur_p
+		var seg_len := maxf(seg_vec.length(), 4.0)
+		var slot := _alloc_particle_slot()
+		_p_mode[slot] = MODE_TRACER
+		_p_pos[slot] = (cur_p + next_p) * 0.5
+		_p_vel[slot] = Vector2.ZERO
+		_p_origin[slot] = _p_pos[slot]
+		_p_dir[slot] = seg_vec / seg_len
+		_p_max_r[slot] = 0.0
+		_p_age[slot] = 0.0
+		_p_life[slot] = 0.16
+		_p_gravity[slot] = 0.0
+		_p_col_idx[slot] = P_COL_BOLT
+		_p_hdr[slot] = 3.4
+		_p_color[slot] = col.lightened(0.25) if (seg & 1) == 0 else col
+		_p_size[slot] = 0.55
+		_p_aspect[slot] = seg_len / (PARTICLE_QUAD_PX * 0.55)
+		_p_rot[slot] = seg_vec.angle()
+		_write_instance_visual(slot)
+		cur_p = next_p
+	var f_slot := _alloc_particle_slot()
+	_p_mode[f_slot] = MODE_BALLISTIC
+	_p_pos[f_slot] = world_pos
+	_p_vel[f_slot] = Vector2.ZERO
+	_p_age[f_slot] = 0.0
+	_p_life[f_slot] = 0.14
+	_p_gravity[f_slot] = 0.0
+	_p_col_idx[f_slot] = P_COL_FLASH
+	_p_hdr[f_slot] = 3.2
+	_p_color[f_slot] = col.lightened(0.30)
+	_p_size[f_slot] = 1.8
+	_p_aspect[f_slot] = 1.0
+	_p_rot[f_slot] = 0.0
+	_write_instance_visual(f_slot)
+	_mm_particles.multimesh.visible_instance_count = _active_count
+	_spawn_transient_light(world_pos, clampf(maxf(radius * 2.2, 64.0), 64.0, 88.0), col, 2.1, 0.18)
+
+
 func emit_spark_arc(world_pos: Vector2, dir: Vector2 = Vector2.RIGHT, color: Color = Color(0.55, 0.92, 1.0, 1.0)) -> void:
 	_ensure_initialized()
 	var base_dir := dir.normalized() if dir.length_squared() > 0.0001 else Vector2.RIGHT
@@ -1069,7 +1166,7 @@ func _copy_strip(src: int, dst: int) -> void:
 	_s_col_idx[dst] = _s_col_idx[src]
 
 
-func _write_strip_visual(i: int) -> void:
+func _pack_strip_to_buf(i: int, mm_buf: PackedFloat32Array) -> void:
 	var life := maxf(_s_life[i], 0.01)
 	var t := clampf(_s_age[i] / life, 0.0, 1.0)
 	var scale_s := 0.5 if (t < 0.08 or t > 0.88) else 1.0
@@ -1079,11 +1176,33 @@ func _write_strip_visual(i: int) -> void:
 		var u := clampf((t - 0.58) / 0.42, 0.0, 1.0)
 		fade_out = 1.0 - u * u
 	var alpha := clampf(fade_in * fade_out, 0.0, 1.0)
+	var off := i * 16
+	var rp := _s_pos[i].round()
+	mm_buf[off] = scale_s
+	mm_buf[off + 1] = 0.0
+	mm_buf[off + 2] = 0.0
+	mm_buf[off + 3] = rp.x
+	mm_buf[off + 4] = 0.0
+	mm_buf[off + 5] = scale_s
+	mm_buf[off + 6] = 0.0
+	mm_buf[off + 7] = rp.y
+	mm_buf[off + 8] = 1.0
+	mm_buf[off + 9] = 1.0
+	mm_buf[off + 10] = 1.0
+	mm_buf[off + 11] = alpha
+	mm_buf[off + 12] = _s_hdr[i]
+	mm_buf[off + 13] = 0.0
+	mm_buf[off + 14] = 1.0
+	mm_buf[off + 15] = float(_s_col_idx[i])
 
+
+func _write_strip_visual(i: int) -> void:
+	_pack_strip_to_buf(i, _s_mm_buf)
+	var off := i * 16
 	var mm := _mm_strips.multimesh
-	mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(scale_s, scale_s), 0.0, _s_pos[i].round()))
-	mm.set_instance_color(i, Color(1.0, 1.0, 1.0, alpha))
-	mm.set_instance_custom_data(i, Color(_s_hdr[i], 0.0, 1.0, float(_s_col_idx[i])))
+	mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(_s_mm_buf[off], _s_mm_buf[off + 5]), 0.0, Vector2(_s_mm_buf[off + 3], _s_mm_buf[off + 7])))
+	mm.set_instance_color(i, Color(1.0, 1.0, 1.0, _s_mm_buf[off + 11]))
+	mm.set_instance_custom_data(i, Color(_s_mm_buf[off + 12], 0.0, 1.0, _s_mm_buf[off + 15]))
 
 
 func spawn_reaction_strip(world_pos: Vector2, strip_id: int) -> void:
@@ -1360,16 +1479,70 @@ func set_camera_audio_context(cam_rect: Rect2, zoom_val: float, sim_speed: float
 		_biome_scan_timer = 0.50
 
 
+func _calc_close_t(zoom_val: float) -> float:
+	return clampf((zoom_val - 1.0) / 3.5, 0.0, 1.0)
+
+
+func _calc_ambient_gain_for_zoom(zoom_val: float) -> float:
+	return lerpf(0.022, 0.056, _calc_close_t(zoom_val))
+
+
 func get_audio_context_state() -> Dictionary:
 	return {
 		"cam_zoom": _cam_zoom,
+		"close_t": _calc_close_t(_cam_zoom),
 		"sim_speed": _sim_speed,
 		"pause_gain": _amb_pause_gain,
 		"pause_target": _amb_pause_target,
 		"ambient_biome_id": _ambient_biome_id,
 		"biome_f_mul": _amb_biome_f_mul,
 		"biome_wind_mul": _amb_biome_wind_mul,
+		"ocean_ratio": _amb_ocean_ratio,
+		"coast_ratio": _amb_coast_ratio,
+		"fire_ratio": _amb_fire_ratio,
+		"city_density": _amb_city_density,
 		"drop_instances": _mm_drops.multimesh.visible_instance_count if (_mm_drops != null and _mm_drops.multimesh != null) else 0,
+	}
+
+
+func verify_audio_config() -> Dictionary:
+	_ensure_initialized()
+	var is_web := OS.has_feature("web")
+	var expected_buf := 0.18 if is_web else float(TUNING_KNOBS["AUDIO_BUFFER_SEC"])
+	var playback_type_ok := true
+	var actual_buf := expected_buf
+	if _audio_player != null:
+		var is_stream_mode := (_audio_player.playback_type == AudioServer.PLAYBACK_TYPE_STREAM)
+		var is_gen := (_audio_player.stream is AudioStreamGenerator)
+		if is_gen:
+			actual_buf = (_audio_player.stream as AudioStreamGenerator).buffer_length
+		playback_type_ok = is_stream_mode and is_gen and absf(actual_buf - expected_buf) < 0.005
+	var close_low := _calc_close_t(0.8)
+	var close_high := _calc_close_t(3.5)
+	var gain_low := _calc_ambient_gain_for_zoom(0.8)
+	var gain_high := _calc_ambient_gain_for_zoom(3.5)
+	var zoom_lod_audio_ok := close_high > close_low and gain_high > gain_low
+	var w := _resolve_world_ref()
+	var env_probe: Dictionary = {}
+	var env_probe_ok := false
+	if w != null and w.has_method("get_audio_env_probe"):
+		env_probe = w.call("get_audio_env_probe", _cam_rect)
+		env_probe_ok = env_probe.has("biome_id") and env_probe.has("ocean_ratio") and env_probe.has("coast_ratio") and env_probe.has("fire_ratio") and env_probe.has("avg_temp")
+	var ok := playback_type_ok and zoom_lod_audio_ok and (w == null or env_probe_ok)
+	return {
+		"ok": ok,
+		"audio_stream_ok": ok,
+		"playback_type_stream": playback_type_ok,
+		"zoom_lod_audio_ok": zoom_lod_audio_ok,
+		"close_t_low": close_low,
+		"close_t_high": close_high,
+		"amb_gain_low": gain_low,
+		"amb_gain_high": gain_high,
+		"env_probe_ok": env_probe_ok,
+		"env_probe": env_probe,
+		"buffer_sec": actual_buf,
+		"audio_supported": _audio_supported,
+		"audio_unlocked": _audio_unlocked,
 	}
 
 
@@ -1386,12 +1559,32 @@ func _resolve_world_ref() -> Node2D:
 	return _world_ref
 
 
+func _resolve_civ_ref() -> Node2D:
+	if _civ_ref != null and is_instance_valid(_civ_ref):
+		return _civ_ref
+	var p := get_parent()
+	if p != null:
+		var cand := p.get_node_or_null("CivSim") as Node2D
+		if cand != null:
+			_civ_ref = cand
+			return _civ_ref
+	_civ_ref = get_node_or_null("../CivSim") as Node2D
+	return _civ_ref
+
+
 func _scan_visible_biome_audio() -> void:
 	var w := _resolve_world_ref()
 	if w == null:
 		return
 	var dom_b: int = 1
-	if w.has_method("get_dominant_biome_in_rect"):
+	if w.has_method("get_audio_env_probe"):
+		var probe: Dictionary = w.call("get_audio_env_probe", _cam_rect)
+		dom_b = int(probe.get("biome_id", 1))
+		_amb_ocean_ratio = clampf(float(probe.get("ocean_ratio", 0.0)), 0.0, 1.0)
+		_amb_coast_ratio = clampf(float(probe.get("coast_ratio", 0.0)), 0.0, 1.0)
+		_amb_fire_ratio = clampf(float(probe.get("fire_ratio", 0.0)), 0.0, 1.0)
+		_amb_avg_temp = float(probe.get("avg_temp", 18.0))
+	elif w.has_method("get_dominant_biome_in_rect"):
 		dom_b = int(w.call("get_dominant_biome_in_rect", _cam_rect))
 	elif w.has_method("get_biome"):
 		var mw: int = int(w.get("map_w"))
@@ -1400,7 +1593,24 @@ func _scan_visible_biome_audio() -> void:
 		var sy: int = clampi(int(_cam_rect.position.y + _cam_rect.size.y * 0.5), 0, maxi(0, mh - 1))
 		dom_b = int(w.call("get_biome", sx, sy))
 	_ambient_biome_id = dom_b
+	var vis_cities: int = 0
+	var civ := _resolve_civ_ref()
+	if civ != null:
+		var c_act_v: Variant = civ.get("_city_active")
+		var c_pos_v: Variant = civ.get("_city_center")
+		if c_act_v is PackedByteArray and c_pos_v is PackedVector2Array:
+			var c_act := c_act_v as PackedByteArray
+			var c_pos := c_pos_v as PackedVector2Array
+			var probe_rect := _cam_rect.grow(32.0)
+			var n_c := mini(c_act.size(), c_pos.size())
+			for ci in range(n_c):
+				if c_act[ci] != 0 and probe_rect.has_point(c_pos[ci]):
+					vis_cities += 1
+	_amb_city_density = clampf(float(vis_cities) * 0.45, 0.0, 1.0)
 	match dom_b:
+		-1:
+			_amb_biome_f_mul = 0.82
+			_amb_biome_wind_mul = 1.15
 		4, 3, 7:
 			_amb_biome_f_mul = 0.78
 			_amb_biome_wind_mul = 1.25
@@ -1487,8 +1697,10 @@ func activate_audio() -> void:
 	_ensure_initialized()
 	if not _audio_supported:
 		return
+	var was_unlocked := _audio_unlocked
 	_audio_unlocked = true
-	_pump_audio(AUDIO_CHUNK_SIZE * 2)
+	if not was_unlocked or (_audio_player != null and not _audio_player.playing):
+		_pump_audio(AUDIO_CHUNK_SIZE * 2)
 
 
 func set_ambient_age(age_id: int) -> void:
@@ -1716,7 +1928,7 @@ func play_sfx(kind: Variant, world_x: float = -1.0) -> void:
 
 	var pan := 0.0
 	if world_x >= 0.0 and not is_nan(world_x) and not is_inf(world_x):
-		var pan_half := maxf(320.0 / clampf(_cam_zoom, 0.65, 6.0), 32.0)
+		var pan_half := maxf(float(TUNING_KNOBS["STEREO_PAN_HALF_WIDTH_PX"]) / clampf(_cam_zoom, 0.65, 6.0), 32.0)
 		pan = clampf((world_x - _cam_center_x) / pan_half, -0.75, 0.75)
 
 	var pitch_mul := _rng.randf_range(TUNING_KNOBS["PITCH_JITTER_MIN"], TUNING_KNOBS["PITCH_JITTER_MAX"])
@@ -1735,10 +1947,6 @@ func play_sfx(kind: Variant, world_x: float = -1.0) -> void:
 	_v_lpf[slot] = 0.0
 	_v_bp[slot] = 0.0
 	_v_noise_state[slot] = int(_rng.randi() | 1)
-
-	if _audio_supported:
-		_audio_unlocked = true
-		_pump_audio(AUDIO_CHUNK_SIZE * 2)
 
 
 func emit_build_pop(world_pos: Vector2) -> void:
@@ -1770,54 +1978,8 @@ func step_fx(dt: float) -> void:
 		if _sfx_cooldown[k] > 0.0:
 			_sfx_cooldown[k] = maxf(0.0, _sfx_cooldown[k] - safe_dt)
 
-	var i := 0
-	while i < _active_count:
-		var age := _p_age[i] + safe_dt
-		var life := _p_life[i]
-		if age >= life:
-			var last := _active_count - 1
-			if i != last:
-				_copy_particle(last, i)
-			_active_count = last
-			continue
-
-		_p_age[i] = age
-		if _p_mode[i] == MODE_SHOCKWAVE:
-			var t := clampf(age / life, 0.0, 1.0)
-			var ease_r := 0.18 + 0.82 * (1.0 - pow(1.0 - t, 2.3))
-			_p_pos[i] = _p_origin[i] + _p_dir[i] * (_p_max_r[i] * ease_r)
-		elif _p_mode[i] == MODE_TRACER:
-			_p_pos[i] += _p_vel[i] * safe_dt
-		else:
-			var vel := _p_vel[i]
-			vel.y += _p_gravity[i] * safe_dt
-			var drag := exp(-2.4 * safe_dt) if _p_col_idx[i] == P_COL_PUFF else exp(-1.1 * safe_dt)
-			vel *= drag
-			_p_vel[i] = vel
-			_p_pos[i] += vel * safe_dt
-
-		_write_instance_visual(i)
-		i += 1
-
-	_mm_particles.multimesh.visible_instance_count = _active_count
-
-	var s_idx := 0
-	var strip_drag := exp(-1.4 * safe_dt)
-	while s_idx < _s_active_count:
-		var s_age := _s_age[s_idx] + safe_dt
-		if s_age >= _s_life[s_idx]:
-			var s_last := _s_active_count - 1
-			if s_idx != s_last:
-				_copy_strip(s_last, s_idx)
-			_s_active_count = s_last
-			continue
-		_s_age[s_idx] = s_age
-		var s_vel := _s_vel[s_idx] * strip_drag
-		_s_vel[s_idx] = s_vel
-		_s_pos[s_idx] += s_vel * safe_dt
-		_write_strip_visual(s_idx)
-		s_idx += 1
-	_mm_strips.multimesh.visible_instance_count = _s_active_count
+	_step_particles_and_pack(safe_dt)
+	_step_strips_and_pack(safe_dt)
 
 	var tl_idx := 0
 	while tl_idx < _tl_count:
@@ -1837,7 +1999,71 @@ func step_fx(dt: float) -> void:
 		tl_idx += 1
 
 	if _audio_supported and _audio_unlocked:
-		_pump_audio(AUDIO_CHUNK_SIZE * 4)
+		_pump_audio(AUDIO_CHUNK_SIZE * 6)
+
+
+func _step_particles_and_pack(safe_dt: float) -> void:
+	var mm_p := _mm_particles.multimesh
+	if _active_count <= 0:
+		if mm_p.visible_instance_count != 0:
+			mm_p.visible_instance_count = 0
+		return
+	var i := 0
+	while i < _active_count:
+		var age := _p_age[i] + safe_dt
+		var life := _p_life[i]
+		if age >= life:
+			var last := _active_count - 1
+			if i != last:
+				_copy_particle(last, i)
+			_active_count = last
+			continue
+		_p_age[i] = age
+		if _p_mode[i] == MODE_SHOCKWAVE:
+			var t := clampf(age / life, 0.0, 1.0)
+			var ease_r := 0.18 + 0.82 * (1.0 - pow(1.0 - t, 2.3))
+			_p_pos[i] = _p_origin[i] + _p_dir[i] * (_p_max_r[i] * ease_r)
+		elif _p_mode[i] == MODE_TRACER:
+			_p_pos[i] += _p_vel[i] * safe_dt
+		else:
+			var vel := _p_vel[i]
+			vel.y += _p_gravity[i] * safe_dt
+			var drag := exp(-2.4 * safe_dt) if _p_col_idx[i] == P_COL_PUFF else exp(-1.1 * safe_dt)
+			vel *= drag
+			_p_vel[i] = vel
+			_p_pos[i] += vel * safe_dt
+		_pack_particle_to_buf(i, _p_mm_buf)
+		i += 1
+	mm_p.visible_instance_count = _active_count
+	if _active_count > 0:
+		mm_p.buffer = _p_mm_buf
+
+
+func _step_strips_and_pack(safe_dt: float) -> void:
+	var mm_s := _mm_strips.multimesh
+	if _s_active_count <= 0:
+		if mm_s.visible_instance_count != 0:
+			mm_s.visible_instance_count = 0
+		return
+	var s_idx := 0
+	var strip_drag := exp(-1.4 * safe_dt)
+	while s_idx < _s_active_count:
+		var s_age := _s_age[s_idx] + safe_dt
+		if s_age >= _s_life[s_idx]:
+			var s_last := _s_active_count - 1
+			if s_idx != s_last:
+				_copy_strip(s_last, s_idx)
+			_s_active_count = s_last
+			continue
+		_s_age[s_idx] = s_age
+		var s_vel := _s_vel[s_idx] * strip_drag
+		_s_vel[s_idx] = s_vel
+		_s_pos[s_idx] += s_vel * safe_dt
+		_pack_strip_to_buf(s_idx, _s_mm_buf)
+		s_idx += 1
+	mm_s.visible_instance_count = _s_active_count
+	if _s_active_count > 0:
+		mm_s.buffer = _s_mm_buf
 
 
 func _copy_particle(src: int, dst: int) -> void:
@@ -1858,7 +2084,7 @@ func _copy_particle(src: int, dst: int) -> void:
 	_p_max_r[dst] = _p_max_r[src]
 
 
-func _write_instance_visual(i: int) -> void:
+func _pack_particle_to_buf(i: int, mm_buf: PackedFloat32Array) -> void:
 	var life := maxf(_p_life[i], 0.01)
 	var t := clampf(_p_age[i] / life, 0.0, 1.0)
 	var remain := 1.0 - t
@@ -1898,14 +2124,42 @@ func _write_instance_visual(i: int) -> void:
 		alpha_mult = remain * (1.18 - 0.20 * t)
 		hdr_val *= (0.55 + 0.45 * remain)
 
-	var xform := Transform2D(_p_rot[i], Vector2(scale_x, scale_y), 0.0, _p_pos[i])
+	var rot := _p_rot[i]
+	var c_r := 1.0 if rot == 0.0 else cos(rot)
+	var s_r := 0.0 if rot == 0.0 else sin(rot)
+	var p := _p_pos[i]
 	var c := _p_color[i]
-	c.a *= clampf(alpha_mult, 0.0, 1.0)
+	var off := i * 16
+	mm_buf[off] = c_r * scale_x
+	mm_buf[off + 1] = -s_r * scale_y
+	mm_buf[off + 2] = 0.0
+	mm_buf[off + 3] = p.x
+	mm_buf[off + 4] = s_r * scale_x
+	mm_buf[off + 5] = c_r * scale_y
+	mm_buf[off + 6] = 0.0
+	mm_buf[off + 7] = p.y
+	mm_buf[off + 8] = c.r
+	mm_buf[off + 9] = c.g
+	mm_buf[off + 10] = c.b
+	mm_buf[off + 11] = c.a * clampf(alpha_mult, 0.0, 1.0)
+	mm_buf[off + 12] = hdr_val
+	mm_buf[off + 13] = remain
+	mm_buf[off + 14] = 1.0
+	mm_buf[off + 15] = float(col_idx)
 
+
+func _write_instance_visual(i: int) -> void:
+	_pack_particle_to_buf(i, _p_mm_buf)
+	var off := i * 16
+	var xform := Transform2D(
+		Vector2(_p_mm_buf[off], _p_mm_buf[off + 4]),
+		Vector2(_p_mm_buf[off + 1], _p_mm_buf[off + 5]),
+		Vector2(_p_mm_buf[off + 3], _p_mm_buf[off + 7])
+	)
 	var mm := _mm_particles.multimesh
 	mm.set_instance_transform_2d(i, xform)
-	mm.set_instance_color(i, c)
-	mm.set_instance_custom_data(i, Color(hdr_val, remain, 1.0, float(col_idx)))
+	mm.set_instance_color(i, Color(_p_mm_buf[off + 8], _p_mm_buf[off + 9], _p_mm_buf[off + 10], _p_mm_buf[off + 11]))
+	mm.set_instance_custom_data(i, Color(_p_mm_buf[off + 12], _p_mm_buf[off + 13], 1.0, _p_mm_buf[off + 15]))
 
 
 func _count_active_voices() -> int:
@@ -1928,32 +2182,52 @@ func _pump_audio(max_frames: int) -> void:
 
 	var avail := pb.get_frames_available()
 	var pushed := 0
-	while avail >= AUDIO_CHUNK_SIZE and pushed < max_frames:
-		_was_silent = false
+	while avail >= AUDIO_CHUNK_SIZE and pushed < max_frames and pb.can_push_buffer(AUDIO_CHUNK_SIZE):
 		_fill_audio_chunk()
 		pb.push_buffer(_mix_chunk)
 		avail -= AUDIO_CHUNK_SIZE
 		pushed += AUDIO_CHUNK_SIZE
 
 
-func _step_ambient_sample(s: int, inv_sr: float, amb_gain: float) -> float:
+func _step_ambient_sample(s: int, inv_sr: float, wind_alpha: float, drone_g: float, wind_g: float, surf_g: float, forge_g: float, crackle_g: float) -> float:
+	var white := _amb_wind_curr
 	if (s & 1) == 0:
 		var ns := _amb_noise_state
 		ns = (ns ^ (ns << 13)) & 0xFFFFFFFF
 		ns = (ns ^ (ns >> 17)) & 0xFFFFFFFF
 		ns = (ns ^ (ns << 5)) & 0xFFFFFFFF
 		_amb_noise_state = ns | 1
-		var white := float((ns & 65535) - 32768) / 32768.0
-		_amb_wind_lpf += 0.045 * (white - _amb_wind_lpf)
+		white = float((ns & 65535) - 32768) / 32768.0
+		_amb_wind_lpf += wind_alpha * (white - _amb_wind_lpf)
 		_amb_wind_prev = _amb_wind_curr
 		_amb_wind_curr = _amb_wind_lpf
+		if surf_g > 0.0001:
+			_amb_surf_lpf += 0.11 * (white - _amb_surf_lpf)
+		if crackle_g > 0.0001:
+			if absf(white) > 0.93:
+				_amb_crackle_env = 1.0
+			else:
+				_amb_crackle_env *= 0.96
 	var wind := 0.5 * (_amb_wind_prev + _amb_wind_curr) if (s & 1) != 0 else _amb_wind_curr
 	_amb_lfo_ph = fmod(_amb_lfo_ph + TAU * 0.14 * inv_sr, TAU)
 	var wind_env := 0.55 + 0.45 * sin(_amb_lfo_ph)
 	_amb_drone_ph1 = fmod(_amb_drone_ph1 + TAU * minf(_amb_freq1 - 0.6, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
 	_amb_drone_ph2 = fmod(_amb_drone_ph2 + TAU * minf(_amb_freq2 + 0.6, MAX_SYNTH_FREQ_HZ) * inv_sr, TAU)
-	var drone := (sin(_amb_drone_ph1) * 0.62 + sin(_amb_drone_ph2) * 0.38) * 0.42
-	return (wind * wind_env * 0.52 * _amb_biome_wind_mul + drone) * amb_gain
+	var drone := (sin(_amb_drone_ph1) * 0.62 + sin(_amb_drone_ph2) * 0.38) * 0.42 * drone_g
+	var out := drone + wind * wind_env * 0.52 * wind_g
+	if surf_g > 0.0001:
+		_amb_surf_ph = fmod(_amb_surf_ph + TAU * 0.18 * inv_sr, TAU)
+		var swell := pow(0.5 + 0.5 * sin(_amb_surf_ph), 2.2)
+		out += _amb_surf_lpf * swell * surf_g
+	if forge_g > 0.0001:
+		_amb_forge_ph = fmod(_amb_forge_ph + TAU * 60.0 * inv_sr, TAU)
+		var forge := sin(_amb_forge_ph) * 0.65 + sin(_amb_forge_ph * 2.0) * 0.35
+		out += forge * (0.75 + 0.25 * sin(_amb_lfo_ph * 3.0)) * forge_g
+	if crackle_g > 0.0001:
+		var hp := white - _amb_crackle_hp_prev
+		_amb_crackle_hp_prev = white
+		out += hp * _amb_crackle_env * crackle_g
+	return out
 
 
 func _fill_audio_chunk() -> void:
@@ -1963,12 +2237,19 @@ func _fill_audio_chunk() -> void:
 	_amb_freq2 = lerpf(_amb_freq2, _amb_target_f2 * _amb_biome_f_mul, 0.06)
 	_amb_pause_gain = lerpf(_amb_pause_gain, _amb_pause_target, 0.08)
 	var active_n := _count_active_voices()
-	var macro_t := clampf((_cam_zoom - 1.2) / 3.8, 0.0, 1.0)
+	var close_t := _calc_close_t(_cam_zoom)
 	var duck := 0.18 if active_n >= 10 else lerpf(1.0, 0.45, clampf(float(active_n) / 10.0, 0.0, 1.0))
-	var amb_gain := lerpf(0.055, 0.032, macro_t) * duck * _amb_pause_gain
+	var duck_p := duck * _amb_pause_gain
+	var wind_alpha := lerpf(0.064, 0.238, close_t)
+	var drone_g := lerpf(0.022, 0.010, close_t) * duck_p
+	var wind_g := lerpf(0.008, 0.042, close_t) * _amb_biome_wind_mul * duck_p
+	var surf_g := _amb_coast_ratio * close_t * 0.040 * duck_p
+	var forge_g := _amb_city_density * close_t * 0.026 * duck_p
+	var storm_lvl := clampf(_amb_fire_ratio * 2.5 + (0.45 if _ambient_age_id == 4 else (0.28 if _ambient_age_id == 1 else 0.0)), 0.0, 1.0)
+	var crackle_g := storm_lvl * (0.12 + 0.88 * close_t) * 0.032 * duck_p
 
 	for s in range(AUDIO_CHUNK_SIZE):
-		var amb := _step_ambient_sample(s, inv_sr, amb_gain)
+		var amb := _step_ambient_sample(s, inv_sr, wind_alpha, drone_g, wind_g, surf_g, forge_g, crackle_g)
 		var mix_l := amb
 		var mix_r := amb
 		for v in range(VOICE_COUNT):

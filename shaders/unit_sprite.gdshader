@@ -236,20 +236,22 @@ void fragment() {
 				vec3 dusk_rgb = mix(base_rgb, base_rgb * vec3(1.06, 0.82, 0.70), dusk * 0.36);
 				base_rgb = min(mix(dusk_rgb, base_rgb * vec3(0.42, 0.50, 0.74), nm) * orb, vec3(0.95));
 
-				// Night NW rim-light + luma floor for non-tinted armor/stone plates
-				vec2 px_step = vec2(1.0 / max(sprite_size.x, 1.0), 1.0 / max(sprite_size.y, 1.0));
-				float nw_a = 0.0;
-				if (v_local_uv.x > px_step.x && v_local_uv.y > px_step.y) {
-					vec2 nw_uv = vec2((col + clamp(v_local_uv.x - px_step.x, 0.002, 0.998)) / cols, clamp(v_local_uv.y - px_step.y, 0.002, 0.998));
-					nw_a = texture(TEXTURE, nw_uv).a;
-				}
-				float nw_edge = (nw_a < 0.55) ? 1.0 : clamp(1.10 - (v_local_uv.x * 0.55 + v_local_uv.y * 0.65), 0.15, 0.85);
-				float plate_w = (1.0 - smoothstep(0.05, 0.25, tint_w)) * smoothstep(0.36, 0.56, tex_lum);
-				base_rgb = min(base_rgb + vec3(0.22, 0.34, 0.54) * 0.22 * nm * nw_edge * smoothstep(0.22, 0.55, tex_lum), vec3(0.95));
-				float target_floor = mix(0.0, 0.48 * smoothstep(0.36, 0.72, tex_lum), nm) * plate_w;
-				float cur_lum = dot(base_rgb, vec3(0.299, 0.587, 0.114));
-				if (cur_lum < target_floor && cur_lum > 0.001) {
-					base_rgb = min(base_rgb * (target_floor / cur_lum), vec3(0.95));
+				// Night NW rim-light + luma floor for non-tinted armor/stone plates (skip flora, tinted, and dark pixels)
+				if (motion_mode != 1 && tint_w < 0.25 && tex_lum > 0.22) {
+					vec2 px_step = vec2(1.0 / max(sprite_size.x, 1.0), 1.0 / max(sprite_size.y, 1.0));
+					float nw_a = 0.0;
+					if (v_local_uv.x > px_step.x && v_local_uv.y > px_step.y) {
+						vec2 nw_uv = vec2((col + clamp(v_local_uv.x - px_step.x, 0.002, 0.998)) / cols, clamp(v_local_uv.y - px_step.y, 0.002, 0.998));
+						nw_a = texture(TEXTURE, nw_uv).a;
+					}
+					float nw_edge = (nw_a < 0.55) ? 1.0 : clamp(1.10 - (v_local_uv.x * 0.55 + v_local_uv.y * 0.65), 0.15, 0.85);
+					float plate_w = (1.0 - smoothstep(0.05, 0.25, tint_w)) * smoothstep(0.36, 0.56, tex_lum);
+					base_rgb = min(base_rgb + vec3(0.22, 0.34, 0.54) * 0.22 * nm * nw_edge * smoothstep(0.22, 0.55, tex_lum), vec3(0.95));
+					float target_floor = mix(0.0, 0.48 * smoothstep(0.36, 0.72, tex_lum), nm) * plate_w;
+					float cur_lum = dot(base_rgb, vec3(0.299, 0.587, 0.114));
+					if (cur_lum < target_floor && cur_lum > 0.001) {
+						base_rgb = min(base_rgb * (target_floor / cur_lum), vec3(0.95));
+					}
 				}
 			}
 

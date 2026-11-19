@@ -31,6 +31,7 @@ enum DropKind {
 	STEAM = 22,
 	FERTILIZER = 23,
 	PLASMA_ARC = 24,
+	HOSTILE_POD = 25,
 }
 
 var _x: PackedFloat32Array
@@ -178,15 +179,17 @@ func color_for_kind(kind: int) -> Color:
 			return Color(0.30, 0.76, 0.98, 0.96)
 		DropKind.STEAM:
 			return Color(0.82, 0.92, 0.98, 0.84)
+		DropKind.HOSTILE_POD:
+			return Color(0.98, 0.32, 0.24, 0.98)
 		_:
 			return Color(0.42, 0.92, 1.0, 0.96)
 
 
 func spawn_shower(world_pos: Vector2, radius: float, drop_kind: int) -> int:
 	var safe_r: float = clampf(radius, 1.0, 64.0)
-	var kind: int = clampi(drop_kind, 0, DropKind.PLASMA_ARC)
+	var kind: int = clampi(drop_kind, 0, DropKind.HOSTILE_POD)
 	var target_count: int = clampi(int(round(safe_r * 0.65)), 2, 20)
-	if kind == DropKind.PLASMA_BOMB or kind == DropKind.METEOR_SHARD:
+	if kind == DropKind.PLASMA_BOMB or kind == DropKind.METEOR_SHARD or kind == DropKind.HOSTILE_POD:
 		target_count = clampi(int(round(safe_r * 0.25)), 1, 6)
 	elif kind == DropKind.GREY_GOO or kind == DropKind.CONWAY:
 		target_count = clampi(int(round(safe_r * 0.35)), 1, 8)
@@ -214,9 +217,9 @@ func _setup_straight_drop(slot: int, pos: Vector2, kind: int, col: Color) -> voi
 		z0 = _drop_rng.randf_range(22.0, 38.0)
 		vz = _drop_rng.randf_range(24.0, 36.0)
 		sway_a = 8.5
-	elif kind == DropKind.PLASMA_BOMB or kind == DropKind.METEOR_SHARD:
-		z0 = _drop_rng.randf_range(48.0, 68.0)
-		vz = _drop_rng.randf_range(76.0, 96.0)
+	elif kind == DropKind.PLASMA_BOMB or kind == DropKind.METEOR_SHARD or kind == DropKind.HOSTILE_POD:
+		z0 = _drop_rng.randf_range(50.0, 72.0)
+		vz = _drop_rng.randf_range(54.0, 74.0) if kind == DropKind.HOSTILE_POD else _drop_rng.randf_range(76.0, 96.0)
 		sway_a = 1.0
 	elif kind == DropKind.RAIN or kind == DropKind.ACID or kind == DropKind.FIRE or kind == DropKind.LAVA:
 		z0 = _drop_rng.randf_range(26.0, 44.0)
@@ -237,7 +240,7 @@ func _setup_straight_drop(slot: int, pos: Vector2, kind: int, col: Color) -> voi
 
 
 func launch_parabolic(origin: Vector2, vel_3d: Vector3, drop_kind: int) -> void:
-	var kind: int = clampi(drop_kind, 0, DropKind.PLASMA_ARC)
+	var kind: int = clampi(drop_kind, 0, DropKind.HOSTILE_POD)
 	var slot: int = _alloc_slot()
 	_x[slot] = origin.x
 	_y[slot] = origin.y
@@ -289,6 +292,70 @@ func step_drops(dt: float, world: Object, fx: Object) -> int:
 			continue
 		i += 1
 	return landed_now
+
+
+func grab_drops_in_radius(world_pos: Vector2, radius: float, vel_target: Vector2) -> int:
+	if _active_count <= 0:
+		return 0
+	var r: float = maxf(radius, 1.0)
+	var r2: float = r * r
+	var grabbed: int = 0
+	var lift_vz: float = clampf(vel_target.length() * 0.10, 10.0, 26.0)
+	for i in range(_active_count):
+		var dx: float = _x[i] - world_pos.x
+		var dy: float = _y[i] - world_pos.y
+		if dx * dx + dy * dy <= r2:
+			_pos_z[i] = maxf(_pos_z[i], 12.0)
+			_parabolic[i] = 1
+			_vx[i] = lerpf(_vx[i], vel_target.x - dx * 2.4, 0.65)
+			_vy[i] = lerpf(_vy[i], vel_target.y - dy * 2.4, 0.65)
+			_vel_z[i] = lift_vz
+			_grav_z[i] = 64.0
+			grabbed += 1
+	return grabbed
+
+
+func intercept_hostile_drops(batteries: Array, max_per_tick: int = 4) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	if _active_count <= 0 or batteries.is_empty() or max_per_tick <= 0:
+		return hits
+	var cap: int = maxi(max_per_tick, 1)
+	var i: int = 0
+	while i < _active_count and hits.size() < cap:
+		var k: int = _kind[i]
+		if (k != DropKind.METEOR_SHARD and k != DropKind.PLASMA_BOMB and k != DropKind.HOSTILE_POD) or _pos_z[i] < 14.0:
+			i += 1
+			continue
+		var drop_pos := Vector2(_x[i], _y[i])
+		var matched: bool = false
+		var b_pos_out: Vector2 = drop_pos
+		var cid_out: int = -1
+		for raw_bat in batteries:
+			if not (raw_bat is Dictionary):
+				continue
+			var bat: Dictionary = raw_bat
+			var b_pos: Vector2 = bat.get("pos", Vector2.ZERO)
+			var b_range: float = maxf(float(bat.get("range", 48.0)), 4.0)
+			if drop_pos.distance_squared_to(b_pos) <= b_range * b_range:
+				matched = true
+				b_pos_out = b_pos
+				cid_out = int(bat.get("city_id", -1))
+				break
+		if matched:
+			hits.append({
+				"pos": drop_pos,
+				"sky_pos": Vector2(_x[i], _y[i] - _pos_z[i]),
+				"battery_pos": b_pos_out,
+				"city_id": cid_out,
+				"kind": k,
+			})
+			var last: int = _active_count - 1
+			if i != last:
+				_copy_slot(last, i)
+			_active_count = last
+			continue
+		i += 1
+	return hits
 
 
 func build_snapshot() -> Dictionary:

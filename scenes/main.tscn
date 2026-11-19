@@ -283,7 +283,7 @@ visible = false
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Аватар: WASD движение · ЛКМ выстрел · E жест/реликт [P] · Esc выход"
+tooltip_text = "Аватар [P]: WASD шаг · ЛКМ атака · Space волна · Shift/ПКМ рывок · R свита · E жест · Esc выход"
 text = "Взять управление [P]"
 
 [node name="LocLabel" type="Label" parent="HUD/InspectorPanel/InspectorBox"]
@@ -434,28 +434,28 @@ alignment = 1
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "ЛКМ: Поднять сушу и деревья · Shift+ЛКМ: Канал (повторный клик — выкл.) [1]"
+tooltip_text = "Поднять сушу и рощи (ЛКМ) · Shift+ЛКМ: прорыть канал (в Крио-тундре замерзает) [1]"
 text = "Поднять"
 
 [node name="BtnCanal" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Прорыть канал до воды [Alt+2]"
+tooltip_text = "Прорыть канал до воды: орошает сушу, гасит лаву в камень с паром и замерзает на морозе [Alt+2]"
 text = "Канал"
 
 [node name="BtnCrystal" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Вырастить энергокристаллы [2 / Alt+3]"
+tooltip_text = "Вырастить энергокристаллы: притягивают разряды Ион-шторма и ускоряют науку колоний [2 / Alt+3]"
 text = "Кристалл"
 
 [node name="BtnLava" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEarth"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Извержение лавы и вулкана [3 / Alt+4]"
+tooltip_text = "Магма и вулкан: плавит песок; Лава + Дождь даёт камень, пар и плодородную почву [3 / Alt+4]"
 text = "Лава"
 
 [node name="GroupWeather" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
@@ -469,21 +469,21 @@ alignment = 1
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Дождевой фронт: тушит огонь, питает оазисы [Alt+1]"
+tooltip_text = "Дождевой фронт: тушит пожары, охлаждает кратеры; с Лавой рождает пар и чернозём [Alt+1]"
 text = "Дождь"
 
 [node name="BtnFirestorm" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWeather"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Огненная буря: поджигает леса и почву [Alt+2]"
+tooltip_text = "Огненная буря: поджигает леса; подхватывается Вихрем в огненный смерч [Alt+2]"
 text = "Огн. буря"
 
 [node name="BtnIonStorm" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWeather"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Ионный шторм: радиация, кристаллы и ЭМИ по роботам [Alt+3]"
+tooltip_text = "Ион-шторм: бьёт молниями в Кристаллы и пилоны, даёт ЭМИ по роботам [Alt+3]"
 text = "Ион-шторм"
 
 [node name="GroupWar" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
@@ -497,28 +497,28 @@ alignment = 1
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "ЛКМ: Удар по лояльности (-35%) / война · Shift+ЛКМ: Мятеж [0 / Alt+1]"
+tooltip_text = "Дипломатическая искра: ЛКМ — удар по лояльности (-35%) и повод к войне · Shift+ЛКМ: мятеж [0 / Alt+1]"
 text = "Дипломат"
 
 [node name="BtnOrbitalStrike" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Орбитальный плазменный удар (проверяет щиты колоний) [9 / Alt+2]"
+tooltip_text = "Орбита: плазменный удар; сдвигает доктрину города к Техно-скептикам, проверяет щиты и ПВО [9 / Alt+2]"
 text = "Орбита"
 
 [node name="BtnMeteor" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Метеоритный удар с кратером [4 / Alt+3]"
+tooltip_text = "Метеоритный удар: выбивает 3-зонный кратер с углями; перехватывается ПВО на T3+ [4 / Alt+3]"
 text = "Метеор"
 
 [node name="BtnVortex" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupWar"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "ЛКМ: Вихрь огня/пара/радиации · Shift+ЛКМ: Морозный вихрь [5 / Alt+4]"
+tooltip_text = "Стихийный вихрь: переносит огонь, пар и радиацию · Shift+ЛКМ: ледяной вихрь -22°C [5 / Alt+4]"
 text = "Вихрь"
 
 [node name="GroupEvo" type="HBoxContainer" parent="HUD/BottomDock/DockCols/RowBottom"]
@@ -532,21 +532,21 @@ alignment = 1
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "ИИ-сбой: ЭМИ по городам и роботам, удар по лояльности [Alt+1]"
+tooltip_text = "ИИ-сбой: ЭМИ по роботам и турелям, падение лояльности, сдвиг доктрины к Техно-скептикам [Alt+1]"
 text = "ИИ-Сбой"
 
 [node name="BtnXenoVirus" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEvo"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Ксено-вирус: заражает юнитов в радиусе кисти [Alt+2]"
+tooltip_text = "Ксено-вирус: заражает юнитов мутациями и разносит эпидемию по контакту [Alt+2]"
 text = "Ксено-вирус"
 
 [node name="BtnBioSeeder" type="Button" parent="HUD/BottomDock/DockCols/RowBottom/GroupEvo"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Био-посев: гасит пламя, озеленяет почву и растит ксено-споры [Alt+3]"
+tooltip_text = "Био-посев: гасит огонь, на пепле растит рощи, на кристаллах — споры, на воде — водоросли [Alt+3]"
 text = "Био-посев"
 
 [node name="SepTools" type="VSeparator" parent="HUD/BottomDock/DockCols/RowBottom"]
@@ -556,25 +556,25 @@ layout_mode = 2
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Основать готовую колонию выбранной фракции (лагерь + палатка) [6]"
+tooltip_text = "Основать готовую колонию выбранной фракции (лагерь + поселенцы) [6]"
 text = "Колония"
 
 [node name="BtnBless" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "ЛКМ: Благословить / исцелить · Shift+ЛКМ: Мутировать [7]"
+tooltip_text = "Благословение: ЛКМ — исцеление, ореол и сдвиг к Солярному культу · Shift+ЛКМ: мутация [7]"
 text = "Благо"
 
 [node name="BtnInspect" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Клик по городу или юниту: инспектор и закладка [B] [8 / Esc]"
+tooltip_text = "Инспектор: клик по городу/юниту для плавного фокуса, Аватара [P] и закладок [B] [8 / Esc]"
 text = "Инсп"
 
 [node name="BtnRegen" type="Button" parent="HUD/BottomDock/DockCols/RowBottom"]
 layout_mode = 2
 focus_mode = 0
-tooltip_text = "Сгенерировать новую планету (2-кликовое подтверждение)"
+tooltip_text = "Создать новую планету (2-кликовое подтверждение; 4 сценария — в Кодексе → Шаблоны)"
 text = "Новый мир"

@@ -82,6 +82,11 @@ const NSTATE_RECRUITING: int = 2
 const NSTATE_FEUD_HUNT: int = 3
 const NSTATE_DUEL: int = 4
 
+const DOC_NEUTRAL: int = 0
+const DOC_SOLAR_CULT: int = 1
+const DOC_TECH_SKEPTICS: int = 2
+const DOC_ORBITAL_WARDENS: int = 3
+
 const MEM_NONE: int = 0
 const MEM_FOUNDED: int = 1
 const MEM_CROWNED: int = 2
@@ -195,6 +200,8 @@ var _notable_last_sync_t: float = -10.0
 var _relic_last_scan_t: float = -10.0
 var _exp_active_cnt: int = 0
 var _colonize_cd_active: bool = false
+var _boss_hunt_uid: int = -1
+var _boss_hunt_pos: Vector2 = Vector2.ZERO
 
 var _kingdom_colonize_cd: PackedFloat32Array
 var _prev_alerted: PackedByteArray
@@ -312,6 +319,8 @@ func reset_all() -> void:
 	_relic_last_scan_t = -10.0
 	_exp_active_cnt = 0
 	_colonize_cd_active = false
+	_boss_hunt_uid = -1
+	_boss_hunt_pos = Vector2.ZERO
 
 
 func _reset_social_tables() -> void:
@@ -521,6 +530,7 @@ func get_macro_badges(civ: Node2D) -> Array[Dictionary]:
 			"has_shield": has_shield,
 			"loyalty": min_loy,
 			"emp_timer": max_emp,
+			"doctrine": int(civ._city_doctrine_id[anchor_cid]) if anchor_cid < civ._max_cities else DOC_NEUTRAL,
 		})
 	return out
 
@@ -691,11 +701,15 @@ func step_city_loyalty(civ: Node2D, cid: int, pace_dt: float) -> void:
 		elif stress > 0.0:
 			stress = maxf(0.0, stress - minf(0.25, l_bonus * 0.4))
 
+	var doc_id: int = int(civ._city_doctrine_id[cid])
+	if doc_id == DOC_SOLAR_CULT and stress > 0.0:
+		stress = maxf(0.0, stress - 0.15)
 	var prev_loy: float = civ._city_loyalty[cid]
 	if stress > 0.0:
 		civ._city_loyalty[cid] = maxf(0.0, prev_loy - stress * civ._k_rebel_loy_decay * pace_dt)
 	else:
-		civ._city_loyalty[cid] = minf(100.0, prev_loy + civ._k_rebel_loy_recover * pace_dt)
+		var rec_mult: float = 1.35 if doc_id == DOC_SOLAR_CULT else 1.0
+		civ._city_loyalty[cid] = minf(100.0, prev_loy + civ._k_rebel_loy_recover * rec_mult * pace_dt)
 
 	if civ._city_loyalty[cid] < civ._k_rebel_loy_thresh and can_city_rebel(civ, cid):
 		if not has_plot_for(cid, -1, PLOT_REBEL):
@@ -757,6 +771,8 @@ func _step_diplomacy_tension(civ: Node2D, pace_dt: float) -> void:
 			civ._diplo_tension[idx_ba] = ten
 
 			if civ._diplo_pair_cd[idx_ab] > 0.0 or civ._city_war_cooldown[a] > 0.0 or civ._city_war_cooldown[b] > 0.0:
+				continue
+			if civ._meta != null and civ._meta.is_kingdom_truce_active(civ._city_kingdom_id[a], civ._city_kingdom_id[b]):
 				continue
 
 			if st != DIPLO_TOTAL_WAR and ten >= war_th and civ._law_diplomacy_wars:
@@ -1275,7 +1291,7 @@ func _can_capture_zone(civ: Node2D, zx: int, zy: int, att_cid: int, att_sol: int
 		var nb_s: int = z_owners[zidx + zw]
 		if nb_s >= 0 and active[nb_s] != 0 and (nb_s == att_cid or (att_kid >= 0 and kids[nb_s] == att_kid)):
 			return true
-	return civ._territory.is_zone_coastal(civ, zx, zy) and att_sol >= 3
+	return civ._territory.is_zone_coastal(civ, zx, zy) and (att_sol >= 2 or civ._tmp_zone_att_cnt[zidx] >= 4)
 
 
 func _advance_zone_captures(civ: Node2D, pace_dt: float, has_roles: bool) -> void:
@@ -1413,6 +1429,8 @@ func _reassign_building(civ: Node2D, bi: int, bt: int, prev_owner: int, new_owne
 	if bt == BLD_SHIELD_PYLON:
 		civ._bld_shield_charge[bi] = clampf(civ._bld_shield_charge[bi] * 0.5, 0.25, 0.50)
 		civ._shield_cache_dirty = true
+	civ._turret_cache_dirty = true
+	civ._aa_battery_cache_dirty = true
 	civ._city_tech_dirty[prev_owner] = 1
 	civ._city_tech_dirty[new_owner] = 1
 	if bt == BLD_DEPOT:
@@ -1714,6 +1732,10 @@ func _build_city_army_order(civ: Node2D, cid: int, war_st: int) -> Dictionary:
 	var rally_pos: Vector2 = civ._territory.find_walkable_near(civ, rally_raw, Vector2i(10, int(civ._city_faction[cid])))
 	if rally_pos.x < 0.0:
 		rally_pos = c_pos
+	if civ._meta != null:
+		var load_shore: Vector2 = civ._meta.get_city_loading_shore(cid)
+		if load_shore.x >= 0.0:
+			rally_pos = load_shore
 
 	var portal_pos: Vector2 = Vector2.ZERO
 	var has_portal: bool = false
@@ -1841,7 +1863,7 @@ func _pick_notable_name(civ: Node2D, fac: int, nid: int) -> String:
 func _promote_unit_notable(civ: Node2D, uid: int, u_idx: int, rank: int, traits: int) -> int:
 	var existing: int = _find_notable_by_uid(uid)
 	if existing >= 0:
-		if rank == RANK_RULER or rank == RANK_HERALD:
+		if rank == RANK_RULER or rank == RANK_HERALD or (rank == RANK_HERETIC and int(_not_rank[existing]) != RANK_RULER):
 			_not_rank[existing] = rank
 		_not_traits[existing] |= traits
 		_sync_physics_notable_idx(civ, uid, existing)
@@ -2280,10 +2302,12 @@ func pin_notable(uid: int, pinned: bool) -> bool:
 	return true
 
 
-func _build_notable_dict(n: int) -> Dictionary:
+func _build_notable_dict(n: int, civ: Node2D = null) -> Dictionary:
 	var rid: int = _not_relic_id[n]
 	var r_name: String = _rel_name[rid] if (rid >= 0 and rid < MAX_RELICS and _rel_active[rid] != 0) else ""
 	var rk: int = clampi(int(_not_rank[n]), 0, RANK_NAMES_RU.size() - 1)
+	var ncid: int = _not_city_id[n]
+	var doc_id: int = int(civ._city_doctrine_id[ncid]) if (civ != null and ncid >= 0 and ncid < civ._max_cities) else DOC_NEUTRAL
 	var mem_arr: Array[String] = []
 	var cnt: int = mini(int(_not_mem_count[n]), NOTABLE_MEM_SLOTS)
 	var head: int = int(_not_mem_head[n]) % NOTABLE_MEM_SLOTS
@@ -2300,9 +2324,10 @@ func _build_notable_dict(n: int) -> Dictionary:
 		"faction": int(_not_faction[n]),
 		"rank": rk,
 		"rank_name": RANK_NAMES_RU[rk],
-		"city_id": _not_city_id[n],
+		"city_id": ncid,
 		"kingdom_id": _not_kingdom_id[n],
 		"clan_id": _not_clan_id[n],
+		"doctrine": doc_id,
 		"traits": _not_traits[n],
 		"relic_id": rid,
 		"relic_name": r_name,
@@ -2314,12 +2339,260 @@ func _build_notable_dict(n: int) -> Dictionary:
 	}
 
 
-func get_notables_summary() -> Array[Dictionary]:
+func get_notables_summary(civ: Node2D = null) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for n in range(MAX_NOTABLES):
 		if _not_active[n] != 0:
-			out.append(_build_notable_dict(n))
+			out.append(_build_notable_dict(n, civ))
 	return out
+
+
+func on_city_doctrine_changed(civ: Node2D, cid: int, doc_id: int) -> void:
+	ensure_allocated()
+	if cid < 0 or cid >= civ._max_cities or civ._city_active[cid] == 0 or doc_id == DOC_NEUTRAL:
+		return
+	var target_rank: int = RANK_HERALD if doc_id == DOC_SOLAR_CULT else (RANK_HERETIC if doc_id == DOC_TECH_SKEPTICS else RANK_BANNER)
+	var add_traits: int = TR_BLESSED_HALO if doc_id != DOC_TECH_SKEPTICS else (TR_SCHISMATIC | TR_VENGEFUL)
+	var nid: int = _find_city_doctrine_notable(cid, target_rank)
+	if nid < 0:
+		var cand: Vector2i = _pick_doctrine_unit(civ, cid)
+		if cand.x > 0 and cand.y >= 0:
+			nid = _promote_unit_notable(civ, cand.x, cand.y, target_rank, add_traits)
+	if nid < 0:
+		return
+	_not_traits[nid] |= add_traits
+	_not_renown[nid] += 6 if doc_id != DOC_ORBITAL_WARDENS else 4
+	if doc_id == DOC_TECH_SKEPTICS:
+		_not_state[nid] = NSTATE_RECRUITING
+		_record_notable_mem(nid, MEM_FEUD_SWORN, _not_uid[nid], cid, civ._sim_time)
+		push_chronicle("Отступник %s отверг знамения (%s)" % [_not_name[nid], civ._city_name[cid]], _not_last_pos[nid], Color("#38F0FF"))
+	elif doc_id == DOC_SOLAR_CULT:
+		_record_notable_mem(nid, MEM_BLESSED, _not_uid[nid], cid, civ._sim_time)
+		push_chronicle("Пророк %s возвышен (%s)" % [_not_name[nid], civ._city_name[cid]], _not_last_pos[nid], Color("#FFD84A"))
+	else:
+		_record_notable_mem(nid, MEM_BLESSED, _not_uid[nid], cid, civ._sim_time)
+		push_chronicle("Страж неба %s (%s)" % [_not_name[nid], civ._city_name[cid]], _not_last_pos[nid], Color("#B86BFF"))
+	if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+		civ._fx.call("spawn_reaction_strip", _not_last_pos[nid] + Vector2(0.0, -8.0), STRIP_CROWN_BANNER)
+
+
+func _find_city_doctrine_notable(cid: int, target_rank: int) -> int:
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] != 0 and _not_city_id[n] == cid and int(_not_rank[n]) == target_rank:
+			return n
+	return -1
+
+
+func _pick_doctrine_unit(civ: Node2D, cid: int) -> Vector2i:
+	var phys: Node2D = civ._physics
+	if phys == null or phys._unit_count <= 0:
+		return Vector2i(-1, -1)
+	var uid_map_v: Variant = phys.get("_uid_to_idx")
+	var uid_map: Dictionary = uid_map_v as Dictionary if (uid_map_v is Dictionary) else {}
+	var ruler_uid: int = -1
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] == 0 or _not_city_id[n] != cid:
+			continue
+		if int(_not_rank[n]) == RANK_RULER:
+			ruler_uid = _not_uid[n]
+		elif uid_map.has(_not_uid[n]):
+			return Vector2i(_not_uid[n], int(uid_map[_not_uid[n]]))
+	var best_u: int = -1
+	var best_sc: int = -1
+	for u in range(phys._unit_count):
+		if phys._u_city_id[u] != cid or phys._hp[u] <= 0.0:
+			continue
+		var uid: int = phys._u_uid[u]
+		if uid <= 0 or uid == ruler_uid:
+			continue
+		var sc: int = phys._u_kills[u] * 3 + (10 if int(phys._u_role[u]) == 4 else 1)
+		if sc > best_sc:
+			best_sc = sc
+			best_u = u
+	return Vector2i(phys._u_uid[best_u], best_u) if best_u >= 0 else Vector2i(-1, -1)
+
+
+func rally_boss_hunters(civ: Node2D, boss_pos: Vector2, boss_uid: int) -> int:
+	ensure_allocated()
+	_boss_hunt_uid = boss_uid
+	_boss_hunt_pos = boss_pos
+	var phys: Node2D = civ._physics
+	if phys == null or phys._unit_count <= 0:
+		return 0
+	var uid_map_v: Variant = phys.get("_uid_to_idx")
+	if not (uid_map_v is Dictionary):
+		return 0
+	var uid_map := uid_map_v as Dictionary
+	var mis_v: Variant = phys.get("_u_mission_pos")
+	var emb_v: Variant = phys.get("_u_embarked")
+	var hunters: int = 0
+	var cands: Array[Vector2i] = []
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] == 0:
+			continue
+		var uid: int = _not_uid[n]
+		if not uid_map.has(uid):
+			continue
+		var u_idx: int = int(uid_map[uid])
+		if u_idx < 0 or u_idx >= phys._unit_count or phys._hp[u_idx] <= 0.0:
+			continue
+		if emb_v is PackedByteArray and u_idx < (emb_v as PackedByteArray).size() and (emb_v as PackedByteArray)[u_idx] != 0:
+			continue
+		if int(_not_state[n]) == NSTATE_FEUD_HUNT:
+			_apply_hunter_goal(phys, mis_v, n, u_idx, boss_pos, boss_uid)
+			hunters += 1
+			continue
+		var rk: int = int(_not_rank[n])
+		var ncid: int = _not_city_id[n]
+		var is_warden_herald: bool = rk == RANK_HERALD and ncid >= 0 and ncid < civ._max_cities and int(civ._city_doctrine_id[ncid]) == DOC_ORBITAL_WARDENS
+		if rk != RANK_HERO and rk != RANK_BANNER and not is_warden_herald:
+			continue
+		var d2: float = Vector2(phys._px[u_idx], phys._py[u_idx]).distance_squared_to(boss_pos)
+		if d2 <= 260.0 * 260.0:
+			cands.append(Vector2i(int(d2), n))
+	cands.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.x < b.x)
+	for c in cands:
+		if hunters >= 4:
+			break
+		var n: int = c.y
+		var u_idx: int = int(uid_map[_not_uid[n]])
+		_not_state[n] = NSTATE_FEUD_HUNT
+		_apply_hunter_goal(phys, mis_v, n, u_idx, boss_pos, boss_uid)
+		hunters += 1
+		if civ._sim_pace_mult < 15.0 and civ._fx != null and civ._fx_has_spawn_reaction_strip:
+			civ._fx.call("spawn_reaction_strip", _not_last_pos[n] + Vector2(0.0, -8.0), STRIP_FEUD_SWORDS)
+	if hunters == 0:
+		hunters = _promote_emergency_boss_hunter(civ, phys, mis_v, emb_v, boss_pos, boss_uid)
+	return hunters
+
+
+func _apply_hunter_goal(phys: Node2D, mis_v: Variant, nid: int, u_idx: int, boss_pos: Vector2, boss_uid: int) -> void:
+	_not_slot[nid] = u_idx
+	_not_last_pos[nid] = Vector2(phys._px[u_idx], phys._py[u_idx])
+	_not_duel_uid[nid] = boss_uid
+	phys._u_target_pos[u_idx] = boss_pos
+	if mis_v is PackedVector2Array and u_idx < (mis_v as PackedVector2Array).size():
+		(mis_v as PackedVector2Array)[u_idx] = boss_pos
+
+
+func _promote_emergency_boss_hunter(civ: Node2D, phys: Node2D, mis_v: Variant, emb_v: Variant, boss_pos: Vector2, boss_uid: int) -> int:
+	var best_u: int = -1
+	var best_d2: float = 160.0 * 160.0
+	for u in range(phys._unit_count):
+		if phys._hp[u] <= 0.0 or phys._u_uid[u] <= 0 or phys._u_city_id[u] < 0:
+			continue
+		if emb_v is PackedByteArray and u < (emb_v as PackedByteArray).size() and (emb_v as PackedByteArray)[u] != 0:
+			continue
+		if _find_notable_by_uid(phys._u_uid[u]) >= 0:
+			continue
+		var d2: float = Vector2(phys._px[u], phys._py[u]).distance_squared_to(boss_pos)
+		if d2 < best_d2:
+			best_d2 = d2
+			best_u = u
+	if best_u < 0:
+		return 0
+	var nid: int = _promote_unit_notable(civ, phys._u_uid[best_u], best_u, RANK_HERO, TR_BLESSED_HALO)
+	if nid < 0:
+		return 0
+	_not_state[nid] = NSTATE_FEUD_HUNT
+	_apply_hunter_goal(phys, mis_v, nid, best_u, boss_pos, boss_uid)
+	return 1
+
+
+func clear_boss_hunt(civ: Node2D = null) -> void:
+	_boss_hunt_uid = -1
+	_boss_hunt_pos = Vector2.ZERO
+	var uid_map: Dictionary = {}
+	var mis_arr: Variant = null
+	if civ != null and civ._physics != null:
+		var uid_map_v: Variant = civ._physics.get("_uid_to_idx")
+		if uid_map_v is Dictionary:
+			uid_map = uid_map_v as Dictionary
+		mis_arr = civ._physics.get("_u_mission_pos")
+	for n in range(MAX_NOTABLES):
+		if _not_active[n] == 0 or int(_not_state[n]) != NSTATE_FEUD_HUNT:
+			continue
+		_not_state[n] = NSTATE_DORMANT
+		_not_duel_uid[n] = -1
+		if mis_arr is PackedVector2Array and uid_map.has(_not_uid[n]):
+			var u_idx: int = int(uid_map[_not_uid[n]])
+			if u_idx >= 0 and u_idx < (mis_arr as PackedVector2Array).size():
+				(mis_arr as PackedVector2Array)[u_idx] = Vector2(-1.0, -1.0)
+
+
+func on_boss_slain(civ: Node2D, world_pos: Vector2, killer_uid: int, species_id: int) -> void:
+	ensure_allocated()
+	var nearest_cid: int = _find_nearest_active_city(civ, world_pos, 220.0)
+	var killer_cid: int = nearest_cid
+	var killer_nid: int = -1
+	if killer_uid > 0 and civ._physics != null:
+		var uid_map_v: Variant = civ._physics.get("_uid_to_idx")
+		if uid_map_v is Dictionary and (uid_map_v as Dictionary).has(killer_uid):
+			var u_idx: int = int((uid_map_v as Dictionary)[killer_uid])
+			if u_idx >= 0 and u_idx < civ._physics._unit_count:
+				var ucid: int = int(civ._physics._u_city_id[u_idx])
+				if ucid >= 0 and ucid < civ._max_cities and civ._city_active[ucid] != 0:
+					killer_cid = ucid
+				killer_nid = _promote_unit_notable(civ, killer_uid, u_idx, RANK_HERO, TR_ASHBORN | TR_BLESSED_HALO)
+				if killer_nid >= 0:
+					_not_renown[killer_nid] += 25
+					_record_notable_mem(killer_nid, MEM_SURVIVED, killer_uid, killer_cid, civ._sim_time)
+	var r_slot: int = _spawn_boss_trophy_relic(world_pos, killer_cid, species_id)
+	var t_name: String = _rel_name[r_slot] if r_slot >= 0 else "Трофей Титана"
+	if r_slot >= 0 and killer_nid >= 0 and _not_relic_id[killer_nid] < 0 and _not_slot[killer_nid] >= 0:
+		_assign_relic_to_unit(civ, r_slot, killer_uid, _not_slot[killer_nid])
+	if killer_cid >= 0:
+		civ._add_city_science(killer_cid, 60.0)
+	for cid in range(civ._max_cities):
+		if civ._city_active[cid] != 0 and civ._city_threat_pos[cid].distance_squared_to(world_pos) <= 165.0 * 165.0:
+			civ._city_threat_pos[cid] = Vector2.ZERO
+			civ._city_alerted[cid] = 0
+			civ._city_alert_timer[cid] = 0.0
+	_orders_dirty = true
+	civ._light_goals_dirty = true
+	clear_boss_hunt(civ)
+	push_chronicle("Босс повержен! %s (+60 науки)" % t_name, world_pos, Color("#FFD84A"))
+	if civ._fx != null and civ._fx_has_spawn_reaction_strip:
+		civ._fx.call("spawn_reaction_strip", world_pos + Vector2(0.0, -8.0), STRIP_CROWN_BANNER)
+
+
+func _find_nearest_active_city(civ: Node2D, world_pos: Vector2, max_r: float) -> int:
+	var best_cid: int = -1
+	var best_d2: float = max_r * max_r
+	for cid in range(civ._max_cities):
+		if civ._city_active[cid] == 0:
+			continue
+		var d2: float = civ._city_center[cid].distance_squared_to(world_pos)
+		if d2 < best_d2:
+			best_d2 = d2
+			best_cid = cid
+	return best_cid
+
+
+func _spawn_boss_trophy_relic(world_pos: Vector2, origin_cid: int, species_id: int) -> int:
+	var r_slot: int = -1
+	for r in range(MAX_RELICS):
+		if _rel_active[r] == 0:
+			r_slot = r
+			break
+	if r_slot < 0:
+		var low_r: int = 1 << 29
+		for r in range(MAX_RELICS):
+			if _rel_holder_uid[r] < 0 and _rel_renown[r] < low_r:
+				low_r = _rel_renown[r]
+				r_slot = r
+	if r_slot < 0:
+		return -1
+	const TROPHY_NAMES := ["Сердце Левиафана", "Ядро Титана", "Хитин Матриарха", "Венец Бездны"]
+	_rel_active[r_slot] = 1
+	_rel_kind[r_slot] = 3
+	_rel_holder_uid[r_slot] = -1
+	_rel_holder_nid[r_slot] = -1
+	_rel_pos[r_slot] = world_pos
+	_rel_origin_cid[r_slot] = origin_cid
+	_rel_name[r_slot] = TROPHY_NAMES[absi(species_id) % TROPHY_NAMES.size()]
+	_rel_renown[r_slot] = 25
+	return r_slot
 
 
 func get_notable_card(uid: int) -> Dictionary:
@@ -2405,6 +2678,8 @@ func unpack_social_extensions(buf: StreamPeerBuffer) -> void:
 	_relic_last_scan_t = -10.0
 	_exp_active_cnt = 0
 	_colonize_cd_active = false
+	_boss_hunt_uid = -1
+	_boss_hunt_pos = Vector2.ZERO
 	if buf.get_available_bytes() <= 0:
 		return
 	var p_cnt: int = buf.get_u8()
